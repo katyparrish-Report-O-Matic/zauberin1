@@ -13,8 +13,7 @@ import ApiDocumentation from './pages/ApiDocumentation';
 import IntegrationsManager from './pages/IntegrationsManager';
 import CacheManager from './pages/CacheManager';
 import PerformanceMonitor from './pages/PerformanceMonitor';
-import MonitoringDashboard from './pages/MonitoringDashboard';
-import StatusPage from './pages/StatusPage';
+import ProductionDashboard from './pages/ProductionDashboard';
 import Layout from './Layout.jsx';
 
 
@@ -34,8 +33,7 @@ export const PAGES = {
     "IntegrationsManager": IntegrationsManager,
     "CacheManager": CacheManager,
     "PerformanceMonitor": PerformanceMonitor,
-    "MonitoringDashboard": MonitoringDashboard,
-    "StatusPage": StatusPage,
+    "ProductionDashboard": ProductionDashboard,
 }
 
 export const pagesConfig = {
