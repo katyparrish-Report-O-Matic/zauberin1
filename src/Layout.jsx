@@ -53,6 +53,11 @@ export default function Layout({ children }) {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center gap-3">
+                <img 
+                  src="https://base44.app/api/apps/690dde1a97d67b2c9dbceb00/files/public/690dde1a97d67b2c9dbceb00/961e1fc85_Zauberin.png" 
+                  alt="Zauberin Logo" 
+                  className="h-10 w-10 object-contain"
+                />
                 <h1 className="text-xl font-bold text-gray-900">Zauberin</h1>
                 {userOrg && (
                   <div className="flex items-center gap-2">
