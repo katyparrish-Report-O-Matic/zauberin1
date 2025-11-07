@@ -8,6 +8,8 @@ import DashboardBuilder from './pages/DashboardBuilder';
 import AuditLogs from './pages/AuditLogs';
 import BackupManager from './pages/BackupManager';
 import DataQuality from './pages/DataQuality';
+import ApiKeysManager from './pages/ApiKeysManager';
+import ApiDocumentation from './pages/ApiDocumentation';
 import Layout from './Layout.jsx';
 
 
@@ -22,6 +24,8 @@ export const PAGES = {
     "AuditLogs": AuditLogs,
     "BackupManager": BackupManager,
     "DataQuality": DataQuality,
+    "ApiKeysManager": ApiKeysManager,
+    "ApiDocumentation": ApiDocumentation,
 }
 
 export const pagesConfig = {
