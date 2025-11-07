@@ -16,7 +16,11 @@ export default function Layout({ children }) {
   const isAdmin = currentUser?.permission_level === 'admin';
 
   const navItems = [
-    { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: FileBarChart },
+    { 
+      name: "Report Builder", 
+      path: createPageUrl("ReportBuilder"), 
+      iconUrl: "https://base44.app/api/apps/690dde1a97d67b2c9dbceb00/files/public/690dde1a97d67b2c9dbceb00/8b9ebd030_Zauberin.png"
+    },
     { name: "Templates", path: createPageUrl("ReportTemplates"), icon: FlaskConical },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
     { name: "Monitoring", path: createPageUrl("MonitoringDashboard"), icon: Activity, requiredLevel: "admin" },
@@ -82,7 +86,6 @@ export default function Layout({ children }) {
               </div>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
                 {visibleNavItems.map((item) => {
-                  const Icon = item.icon;
                   const isActive = location.pathname === item.path;
                   return (
                     <Link
@@ -94,7 +97,17 @@ export default function Layout({ children }) {
                           : "border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300"
                       }`}
                     >
-                      <Icon className="w-4 h-4 mr-2" />
+                      {item.iconUrl ? (
+                        <img 
+                          src={item.iconUrl} 
+                          alt="" 
+                          className="w-4 h-4 mr-2 object-contain"
+                        />
+                      ) : (
+                        <>
+                          {React.createElement(item.icon, { className: "w-4 h-4 mr-2" })}
+                        </>
+                      )}
                       {item.name}
                     </Link>
                   );
