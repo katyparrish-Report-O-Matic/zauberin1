@@ -15,6 +15,7 @@ import { dataTransformationService } from "../components/data/DataTransformation
 import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
+import { auditService } from "../components/audit/AuditService";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -388,7 +389,20 @@ Generate a complete report configuration that captures their intent.`,
       toast.error('You need editor permissions to save reports');
       return;
     }
+    
     saveReportMutation.mutate(currentReport);
+    
+    // Log audit
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    if (orgId && currentUser) {
+      auditService.logReportAction(
+        orgId,
+        currentUser.email,
+        'create',
+        'new',
+        currentReport.title
+      );
+    }
   };
 
   const handleLoadReport = async (report) => {
@@ -409,7 +423,21 @@ Generate a complete report configuration that captures their intent.`,
       toast.error('You need admin permissions to delete reports');
       return;
     }
+    
+    const report = savedReports.find(r => r.id === id);
     deleteReportMutation.mutate(id);
+    
+    // Log audit
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    if (orgId && currentUser && report) {
+      auditService.logReportAction(
+        orgId,
+        currentUser.email,
+        'delete',
+        id,
+        report.title
+      );
+    }
   };
 
   const handleExport = () => {
@@ -440,6 +468,17 @@ Generate a complete report configuration that captures their intent.`,
     URL.revokeObjectURL(url); // Clean up
     
     toast.success('Report exported');
+
+    // Log audit
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    if (orgId && currentUser && reportData) {
+      auditService.logDataExport(
+        orgId,
+        currentUser.email,
+        'csv',
+        reportData.length
+      );
+    }
   };
 
   const isApiConfigured = apiSettings?.api_url && apiSettings?.api_token;

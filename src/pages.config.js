@@ -5,6 +5,7 @@ import OrganizationManager from './pages/OrganizationManager';
 import WebhookManager from './pages/WebhookManager';
 import TemplateManager from './pages/TemplateManager';
 import DashboardBuilder from './pages/DashboardBuilder';
+import AuditLogs from './pages/AuditLogs';
 import Layout from './Layout.jsx';
 
 
@@ -16,6 +17,7 @@ export const PAGES = {
     "WebhookManager": WebhookManager,
     "TemplateManager": TemplateManager,
     "DashboardBuilder": DashboardBuilder,
+    "AuditLogs": AuditLogs,
 }
 
 export const pagesConfig = {
