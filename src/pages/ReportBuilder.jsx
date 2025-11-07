@@ -16,8 +16,8 @@ import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
-import { cacheService } from "../components/cache/CacheService"; // Added import
-import { environmentConfig } from "../components/config/EnvironmentConfig"; // Added import
+import { cacheService } from "../components/cache/CacheService";
+import { environmentConfig } from "../components/config/EnvironmentConfig";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -523,10 +523,7 @@ Generate a complete report configuration that captures their intent.`,
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                <span className="text-3xl">🧙‍♀️</span>
-                Bespoke Report Builder
-              </h1>
+              <h1 className="text-3xl font-bold text-gray-900">Bespoke Report Builder</h1>
               <p className="text-gray-600 mt-1">
                 Describe what you want to visualize and we'll create a custom report for you
               </p>
