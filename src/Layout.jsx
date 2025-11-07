@@ -2,7 +2,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, Settings, Clock, Building2, Shield, Webhook, Layout as LayoutIcon } from "lucide-react";
+import { Sparkles, Settings, Clock, Building2, Shield, Webhook, Layout as LayoutIcon, Columns } from "lucide-react";
 import JobScheduler from "./components/jobs/JobScheduler";
 import { usePermissions } from "./components/auth/usePermissions";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ export default function Layout({ children }) {
 
   const navItems = [
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: Sparkles },
+    { name: "Dashboard Builder", path: createPageUrl("DashboardBuilder"), icon: Columns, requiredLevel: "editor" },
     { name: "Templates", path: createPageUrl("TemplateManager"), icon: LayoutIcon, requiredLevel: "editor" },
     { name: "Webhooks", path: createPageUrl("WebhookManager"), icon: Webhook, requiredLevel: "admin" },
     { name: "Jobs", path: createPageUrl("JobsManager"), icon: Clock, requiredLevel: "editor" },
