@@ -3,17 +3,14 @@ import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Download, Save, AlertCircle, AlertTriangle, RefreshCw } from "lucide-react";
+import { Download, Save, AlertCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import ReportRequestPanel from "../components/report/ReportRequestPanel";
 import ReportCanvas from "../components/report/ReportCanvas";
 import SavedReportsList from "../components/report/SavedReportsList";
-import ApiHealthIndicator from "../components/api/ApiHealthIndicator";
-import QueueProgressIndicator from "../components/api/QueueProgressIndicator";
 import DataQualityIndicator from "../components/data/DataQualityIndicator";
-import { apiService } from "../components/api/ApiService";
 import { dataTransformationService } from "../components/data/DataTransformationService";
 
 export default function ReportBuilder() {
@@ -21,7 +18,6 @@ export default function ReportBuilder() {
   const [currentReport, setCurrentReport] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [queueProgress, setQueueProgress] = useState({ current: 0, total: 0, visible: false });
   const [dataQuality, setDataQuality] = useState(null);
 
   // Fetch API settings
@@ -58,232 +54,9 @@ export default function ReportBuilder() {
     }
   });
 
-  // Helper to combine data from multiple metrics into a single dataset for charting
-  const combineMetricData = (results, config) => {
-    if (!results || results.length === 0) return [];
-
-    if (config.chart_type === 'pie') {
-      // For pie charts, we typically have one value per category/segment.
-      // Sum values for the same segment if multiple metrics are provided, or pick one.
-      // For simplicity here, we'll assume the first metric's data is primary for pie,
-      // or if multiple, they are aggregated somehow (though pie usually shows one total distribution).
-      // A more robust solution might require specifying how to combine.
-      return results[0]; // Assuming pie chart visualizes a single metric's distribution
-    }
-
-    // For line, bar, table charts, combine by common dimensions (date, segment_by)
-    const combinedMap = new Map();
-    const primaryKey = config.segment_by && config.segment_by.length > 0 ? 'segment' : 'date'; // Simplified key for merging
-
-    results.forEach(metricDataArray => {
-      metricDataArray.forEach(item => {
-        let key;
-        if (primaryKey === 'date') {
-          key = item.date;
-        } else {
-          // If segmented, create a composite key. E.g., "date|branch_name"
-          // Assuming segment_by always results in a property like 'branch' or 'region'
-          const segmentDimension = config.segment_by[0]; // Take the first segment_by for keying
-          key = `${item.date || ''}|${item[segmentDimension] || ''}`;
-        }
-
-        if (!combinedMap.has(key)) {
-          combinedMap.set(key, {});
-          if (item.date) combinedMap.get(key).date = item.date;
-          if (config.segment_by && config.segment_by.length > 0) {
-            const segmentDimension = config.segment_by[0];
-            if (item[segmentDimension]) combinedMap.get(key)[segmentDimension] = item[segmentDimension];
-          }
-        }
-        
-        // Merge metric specific fields
-        Object.keys(item).forEach(k => {
-          if (k !== 'date' && k !== config.segment_by?.[0]) { // Avoid overwriting date/segment keys
-            combinedMap.get(key)[k] = item[k];
-          }
-        });
-      });
-    });
-
-    return Array.from(combinedMap.values());
-  };
-
-  const generateMockData = (config, metricName) => {
-    const branches = ['North Branch', 'South Branch', 'East Branch', 'West Branch', 'Central Branch'];
-    const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America'];
-    const hasSegmentation = config.segment_by && config.segment_by.length > 0;
-    const currentMetric = metricName || 'value';
-
-    // For pie charts
-    if (config.chart_type === 'pie') {
-      let categories = ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'];
-      if (hasSegmentation) {
-        const segmentDimension = config.segment_by[0];
-        if (segmentDimension === 'branch') categories = branches;
-        if (segmentDimension === 'region') categories = regions;
-      }
-
-      const total = 10000;
-      const values = [];
-      let remaining = total;
-
-      categories.forEach((cat, idx) => {
-        if (idx === categories.length - 1) {
-          values.push(remaining);
-        } else {
-          const value = Math.floor(remaining * (Math.random() * 0.3 + 0.1));
-          values.push(value);
-          remaining -= value;
-        }
-      });
-
-      return categories.map((name, idx) => ({
-        name,
-        [currentMetric]: values[idx]
-      }));
-    }
-
-    // For time-series/table charts
-    const days = 30; // Default for line/bar/table
-    const data = [];
-
-    for (let i = 0; i < days; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - (days - i));
-      const dateStr = date.toISOString().split('T')[0];
-      const baseValue = 500 + Math.floor(Math.random() * 300);
-
-      if (hasSegmentation) {
-        const segmentDimension = config.segment_by[0];
-        if (segmentDimension === 'branch') {
-          branches.forEach(branch => {
-            data.push({
-              date: dateStr,
-              branch,
-              [currentMetric]: baseValue + Math.floor(Math.random() * 200)
-            });
-          });
-        } else if (segmentDimension === 'region') {
-          regions.forEach(region => {
-            data.push({
-              date: dateStr,
-              region,
-              [currentMetric]: baseValue + Math.floor(Math.random() * 200)
-            });
-          });
-        } else {
-          // Generic segmentation
-          ['Segment 1', 'Segment 2', 'Segment 3'].forEach(segment => {
-            data.push({
-              date: dateStr,
-              [segmentDimension]: segment,
-              [currentMetric]: baseValue + Math.floor(Math.random() * 200)
-            });
-          });
-        }
-      } else {
-        // No segmentation
-        data.push({
-          date: dateStr,
-          [currentMetric]: baseValue + Math.floor(Math.random() * 200)
-        });
-      }
-    }
-    return data;
-  };
-
-  const fetchAndTransformData = async (config) => {
-    const metrics = config.metrics && config.metrics.length > 0 ? config.metrics : ['value'];
-    const totalRequests = metrics.length;
-    const timePeriod = config.date_range?.granularity || 'daily';
-
-    setQueueProgress({ current: 0, total: totalRequests, visible: true });
-
-    try {
-      const results = [];
-      let allQualityIssues = [];
-
-      for (let i = 0; i < metrics.length; i++) {
-        const metric = metrics[i];
-        
-        // Check for cached transformed data
-        // For simplicity, we are using a fixed date range here. In a real app,
-        // this would be dynamic based on config.date_range.
-        const cacheStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const cacheEndDate = new Date();
-
-        const cached = await dataTransformationService.getCachedData(
-          metric,
-          timePeriod,
-          cacheStartDate,
-          cacheEndDate,
-          config.segment_by?.[0] // Pass segment dimension for cache key
-        );
-
-        let transformedData;
-        
-        if (cached && cached.data && cached.data.length > 0) {
-          console.log(`[ReportBuilder] Using cached transformed data for ${metric}`);
-          transformedData = cached; // Cached already contains data, quality, issues
-        } else {
-          // Fetch raw data using apiService (simulated here with generateMockData)
-          const rawData = await apiService.queueRequest(
-            async () => {
-              // Simulate API call delay
-              await new Promise(resolve => setTimeout(resolve, 800));
-              return generateMockData(config, metric);
-            },
-            { name: `Fetch ${metric} data` }
-          );
-
-          // Transform the data
-          transformedData = await dataTransformationService.transformData(rawData, {
-            metric_name: metric,
-            time_period: timePeriod,
-            segment_by: config.segment_by,
-            start_date: cacheStartDate, // Pass for caching
-            end_date: cacheEndDate, // Pass for caching
-          });
-          // Cache the transformed data
-          await dataTransformationService.cacheData(
-            metric,
-            timePeriod,
-            cacheStartDate,
-            cacheEndDate,
-            config.segment_by?.[0],
-            transformedData
-          );
-        }
-
-        results.push(transformedData.data);
-        allQualityIssues.push(...transformedData.quality_issues);
-        setQueueProgress(prev => ({ ...prev, current: i + 1 }));
-      }
-
-      const combinedData = combineMetricData(results, config);
-      const overallQuality = dataTransformationService.calculateOverallQuality(
-        allQualityIssues,
-        combinedData.length
-      );
-
-      return {
-        data: combinedData,
-        quality: {
-          quality_score: overallQuality,
-          issues: allQualityIssues
-        }
-      };
-
-    } finally {
-      setTimeout(() => {
-        setQueueProgress({ current: 0, total: 0, visible: false });
-      }, 1000); // Keep visible for a short period after completion
-    }
-  };
-
   const generateReport = async (request) => {
     setIsGenerating(true);
-    setDataQuality(null); // Clear previous data quality warnings
+    setDataQuality(null);
 
     try {
       // Use LLM to interpret the request and generate configuration
@@ -344,8 +117,11 @@ Generate a complete report configuration that captures their intent.`,
         }
       });
 
-      // Fetch and transform data
-      const result = await fetchAndTransformData(response);
+      // Generate mock data based on configuration
+      const mockData = generateMockData(response);
+
+      // Transform data after generation
+      const result = await transformAndStoreData(response, mockData);
 
       setCurrentReport({
         ...request,
@@ -356,16 +132,207 @@ Generate a complete report configuration that captures their intent.`,
       setDataQuality(result.quality);
       
       if (result.quality.quality_score < 80) {
-        toast.warning(`Data quality: ${result.quality.quality_score}/100. Check quality issues.`);
+        toast.warning(`Data quality: ${result.quality.quality_score}/100`);
       } else {
         toast.success('Report generated successfully');
       }
     } catch (error) {
-      toast.error('Failed to generate report: ' + error.message);
+      toast.error('Failed to generate report');
       console.error(error);
     }
 
     setIsGenerating(false);
+  };
+
+  const transformAndStoreData = async (config, rawData) => {
+    const timePeriod = config.date_range?.granularity || 'daily';
+    const metricName = config.metrics?.[0] || 'value';
+
+    try {
+      // Check for cached transformed data first
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - 30); // Default to last 30 days for cache key
+
+      const cached = await dataTransformationService.getCachedData(
+        metricName,
+        timePeriod,
+        startDate,
+        endDate
+      );
+
+      if (cached && cached.length > 0) {
+        console.log('[ReportBuilder] Using cached transformed data');
+        return {
+          data: rawData, // Use original format for display
+          quality: {
+            quality_score: cached[0].data_quality_score || 100,
+            issues: []
+          }
+        };
+      }
+
+      // Transform and store new data
+      const transformed = await dataTransformationService.transformData(rawData, {
+        metric_name: metricName,
+        time_period: timePeriod,
+        segment_by: config.segment_by
+      });
+
+      return {
+        data: rawData, // Keep original format for charts
+        quality: {
+          quality_score: transformed.quality_score,
+          issues: transformed.quality_issues
+        }
+      };
+    } catch (error) {
+      console.error('[ReportBuilder] Transform error:', error);
+      return {
+        data: rawData,
+        quality: { quality_score: 100, issues: [] }
+      };
+    }
+  };
+
+  const generateMockData = (config) => {
+    const branches = ['North Branch', 'South Branch', 'East Branch', 'West Branch', 'Central Branch'];
+    const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America'];
+    const hasSegmentation = config.segment_by && config.segment_by.length > 0;
+    
+    // For pie charts with segmentation
+    if (config.chart_type === 'pie' && hasSegmentation) {
+      const segmentDimension = config.segment_by[0];
+      const categories = segmentDimension === 'branch' ? branches : 
+                        segmentDimension === 'region' ? regions :
+                        ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'];
+      
+      // Generate proportional data that adds up correctly
+      const total = 10000;
+      const values = [];
+      let remaining = total;
+      
+      categories.forEach((cat, idx) => {
+        if (idx === categories.length - 1) {
+          values.push(remaining);
+        } else {
+          const value = Math.floor(remaining * (Math.random() * 0.3 + 0.1));
+          values.push(value);
+          remaining -= value;
+        }
+      });
+      
+      return categories.map((name, idx) => ({
+        name,
+        value: values[idx]
+      }));
+    }
+    
+    // For pie charts without segmentation
+    if (config.chart_type === 'pie') {
+      return [
+        { name: 'Category A', value: 4000 },
+        { name: 'Category B', value: 3000 },
+        { name: 'Category C', value: 2000 },
+        { name: 'Category D', value: 1000 }
+      ];
+    }
+
+    // For tables with segmentation
+    if (config.chart_type === 'table' && hasSegmentation) {
+      const rows = [];
+      const numDays = 10;
+      
+      if (config.segment_by.includes('branch')) {
+        branches.forEach(branch => {
+          for (let i = 0; i < numDays; i++) {
+            const baseValue = 500 + Math.floor(Math.random() * 300);
+            rows.push({
+              date: `2025-11-${String(i + 1).padStart(2, '0')}`,
+              branch,
+              ...(config.metrics?.reduce((acc, metric) => ({
+                ...acc,
+                [metric]: baseValue + Math.floor(Math.random() * 200)
+              }), {}) || { value: baseValue })
+            });
+          }
+        });
+      } else if (config.segment_by.includes('region')) {
+        regions.forEach(region => {
+          for (let i = 0; i < numDays; i++) {
+            const baseValue = 1000 + Math.floor(Math.random() * 500);
+            rows.push({
+              date: `2025-11-${String(i + 1).padStart(2, '0')}`,
+              region,
+              ...(config.metrics?.reduce((acc, metric) => ({
+                ...acc,
+                [metric]: baseValue + Math.floor(Math.random() * 300)
+              }), {}) || { value: baseValue })
+            });
+          }
+        });
+      }
+      
+      return rows;
+    }
+
+    // For tables without segmentation
+    if (config.chart_type === 'table') {
+      return Array.from({ length: 10 }, (_, i) => ({
+        date: `2025-11-${String(i + 1).padStart(2, '0')}`,
+        ...(config.metrics?.reduce((acc, metric) => ({
+          ...acc,
+          [metric]: 500 + Math.floor(Math.random() * 500)
+        }), {}) || { value: 500 + Math.floor(Math.random() * 500) })
+      }));
+    }
+
+    // For line/bar charts with segmentation
+    if (hasSegmentation && (config.chart_type === 'line' || config.chart_type === 'bar')) {
+      const days = 30;
+      const data = [];
+      
+      for (let i = 0; i < days; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - (days - i));
+        const dateStr = date.toISOString().split('T')[0];
+        
+        const row = { date: dateStr };
+        
+        // Add segmented data
+        if (config.segment_by.includes('branch')) {
+          branches.forEach(branch => {
+            const baseValue = 100 + Math.floor(Math.random() * 100);
+            row[branch] = baseValue;
+          });
+        } else if (config.segment_by.includes('region')) {
+          regions.forEach(region => {
+            const baseValue = 200 + Math.floor(Math.random() * 150);
+            row[region] = baseValue;
+          });
+        }
+        
+        data.push(row);
+      }
+      
+      return data;
+    }
+
+    // Default line/bar chart without segmentation
+    const days = 30;
+    return Array.from({ length: days }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (days - i));
+      const baseValue = 500 + Math.floor(Math.random() * 300);
+      
+      return {
+        date: date.toISOString().split('T')[0],
+        ...(config.metrics?.reduce((acc, metric) => ({
+          ...acc,
+          [metric]: baseValue + Math.floor(Math.random() * 200)
+        }), {}) || { value: baseValue })
+      };
+    });
   };
 
   const handleSaveReport = () => {
@@ -375,64 +342,22 @@ Generate a complete report configuration that captures their intent.`,
 
   const handleLoadReport = async (report) => {
     setCurrentReport(report);
-    const result = await fetchAndTransformData(report.configuration);
+    const mockData = generateMockData(report.configuration);
+    const result = await transformAndStoreData(report.configuration, mockData);
     setReportData(result.data);
     setDataQuality(result.quality);
     toast.success(`Loaded: ${report.title}`);
   };
 
-  const handleRefreshData = async () => {
-    if (!currentReport) return;
-    
-    toast.info('Refreshing data...');
-    setIsGenerating(true);
-    
-    try {
-      // Clear cache specifically for this report's configuration
-      await dataTransformationService.clearCacheForConfig(currentReport.configuration);
-      await apiService.clearAllQueues(); // Clear all pending API requests as well
-      
-      // Re-fetch and transform data
-      const result = await fetchAndTransformData(currentReport.configuration);
-      setReportData(result.data);
-      setDataQuality(result.quality);
-      
-      toast.success('Data refreshed');
-    } catch (error) {
-      toast.error('Failed to refresh data: ' + error.message);
-      console.error(error);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
   const handleExport = () => {
-    if (!reportData || reportData.length === 0) {
-      toast.error('No data to export.');
-      return;
-    }
-
-    // For pie charts, 'name' and the metric name are keys.
-    // For other charts, it could be 'date', segment_by, and metric names.
-    const keys = new Set();
-    reportData.forEach(row => {
-        Object.keys(row).forEach(key => keys.add(key));
-    });
-    const headers = Array.from(keys);
+    if (!reportData) return;
 
     const csvContent = [
-      headers.join(','),
-      ...reportData.map(row => headers.map(header => {
-        const value = row[header];
-        // Handle potential commas or quotes in values
-        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return value;
-      }).join(','))
+      Object.keys(reportData[0]).join(','),
+      ...reportData.map(row => Object.values(row).join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -440,7 +365,6 @@ Generate a complete report configuration that captures their intent.`,
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url); // Clean up the URL object
     
     toast.success('Report exported');
   };
@@ -456,13 +380,10 @@ Generate a complete report configuration that captures their intent.`,
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Bespoke Report Builder</h1>
               <p className="text-gray-600 mt-1">
-                Describe what you want to visualize and we'll create a custom report
+                Describe what you want to visualize and we'll create a custom report for you
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <DataQualityIndicator dataQuality={dataQuality} />
-              <ApiHealthIndicator />
-            </div>
+            <DataQualityIndicator />
           </div>
 
           {!isApiConfigured && (
@@ -476,26 +397,18 @@ Generate a complete report configuration that captures their intent.`,
           )}
 
           {dataQuality && dataQuality.quality_score < 80 && (
-            <Alert variant="warning">
+            <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
                 Data quality score: {dataQuality.quality_score}/100. 
                 {dataQuality.issues.length > 0 && ` Found ${dataQuality.issues.length} issue(s).`}
-                {dataQuality.issues.length > 0 && (
-                    <ul className="list-disc pl-5 mt-2 text-sm">
-                        {dataQuality.issues.slice(0, 3).map((issue, index) => (
-                            <li key={index}>{issue.description}</li>
-                        ))}
-                        {dataQuality.issues.length > 3 && <li>And {dataQuality.issues.length - 3} more...</li>}
-                    </ul>
-                )}
               </AlertDescription>
             </Alert>
           )}
 
           {/* Main Layout */}
           <div className="grid lg:grid-cols-12 gap-6">
-            {/* Left Panel */}
+            {/* Left Panel - Request Builder */}
             <div className="lg:col-span-4 space-y-6">
               <ReportRequestPanel 
                 onGenerateReport={generateReport}
@@ -510,27 +423,18 @@ Generate a complete report configuration that captures their intent.`,
               />
             </div>
 
-            {/* Right Panel */}
+            {/* Right Panel - Report Display */}
             <div className="lg:col-span-8 space-y-4">
               {currentReport && (
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
-                    onClick={handleRefreshData}
-                    disabled={isGenerating}
-                    className="gap-2"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Refresh
-                  </Button>
-                  <Button
-                    variant="outline"
                     onClick={handleExport}
-                    disabled={!reportData || reportData.length === 0}
+                    disabled={!reportData}
                     className="gap-2"
                   >
                     <Download className="w-4 h-4" />
-                    Export
+                    Export CSV
                   </Button>
                   <Button
                     onClick={handleSaveReport}
@@ -538,7 +442,7 @@ Generate a complete report configuration that captures their intent.`,
                     className="gap-2"
                   >
                     <Save className="w-4 h-4" />
-                    Save
+                    Save Report
                   </Button>
                 </div>
               )}
@@ -551,12 +455,6 @@ Generate a complete report configuration that captures their intent.`,
           </div>
         </div>
       </div>
-
-      <QueueProgressIndicator 
-        current={queueProgress.current}
-        total={queueProgress.total}
-        isVisible={queueProgress.visible}
-      />
     </div>
   );
 }

@@ -14,7 +14,6 @@ class DataTransformationService {
    */
   async transformData(rawData, config) {
     const { metric_name, time_period = 'daily', segment_by = [] } = config;
-    const transformedData = [];
     const qualityIssues = [];
 
     try {
@@ -45,7 +44,7 @@ class DataTransformationService {
 
       // Store transformed data
       for (const record of enrichedData) {
-        const transformedRecord = await base44.entities.TransformedMetric.create({
+        await base44.entities.TransformedMetric.create({
           metric_name,
           time_period,
           period_start: record.period_start,
@@ -60,7 +59,6 @@ class DataTransformationService {
           },
           data_quality_score: record.quality_score
         });
-        transformedData.push(transformedRecord);
       }
 
       // Log quality issues
@@ -68,11 +66,10 @@ class DataTransformationService {
         await base44.entities.DataQualityLog.create(issue);
       }
 
-      console.log(`[DataTransform] Processed ${transformedData.length} records with ${qualityIssues.length} quality issues`);
+      console.log(`[DataTransform] Processed ${enrichedData.length} records, ${qualityIssues.length} issues`);
 
       return {
         data: enrichedData,
-        transformed_records: transformedData,
         quality_issues: qualityIssues,
         quality_score: this.calculateOverallQuality(qualityIssues, enrichedData.length)
       };
@@ -112,7 +109,6 @@ class DataTransformationService {
    */
   cleanData(data, qualityIssues, metricName) {
     const cleaned = [];
-    let missingCount = 0;
     let nullCount = 0;
 
     for (const record of data) {
@@ -123,7 +119,6 @@ class DataTransformationService {
         if (key !== 'date' && key !== 'name' && key !== 'segment') {
           if (cleanedRecord[key] === null || cleanedRecord[key] === undefined) {
             nullCount++;
-            // Replace with 0 or previous value
             cleanedRecord[key] = 0;
             cleanedRecord._imputed = true;
           }
@@ -160,9 +155,6 @@ class DataTransformationService {
    * Aggregate data by time period
    */
   aggregateByTimePeriod(data, timePeriod, segmentBy) {
-    const aggregated = [];
-    
-    // Group by time period and segment
     const groups = {};
 
     for (const record of data) {
@@ -180,7 +172,6 @@ class DataTransformationService {
         };
       }
 
-      // Extract numeric values
       Object.keys(record).forEach(key => {
         if (key !== 'date' && key !== 'name' && typeof record[key] === 'number') {
           groups[groupKey].values.push(record[key]);
@@ -190,6 +181,7 @@ class DataTransformationService {
     }
 
     // Calculate aggregations
+    const aggregated = [];
     for (const groupKey in groups) {
       const group = groups[groupKey];
       const values = group.values;
@@ -215,17 +207,15 @@ class DataTransformationService {
    * Calculate derived metrics
    */
   calculateDerivedMetrics(data) {
-    const enriched = data.map((record, idx) => {
+    return data.map((record, idx) => {
       const enhanced = { ...record };
 
-      // Growth rate (compared to previous period)
+      // Growth rate
       if (idx > 0) {
         const previousValue = data[idx - 1].value;
-        if (previousValue > 0) {
-          enhanced.growth_rate = ((record.value - previousValue) / previousValue) * 100;
-        } else {
-          enhanced.growth_rate = 0;
-        }
+        enhanced.growth_rate = previousValue > 0 
+          ? ((record.value - previousValue) / previousValue) * 100 
+          : 0;
       } else {
         enhanced.growth_rate = 0;
       }
@@ -242,8 +232,6 @@ class DataTransformationService {
 
       return enhanced;
     });
-
-    return enriched;
   }
 
   /**
@@ -260,7 +248,7 @@ class DataTransformationService {
 
     for (let i = 0; i < data.length; i++) {
       const value = data[i].value;
-      const zScore = Math.abs((value - mean) / stdDev);
+      const zScore = stdDev > 0 ? Math.abs((value - mean) / stdDev) : 0;
 
       if (zScore > this.anomalyThreshold) {
         anomalies.push({
@@ -287,7 +275,6 @@ class DataTransformationService {
         time_period: timePeriod
       });
 
-      // Filter by date range
       const filtered = cached.filter(record => {
         const recordDate = new Date(record.period_start);
         return recordDate >= new Date(startDate) && recordDate <= new Date(endDate);
@@ -401,7 +388,7 @@ class DataTransformationService {
   }
 
   calculateOverallQuality(issues, recordCount) {
-    if (recordCount === 0) return 0;
+    if (recordCount === 0) return 100;
     
     const severityWeights = { low: 1, medium: 3, high: 7, critical: 15 };
     const totalDeductions = issues.reduce((sum, issue) => {

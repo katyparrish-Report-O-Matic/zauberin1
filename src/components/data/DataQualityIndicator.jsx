@@ -14,7 +14,7 @@ export default function DataQualityIndicator() {
   const { data: qualityIssues } = useQuery({
     queryKey: ['dataQualityIssues'],
     queryFn: () => dataTransformationService.getQualityIssues(10),
-    refetchInterval: 60000, // Check every minute
+    refetchInterval: 60000,
     initialData: []
   });
 
