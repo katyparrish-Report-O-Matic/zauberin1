@@ -1,54 +1,66 @@
-import { useEffect } from 'react';
-import { alertManager } from './AlertManager';
-import { statusChecker } from './StatusChecker';
-import { monitoringService } from './MonitoringService';
-import { usePermissions } from '../auth/usePermissions';
+import React, { useEffect } from 'react';
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { environmentConfig } from "../config/EnvironmentConfig";
+import { productionApiService } from "../api/ProductionApiService";
+import { usePermissions } from "../auth/usePermissions";
 
 /**
  * Monitoring Initializer Component
- * Starts monitoring services when app loads
+ * Runs health checks and monitoring tasks on app load
  */
 export default function MonitoringInitializer() {
-  const { hasPermission } = usePermissions();
+  const { currentUser } = usePermissions();
 
+  // Check API health on mount
   useEffect(() => {
-    // Only start monitoring for admin users (to reduce overhead)
-    if (!hasPermission('admin')) return;
+    if (!currentUser?.organization_id) return;
 
-    // Start alert manager
-    alertManager.start();
+    const initMonitoring = async () => {
+      try {
+        environmentConfig.log('info', '[Monitoring] Initializing system monitoring');
 
-    // Start status checker
-    statusChecker.start();
+        // Check API health
+        const apiHealth = await productionApiService.checkApiHealth(currentUser.organization_id);
+        
+        if (!apiHealth.healthy) {
+          environmentConfig.log('warn', '[Monitoring] API health check failed:', apiHealth.error);
+        } else {
+          environmentConfig.log('info', '[Monitoring] API health check passed');
+        }
 
-    // Track page performance
-    if (window.performance) {
-      const perfData = window.performance.timing;
-      const pageLoadTime = perfData.loadEventEnd - perfData.navigationStart;
+        // Prefetch dashboard data in background
+        if (environmentConfig.get('features').analytics) {
+          productionApiService.prefetchDashboardData(currentUser.organization_id).catch(err => {
+            environmentConfig.log('warn', '[Monitoring] Prefetch failed:', err);
+          });
+        }
+
+      } catch (error) {
+        environmentConfig.log('error', '[Monitoring] Initialization error:', error);
+      }
+    };
+
+    initMonitoring();
+  }, [currentUser?.organization_id]);
+
+  // Periodic health check
+  useQuery({
+    queryKey: ['systemHealth', currentUser?.organization_id],
+    queryFn: async () => {
+      if (!currentUser?.organization_id) return null;
       
-      if (pageLoadTime > 0) {
-        monitoringService.trackPageLoad(window.location.pathname, pageLoadTime);
+      const health = await productionApiService.checkApiHealth(currentUser.organization_id);
+      
+      if (!health.healthy) {
+        environmentConfig.log('warn', '[Monitoring] Periodic health check failed');
       }
-    }
-
-    return () => {
-      // Cleanup on unmount
-      alertManager.stop();
-      statusChecker.stop();
-    };
-  }, [hasPermission]);
-
-  // Track route changes
-  useEffect(() => {
-    const startTime = Date.now();
-
-    return () => {
-      const duration = Date.now() - startTime;
-      if (duration > 100) { // Only track if user spent time on page
-        monitoringService.trackPageLoad(window.location.pathname, duration);
-      }
-    };
-  }, [window.location.pathname]);
+      
+      return health;
+    },
+    refetchInterval: 5 * 60 * 1000, // Check every 5 minutes
+    enabled: !!currentUser?.organization_id && environmentConfig.isMonitoringEnabled()
+  });
 
   return null; // This component doesn't render anything
 }
