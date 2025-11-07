@@ -10,6 +10,7 @@ import BackupManager from './pages/BackupManager';
 import DataQuality from './pages/DataQuality';
 import ApiKeysManager from './pages/ApiKeysManager';
 import ApiDocumentation from './pages/ApiDocumentation';
+import IntegrationsManager from './pages/IntegrationsManager';
 import Layout from './Layout.jsx';
 
 
@@ -26,6 +27,7 @@ export const PAGES = {
     "DataQuality": DataQuality,
     "ApiKeysManager": ApiKeysManager,
     "ApiDocumentation": ApiDocumentation,
+    "IntegrationsManager": IntegrationsManager,
 }
 
 export const pagesConfig = {
