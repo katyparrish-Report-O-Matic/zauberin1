@@ -2,7 +2,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, Clock, Building2, Shield, Webhook, Layout as LayoutIcon, Columns, FileText, Activity, Database, Key, Zap, HardDrive, FileBarChart } from "lucide-react";
+import { Settings, Clock, Building2, Shield, Webhook, FlaskConical, Columns, FileText, Activity, Database, Key, Zap, HardDrive, FileBarChart } from "lucide-react";
 import JobScheduler from "./components/jobs/JobScheduler";
 import { usePermissions } from "./components/auth/usePermissions";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ export default function Layout({ children }) {
 
   const navItems = [
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: FileBarChart },
-    { name: "Templates", path: createPageUrl("ReportTemplates"), icon: LayoutIcon },
+    { name: "Templates", path: createPageUrl("ReportTemplates"), icon: FlaskConical },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
     { name: "Monitoring", path: createPageUrl("MonitoringDashboard"), icon: Activity, requiredLevel: "admin" },
     { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" },
