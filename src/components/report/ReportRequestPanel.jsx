@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2 } from "lucide-react";
 
-export default function ReportRequestPanel({ onGenerateReport, isGenerating }) {
+export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false }) {
   const [title, setTitle] = useState('');
   const [request, setRequest] = useState('');
 
@@ -60,7 +61,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating }) {
 
         <Button 
           onClick={handleGenerate}
-          disabled={!request.trim() || isGenerating}
+          disabled={!request.trim() || isGenerating || disabled}
           className="w-full gap-2"
         >
           {isGenerating ? (
@@ -75,6 +76,12 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating }) {
             </>
           )}
         </Button>
+
+        {disabled && (
+          <p className="text-xs text-red-600">
+            You need editor permissions to create reports
+          </p>
+        )}
 
         <div className="pt-4 border-t">
           <p className="text-sm font-medium text-gray-700 mb-2">Example requests:</p>

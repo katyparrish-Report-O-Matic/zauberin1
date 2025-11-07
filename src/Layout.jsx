@@ -1,17 +1,27 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, Settings, Clock } from "lucide-react";
+import { Sparkles, Settings, Clock, Building2, Shield } from "lucide-react";
 import JobScheduler from "./components/jobs/JobScheduler";
+import { usePermissions } from "./components/auth/usePermissions";
+import { Badge } from "@/components/ui/badge";
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const { userOrg, hasPermission, isAgency } = usePermissions();
 
   const navItems = [
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: Sparkles },
-    { name: "Jobs", path: createPageUrl("JobsManager"), icon: Clock },
-    { name: "Settings", path: createPageUrl("Settings"), icon: Settings }
+    { name: "Jobs", path: createPageUrl("JobsManager"), icon: Clock, requiredLevel: "editor" },
+    { name: "Organizations", path: createPageUrl("OrganizationManager"), icon: Building2, requiredLevel: "admin", agencyOnly: true },
+    { name: "Settings", path: createPageUrl("Settings"), icon: Settings, requiredLevel: "admin" }
   ];
+
+  const visibleNavItems = navItems.filter(item => {
+    if (item.agencyOnly && !isAgency) return false;
+    if (item.requiredLevel && !hasPermission(item.requiredLevel)) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -20,11 +30,24 @@ export default function Layout({ children }) {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex justify-between h-16">
             <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-gray-900">Report Builder</h1>
+              <div className="flex-shrink-0 flex items-center gap-3">
+                <h1 className="text-xl font-bold text-gray-900">MetricFlow</h1>
+                {userOrg && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {userOrg.name}
+                    </Badge>
+                    {isAgency && (
+                      <Badge variant="default" className="text-xs bg-blue-600">
+                        <Shield className="w-3 h-3 mr-1" />
+                        Agency
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
-                {navItems.map((item) => {
+                {visibleNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.path;
                   return (

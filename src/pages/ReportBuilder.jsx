@@ -12,6 +12,8 @@ import ReportCanvas from "../components/report/ReportCanvas";
 import SavedReportsList from "../components/report/SavedReportsList";
 import DataQualityIndicator from "../components/data/DataQualityIndicator";
 import { dataTransformationService } from "../components/data/DataTransformationService";
+import OrganizationSelector from "../components/org/OrganizationSelector";
+import { usePermissions } from "../components/auth/usePermissions";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -19,20 +21,39 @@ export default function ReportBuilder() {
   const [reportData, setReportData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [dataQuality, setDataQuality] = useState(null);
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
 
-  // Fetch API settings
+  const { currentUser, isAgency, hasPermission } = usePermissions();
+
+  // Fetch API settings for current/selected organization
   const { data: apiSettings } = useQuery({
-    queryKey: ['apiSettings'],
+    queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
-      const settings = await base44.entities.ApiSettings.list();
+      const orgId = selectedOrgId || currentUser?.organization_id;
+      if (!orgId || orgId === 'all') return null; // 'all' is for agency view, not a specific org for settings
+      
+      const settings = await base44.entities.ApiSettings.filter({ organization_id: orgId });
       return settings[0] || null;
-    }
+    },
+    enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
 
-  // Fetch saved reports
+  // Fetch saved reports filtered by organization
   const { data: savedReports } = useQuery({
-    queryKey: ['reportRequests'],
-    queryFn: () => base44.entities.ReportRequest.list('-created_date'),
+    queryKey: ['reportRequests', selectedOrgId || currentUser?.organization_id],
+    queryFn: async () => {
+      const orgId = selectedOrgId || currentUser?.organization_id;
+      
+      if (isAgency && selectedOrgId === 'all') {
+        return await base44.entities.ReportRequest.list('-created_date');
+      }
+      
+      if (!orgId || orgId === 'all') return []; // If no org selected or 'all' is selected for a non-agency user
+      return await base44.entities.ReportRequest.filter(
+        { organization_id: orgId },
+        '-created_date'
+      );
+    },
     initialData: []
   });
 
@@ -42,6 +63,10 @@ export default function ReportBuilder() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reportRequests'] });
       toast.success('Report saved successfully');
+    },
+    onError: (error) => {
+      toast.error('Failed to save report');
+      console.error("Save report error:", error);
     }
   });
 
@@ -51,10 +76,28 @@ export default function ReportBuilder() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reportRequests'] });
       toast.success('Report deleted');
+      setCurrentReport(null); // Clear current report if deleted
+      setReportData(null);
+      setDataQuality(null);
+    },
+    onError: (error) => {
+      toast.error('Failed to delete report');
+      console.error("Delete report error:", error);
     }
   });
 
   const generateReport = async (request) => {
+    if (!hasPermission('editor')) {
+      toast.error('You need editor permissions to create reports');
+      return;
+    }
+
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    if (!orgId || orgId === 'all') {
+      toast.error('Please select an organization');
+      return;
+    }
+
     setIsGenerating(true);
     setDataQuality(null);
 
@@ -125,6 +168,7 @@ Generate a complete report configuration that captures their intent.`,
 
       setCurrentReport({
         ...request,
+        organization_id: orgId, // Assign current organization ID
         configuration: response,
         status: 'generated'
       });
@@ -158,7 +202,8 @@ Generate a complete report configuration that captures their intent.`,
         metricName,
         timePeriod,
         startDate,
-        endDate
+        endDate,
+        selectedOrgId || currentUser?.organization_id // Pass organization ID to cache key
       );
 
       if (cached && cached.length > 0) {
@@ -176,7 +221,8 @@ Generate a complete report configuration that captures their intent.`,
       const transformed = await dataTransformationService.transformData(rawData, {
         metric_name: metricName,
         time_period: timePeriod,
-        segment_by: config.segment_by
+        segment_by: config.segment_by,
+        organization_id: selectedOrgId || currentUser?.organization_id // Pass organization ID
       });
 
       return {
@@ -337,11 +383,19 @@ Generate a complete report configuration that captures their intent.`,
 
   const handleSaveReport = () => {
     if (!currentReport) return;
+    if (!hasPermission('editor')) {
+      toast.error('You need editor permissions to save reports');
+      return;
+    }
     saveReportMutation.mutate(currentReport);
   };
 
   const handleLoadReport = async (report) => {
     setCurrentReport(report);
+    // Ensure the selectedOrgId is set when a report from a specific organization is loaded
+    if (report.organization_id && selectedOrgId !== report.organization_id) {
+      setSelectedOrgId(report.organization_id);
+    }
     const mockData = generateMockData(report.configuration);
     const result = await transformAndStoreData(report.configuration, mockData);
     setReportData(result.data);
@@ -349,15 +403,32 @@ Generate a complete report configuration that captures their intent.`,
     toast.success(`Loaded: ${report.title}`);
   };
 
+  const handleDeleteReport = (id) => {
+    if (!hasPermission('admin')) {
+      toast.error('You need admin permissions to delete reports');
+      return;
+    }
+    deleteReportMutation.mutate(id);
+  };
+
   const handleExport = () => {
-    if (!reportData) return;
+    if (!reportData || reportData.length === 0) {
+      toast.info('No data to export.');
+      return;
+    }
 
     const csvContent = [
       Object.keys(reportData[0]).join(','),
-      ...reportData.map(row => Object.values(row).join(','))
+      ...reportData.map(row => Object.values(row).map(value => {
+        // Escape commas and double quotes for CSV format
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -365,6 +436,7 @@ Generate a complete report configuration that captures their intent.`,
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url); // Clean up
     
     toast.success('Report exported');
   };
@@ -383,15 +455,25 @@ Generate a complete report configuration that captures their intent.`,
                 Describe what you want to visualize and we'll create a custom report for you
               </p>
             </div>
-            <DataQualityIndicator />
+            <div className="flex items-center gap-3">
+              {isAgency && (
+                <OrganizationSelector
+                  value={selectedOrgId || currentUser?.organization_id}
+                  onChange={setSelectedOrgId}
+                />
+              )}
+              <DataQualityIndicator />
+            </div>
           </div>
 
           {!isApiConfigured && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                API not configured. Currently using mock data.{' '}
-                <a href="/settings" className="underline font-medium">Configure API settings</a>
+                API not configured for this organization. Currently using mock data.{' '}
+                {hasPermission('admin') && (
+                  <a href="/settings" className="underline font-medium">Configure API settings</a>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -413,13 +495,15 @@ Generate a complete report configuration that captures their intent.`,
               <ReportRequestPanel 
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
+                disabled={!hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
               />
               
               <SavedReportsList
                 reports={savedReports}
                 onLoadReport={handleLoadReport}
-                onDeleteReport={(id) => deleteReportMutation.mutate(id)}
+                onDeleteReport={handleDeleteReport}
                 onShareReport={(report) => toast.info('Sharing feature coming soon')}
+                canDelete={hasPermission('admin')}
               />
             </div>
 
@@ -430,7 +514,7 @@ Generate a complete report configuration that captures their intent.`,
                   <Button
                     variant="outline"
                     onClick={handleExport}
-                    disabled={!reportData}
+                    disabled={!reportData || reportData.length === 0}
                     className="gap-2"
                   >
                     <Download className="w-4 h-4" />
@@ -438,7 +522,7 @@ Generate a complete report configuration that captures their intent.`,
                   </Button>
                   <Button
                     onClick={handleSaveReport}
-                    disabled={!currentReport || currentReport.id}
+                    disabled={!currentReport || currentReport.id || !hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
                     className="gap-2"
                   >
                     <Save className="w-4 h-4" />

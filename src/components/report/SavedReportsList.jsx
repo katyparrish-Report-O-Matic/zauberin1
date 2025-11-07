@@ -1,10 +1,11 @@
+
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Trash2, Share2 } from "lucide-react";
 import { format } from "date-fns";
 
-export default function SavedReportsList({ reports, onLoadReport, onDeleteReport, onShareReport }) {
+export default function SavedReportsList({ reports, onLoadReport, onDeleteReport, onShareReport, canDelete = true }) {
   if (!reports || reports.length === 0) {
     return (
       <Card>
@@ -56,14 +57,16 @@ export default function SavedReportsList({ reports, onLoadReport, onDeleteReport
                 >
                   <Share2 className="w-3.5 h-3.5" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-red-600 hover:text-red-700"
-                  onClick={() => onDeleteReport(report.id)}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                {canDelete && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-600 hover:text-red-700"
+                    onClick={() => onDeleteReport(report.id)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
