@@ -2,19 +2,23 @@ import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Download, Save, AlertCircle } from "lucide-react";
+import { Download, Save, AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import ReportRequestPanel from "../components/report/ReportRequestPanel";
 import ReportCanvas from "../components/report/ReportCanvas";
 import SavedReportsList from "../components/report/SavedReportsList";
+import ApiHealthIndicator from "../components/api/ApiHealthIndicator";
+import QueueProgressIndicator from "../components/api/QueueProgressIndicator";
+import { apiService } from "../components/api/ApiService";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
   const [currentReport, setCurrentReport] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [queueProgress, setQueueProgress] = useState({ current: 0, total: 0, visible: false });
 
   // Fetch API settings
   const { data: apiSettings } = useQuery({
@@ -112,8 +116,8 @@ Generate a complete report configuration that captures their intent.`,
         }
       });
 
-      // Generate mock data based on configuration
-      const mockData = generateMockData(response);
+      // Fetch data using API service with queuing
+      const mockData = await fetchReportData(response);
 
       setCurrentReport({
         ...request,
@@ -124,14 +128,70 @@ Generate a complete report configuration that captures their intent.`,
       
       toast.success('Report generated successfully');
     } catch (error) {
-      toast.error('Failed to generate report');
+      toast.error('Failed to generate report: ' + error.message);
       console.error(error);
     }
 
     setIsGenerating(false);
   };
 
-  const generateMockData = (config) => {
+  const fetchReportData = async (config) => {
+    // Simulate queued API requests
+    const metrics = config.metrics || ['value'];
+    const totalRequests = metrics.length;
+
+    setQueueProgress({ current: 0, total: totalRequests, visible: true });
+
+    try {
+      const results = [];
+
+      for (let i = 0; i < metrics.length; i++) {
+        const metric = metrics[i];
+        
+        // Queue the request
+        const data = await apiService.queueRequest(
+          async () => {
+            // Simulate API call with delay
+            await new Promise(resolve => setTimeout(resolve, 800));
+            return generateMockData(config, metric);
+          },
+          { name: `Fetch ${metric} data` }
+        );
+
+        results.push(data);
+        setQueueProgress(prev => ({ ...prev, current: i + 1 }));
+      }
+
+      // Combine results
+      const combinedData = combineMetricData(results, config);
+      
+      return combinedData;
+
+    } finally {
+      // Hide progress after a short delay
+      setTimeout(() => {
+        setQueueProgress({ current: 0, total: 0, visible: false });
+      }, 1000);
+    }
+  };
+
+  const combineMetricData = (results, config) => {
+    if (results.length === 1) return results[0];
+    
+    // Merge multiple metric results
+    const combined = results[0].map((row, idx) => {
+      const mergedRow = { ...row };
+      for (let i = 1; i < results.length; i++) {
+        const metric = config.metrics[i];
+        mergedRow[metric] = results[i][idx]?.[config.metrics[i]] || results[i][idx]?.value || 0;
+      }
+      return mergedRow;
+    });
+
+    return combined;
+  };
+
+  const generateMockData = (config, metricName) => {
     const branches = ['North Branch', 'South Branch', 'East Branch', 'West Branch', 'Central Branch'];
     const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America'];
     const hasSegmentation = config.segment_by && config.segment_by.length > 0;
@@ -186,10 +246,7 @@ Generate a complete report configuration that captures their intent.`,
             rows.push({
               date: `2025-11-${String(i + 1).padStart(2, '0')}`,
               branch,
-              ...(config.metrics?.reduce((acc, metric) => ({
-                ...acc,
-                [metric]: baseValue + Math.floor(Math.random() * 200)
-              }), {}) || { value: baseValue })
+              [metricName]: baseValue + Math.floor(Math.random() * 200)
             });
           }
         });
@@ -200,10 +257,7 @@ Generate a complete report configuration that captures their intent.`,
             rows.push({
               date: `2025-11-${String(i + 1).padStart(2, '0')}`,
               region,
-              ...(config.metrics?.reduce((acc, metric) => ({
-                ...acc,
-                [metric]: baseValue + Math.floor(Math.random() * 300)
-              }), {}) || { value: baseValue })
+              [metricName]: baseValue + Math.floor(Math.random() * 300)
             });
           }
         });
@@ -216,10 +270,7 @@ Generate a complete report configuration that captures their intent.`,
     if (config.chart_type === 'table') {
       return Array.from({ length: 10 }, (_, i) => ({
         date: `2025-11-${String(i + 1).padStart(2, '0')}`,
-        ...(config.metrics?.reduce((acc, metric) => ({
-          ...acc,
-          [metric]: 500 + Math.floor(Math.random() * 500)
-        }), {}) || { value: 500 + Math.floor(Math.random() * 500) })
+        [metricName]: 500 + Math.floor(Math.random() * 500)
       }));
     }
 
@@ -263,10 +314,7 @@ Generate a complete report configuration that captures their intent.`,
       
       return {
         date: date.toISOString().split('T')[0],
-        ...(config.metrics?.reduce((acc, metric) => ({
-          ...acc,
-          [metric]: baseValue + Math.floor(Math.random() * 200)
-        }), {}) || { value: baseValue })
+        [metricName]: baseValue + Math.floor(Math.random() * 200)
       };
     });
   };
@@ -276,10 +324,26 @@ Generate a complete report configuration that captures their intent.`,
     saveReportMutation.mutate(currentReport);
   };
 
-  const handleLoadReport = (report) => {
+  const handleLoadReport = async (report) => {
     setCurrentReport(report);
-    setReportData(generateMockData(report.configuration));
+    const data = await fetchReportData(report.configuration);
+    setReportData(data);
     toast.success(`Loaded: ${report.title}`);
+  };
+
+  const handleRefreshData = async () => {
+    if (!currentReport) return;
+    
+    toast.info('Refreshing data...');
+    
+    // Clear cache for this report
+    await apiService.clearCache();
+    
+    // Re-fetch data
+    const data = await fetchReportData(currentReport.configuration);
+    setReportData(data);
+    
+    toast.success('Data refreshed');
   };
 
   const handleExport = () => {
@@ -298,6 +362,7 @@ Generate a complete report configuration that captures their intent.`,
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     
     toast.success('Report exported');
   };
@@ -309,11 +374,14 @@ Generate a complete report configuration that captures their intent.`,
       <div className="p-6 md:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Bespoke Report Builder</h1>
-            <p className="text-gray-600 mt-1">
-              Describe what you want to visualize and we'll create a custom report for you
-            </p>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Bespoke Report Builder</h1>
+              <p className="text-gray-600 mt-1">
+                Describe what you want to visualize and we'll create a custom report
+              </p>
+            </div>
+            <ApiHealthIndicator />
           </div>
 
           {!isApiConfigured && (
@@ -328,7 +396,7 @@ Generate a complete report configuration that captures their intent.`,
 
           {/* Main Layout */}
           <div className="grid lg:grid-cols-12 gap-6">
-            {/* Left Panel - Request Builder */}
+            {/* Left Panel */}
             <div className="lg:col-span-4 space-y-6">
               <ReportRequestPanel 
                 onGenerateReport={generateReport}
@@ -343,10 +411,19 @@ Generate a complete report configuration that captures their intent.`,
               />
             </div>
 
-            {/* Right Panel - Report Display */}
+            {/* Right Panel */}
             <div className="lg:col-span-8 space-y-4">
               {currentReport && (
                 <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleRefreshData}
+                    disabled={isGenerating}
+                    className="gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Refresh
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={handleExport}
@@ -354,7 +431,7 @@ Generate a complete report configuration that captures their intent.`,
                     className="gap-2"
                   >
                     <Download className="w-4 h-4" />
-                    Export CSV
+                    Export
                   </Button>
                   <Button
                     onClick={handleSaveReport}
@@ -362,7 +439,7 @@ Generate a complete report configuration that captures their intent.`,
                     className="gap-2"
                   >
                     <Save className="w-4 h-4" />
-                    Save Report
+                    Save
                   </Button>
                 </div>
               )}
@@ -375,6 +452,12 @@ Generate a complete report configuration that captures their intent.`,
           </div>
         </div>
       </div>
+
+      <QueueProgressIndicator 
+        current={queueProgress.current}
+        total={queueProgress.total}
+        isVisible={queueProgress.visible}
+      />
     </div>
   );
 }
