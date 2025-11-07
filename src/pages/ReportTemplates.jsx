@@ -16,18 +16,6 @@ export default function ReportTemplates() {
   const navigate = useNavigate();
   const { currentUser } = usePermissions();
 
-  // Fetch public templates
-  const { data: publicTemplates } = useQuery({
-    queryKey: ['publicTemplates'],
-    queryFn: async () => {
-      const templates = await base44.entities.ReportTemplate.filter({
-        is_public: true
-      }, '-usage_count');
-      return templates;
-    },
-    initialData: []
-  });
-
   // Fetch user's templates
   const { data: myTemplates } = useQuery({
     queryKey: ['myTemplates', currentUser?.organization_id],
@@ -42,30 +30,39 @@ export default function ReportTemplates() {
     initialData: []
   });
 
-  // Use template mutation
+  // Use template mutation - creates a static report request
   const useTemplateMutation = useMutation({
     mutationFn: async (template) => {
       // Increment usage count
-      await base44.entities.ReportTemplate.update(template.id, {
-        usage_count: (template.usage_count || 0) + 1
-      });
+      if (template.id) {
+        await base44.entities.ReportTemplate.update(template.id, {
+          usage_count: (template.usage_count || 0) + 1
+        });
+      }
 
-      // Create dashboard from template
-      return await base44.entities.Dashboard.create({
-        name: `${template.name} - ${new Date().toLocaleDateString()}`,
+      // Create a report request from template (not a live dashboard)
+      return await base44.entities.ReportRequest.create({
+        title: `${template.name} - ${new Date().toLocaleDateString()}`,
         description: template.description,
         organization_id: currentUser.organization_id,
-        template_id: template.id,
-        layout: template.layout_config,
-        components: template.metric_configs || [],
-        global_settings: {
-          refresh_interval: template.layout_config?.refresh_interval || 300
-        }
+        configuration: {
+          title: template.name,
+          metrics: template.metrics,
+          chart_type: template.type === 'realtime_monitor' ? 'line' : 
+                     template.type === 'comparison_view' ? 'bar' :
+                     template.type === 'executive_summary' ? 'line' : 'table',
+          segment_by: [],
+          date_range: {
+            period: template.type === 'realtime_monitor' ? 'today' : 'last_30_days',
+            granularity: 'daily'
+          }
+        },
+        status: 'draft'
       });
     },
-    onSuccess: (dashboard) => {
-      toast.success('Dashboard created from template');
-      navigate(createPageUrl('DashboardBuilder'));
+    onSuccess: (report) => {
+      toast.success('Report created from template');
+      navigate(createPageUrl('ReportBuilder'));
     },
     onError: () => {
       toast.error('Failed to use template');
@@ -101,46 +98,18 @@ export default function ReportTemplates() {
       usageCount: 156
     },
     {
-      name: 'Real-time Monitor',
-      description: 'Live dashboard with auto-refresh for monitoring',
+      name: 'Performance Monitor',
+      description: 'Key performance indicators snapshot',
       type: 'realtime_monitor',
       icon: Activity,
       color: 'bg-green-600',
-      metrics: ['Live Transactions', 'Active Users', 'System Health', 'Error Rate'],
+      metrics: ['Today\'s Transactions', 'Active Users', 'System Health', 'Conversion Rate'],
       usageCount: 134
     }
   ];
 
   const handleUseTemplate = async (template) => {
-    // Create template entity if it doesn't exist
-    const existingTemplates = await base44.entities.ReportTemplate.filter({
-      name: template.name,
-      is_public: true
-    });
-
-    let templateEntity;
-
-    if (existingTemplates.length > 0) {
-      templateEntity = existingTemplates[0];
-    } else {
-      templateEntity = await base44.entities.ReportTemplate.create({
-        name: template.name,
-        description: template.description,
-        template_type: template.type,
-        is_public: true,
-        layout_config: {
-          grid_layout: [],
-          refresh_interval: template.type === 'realtime_monitor' ? 30 : 300
-        },
-        metric_configs: template.metrics.map(m => ({
-          metric_name: m,
-          chart_type: 'line'
-        })),
-        usage_count: template.usageCount
-      });
-    }
-
-    useTemplateMutation.mutate(templateEntity);
+    useTemplateMutation.mutate(template);
   };
 
   return (
@@ -155,7 +124,7 @@ export default function ReportTemplates() {
                 Report Templates
               </h1>
               <p className="text-gray-600 mt-1">
-                Pre-built dashboard templates to get started quickly
+                Pre-built report templates to get started quickly - creates static reports, not live dashboards
               </p>
             </div>
 
@@ -242,6 +211,19 @@ export default function ReportTemplates() {
                 </div>
               </div>
             )}
+
+            {/* Info Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>About Report Templates</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-gray-600">
+                <p>✓ Templates create static reports, not live dashboards</p>
+                <p>✓ Each use generates a new report based on current data</p>
+                <p>✓ Reports can be customized after creation</p>
+                <p>✓ Perfect for recurring analysis needs</p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
