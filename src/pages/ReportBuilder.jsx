@@ -14,6 +14,7 @@ import DataQualityIndicator from "../components/data/DataQualityIndicator";
 import { dataTransformationService } from "../components/data/DataTransformationService";
 import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
+import RateLimitIndicator from "../components/api/RateLimitIndicator";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -462,6 +463,7 @@ Generate a complete report configuration that captures their intent.`,
                   onChange={setSelectedOrgId}
                 />
               )}
+              <RateLimitIndicator />
               <DataQualityIndicator />
             </div>
           </div>
