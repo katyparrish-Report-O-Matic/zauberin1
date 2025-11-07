@@ -2,6 +2,7 @@ import ReportBuilder from './pages/ReportBuilder';
 import Settings from './pages/Settings';
 import JobsManager from './pages/JobsManager';
 import OrganizationManager from './pages/OrganizationManager';
+import WebhookManager from './pages/WebhookManager';
 import Layout from './Layout.jsx';
 
 
@@ -10,6 +11,7 @@ export const PAGES = {
     "Settings": Settings,
     "JobsManager": JobsManager,
     "OrganizationManager": OrganizationManager,
+    "WebhookManager": WebhookManager,
 }
 
 export const pagesConfig = {

@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, Settings, Clock, Building2, Shield } from "lucide-react";
+import { Sparkles, Settings, Clock, Building2, Shield, Webhook } from "lucide-react";
 import JobScheduler from "./components/jobs/JobScheduler";
 import { usePermissions } from "./components/auth/usePermissions";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ export default function Layout({ children }) {
 
   const navItems = [
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: Sparkles },
+    { name: "Webhooks", path: createPageUrl("WebhookManager"), icon: Webhook, requiredLevel: "admin" },
     { name: "Jobs", path: createPageUrl("JobsManager"), icon: Clock, requiredLevel: "editor" },
     { name: "Organizations", path: createPageUrl("OrganizationManager"), icon: Building2, requiredLevel: "admin", agencyOnly: true },
     { name: "Settings", path: createPageUrl("Settings"), icon: Settings, requiredLevel: "admin" }
