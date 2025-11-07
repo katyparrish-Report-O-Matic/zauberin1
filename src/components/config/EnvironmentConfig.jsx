@@ -1,3 +1,4 @@
+
 /**
  * Environment Configuration Service
  * Manages environment-specific settings and configurations
@@ -42,7 +43,7 @@ const ENVIRONMENTS = {
 
   staging: {
     name: 'Staging',
-    apiBaseUrl: 'https://api-staging.metricflow.app/v1',
+    apiBaseUrl: 'https://api-staging.zauberin.app/v1', // Updated
     useMockData: false,
     enableVerboseLogging: true,
     enableDebugMode: true,
@@ -77,7 +78,7 @@ const ENVIRONMENTS = {
 
   production: {
     name: 'Production',
-    apiBaseUrl: 'https://api.metricflow.app/v1',
+    apiBaseUrl: 'https://api.zauberin.app/v1', // Updated
     useMockData: false,
     enableVerboseLogging: false,
     enableDebugMode: false,

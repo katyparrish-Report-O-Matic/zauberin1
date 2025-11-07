@@ -88,7 +88,6 @@ class ProductionApiService {
 
     const config = await this.getApiConfig(organizationId);
     if (!config) {
-      // Return mock metrics if no config
       environmentConfig.log('info', '[ProductionAPI] No API config, returning mock metrics');
       return [
         'revenue',

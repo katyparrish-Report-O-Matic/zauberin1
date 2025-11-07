@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -77,7 +78,7 @@ export default function WebhookManager() {
       
       // Generate webhook URL and secret
       const webhookId = Math.random().toString(36).substring(7);
-      const webhookUrl = `https://api.metricflow.app/webhooks/${webhookId}`;
+      const webhookUrl = `https://api.zauberin.app/webhooks/${webhookId}`;
       const secretKey = Math.random().toString(36).substring(2) + Date.now().toString(36);
 
       return await base44.entities.WebhookEndpoint.create({

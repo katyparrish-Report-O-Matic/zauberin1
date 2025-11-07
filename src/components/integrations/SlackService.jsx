@@ -1,3 +1,4 @@
+
 import { base44 } from "@/api/base44Client";
 
 /**
@@ -302,13 +303,13 @@ class SlackService {
   async testConnection(webhookUrl) {
     try {
       const message = {
-        text: '✅ MetricFlow connection test successful!',
+        text: '✅ Zauberin connection test successful!',
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: '✅ *MetricFlow Connection Test*\n\nYour Slack integration is configured correctly!'
+              text: '✅ *Zauberin Connection Test*\n\nYour Slack integration is configured correctly!'
             }
           }
         ]

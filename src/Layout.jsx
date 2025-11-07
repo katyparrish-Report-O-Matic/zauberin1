@@ -12,7 +12,6 @@ export default function Layout({ children }) {
   const location = useLocation();
   const { userOrg, hasPermission, isAgency, currentUser } = usePermissions();
 
-  // Determine if user is admin
   const isAdmin = currentUser?.permission_level === 'admin';
 
   const navItems = [
@@ -35,14 +34,11 @@ export default function Layout({ children }) {
   ];
 
   const visibleNavItems = navItems.filter(item => {
-    // Admins can see everything
     if (isAdmin) {
-      // Only hide agency-only items if not an agency
       if (item.agencyOnly && !isAgency) return false;
       return true;
     }
     
-    // For non-admins, apply normal permission checks
     if (item.agencyOnly && !isAgency) return false;
     if (item.requiredLevel && !hasPermission(item.requiredLevel)) return false;
     return true;
@@ -57,7 +53,7 @@ export default function Layout({ children }) {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center gap-3">
-                <h1 className="text-xl font-bold text-gray-900">MetricFlow</h1>
+                <h1 className="text-xl font-bold text-gray-900">Zauberin</h1>
                 {userOrg && (
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
