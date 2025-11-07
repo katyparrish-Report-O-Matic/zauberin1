@@ -4,10 +4,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
 export default function PermissionGuard({ children, requiredLevel, fallback }) {
-  const { hasPermission, isLoading } = usePermissions();
+  const { hasPermission, isLoading, currentUser } = usePermissions();
 
   if (isLoading) {
     return null;
+  }
+
+  // Admins can access everything - bypass all permission checks
+  if (currentUser?.permission_level === 'admin') {
+    return children;
   }
 
   if (!hasPermission(requiredLevel)) {

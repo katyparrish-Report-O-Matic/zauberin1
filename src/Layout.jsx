@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -11,7 +10,10 @@ import MonitoringInitializer from "./components/monitoring/MonitoringInitializer
 
 export default function Layout({ children }) {
   const location = useLocation();
-  const { userOrg, hasPermission, isAgency } = usePermissions();
+  const { userOrg, hasPermission, isAgency, currentUser } = usePermissions();
+
+  // Determine if user is admin
+  const isAdmin = currentUser?.permission_level === 'admin';
 
   const navItems = [
     { name: "Dashboard", path: createPageUrl("ProductionDashboard"), icon: Activity },
@@ -33,6 +35,14 @@ export default function Layout({ children }) {
   ];
 
   const visibleNavItems = navItems.filter(item => {
+    // Admins can see everything
+    if (isAdmin) {
+      // Only hide agency-only items if not an agency
+      if (item.agencyOnly && !isAgency) return false;
+      return true;
+    }
+    
+    // For non-admins, apply normal permission checks
     if (item.agencyOnly && !isAgency) return false;
     if (item.requiredLevel && !hasPermission(item.requiredLevel)) return false;
     return true;
@@ -57,6 +67,12 @@ export default function Layout({ children }) {
                       <Badge variant="default" className="text-xs bg-blue-600">
                         <Shield className="w-3 h-3 mr-1" />
                         Agency
+                      </Badge>
+                    )}
+                    {isAdmin && (
+                      <Badge variant="default" className="text-xs bg-purple-600">
+                        <Shield className="w-3 h-3 mr-1" />
+                        Admin
                       </Badge>
                     )}
                   </div>
