@@ -12,6 +12,7 @@ import ApiKeysManager from './pages/ApiKeysManager';
 import ApiDocumentation from './pages/ApiDocumentation';
 import IntegrationsManager from './pages/IntegrationsManager';
 import CacheManager from './pages/CacheManager';
+import PerformanceMonitor from './pages/PerformanceMonitor';
 import Layout from './Layout.jsx';
 
 
@@ -30,6 +31,7 @@ export const PAGES = {
     "ApiDocumentation": ApiDocumentation,
     "IntegrationsManager": IntegrationsManager,
     "CacheManager": CacheManager,
+    "PerformanceMonitor": PerformanceMonitor,
 }
 
 export const pagesConfig = {

@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { dataTransformationService } from "../data/DataTransformationService";
 import { backupService } from "../backup/BackupService"; // Added import
 import { cacheService } from "../cache/CacheService";
+import { archivalService } from "../performance/ArchivalService";
 
 /**
  * Background Job Service
@@ -207,6 +208,23 @@ class BackgroundJobService {
     const cacheCleanup = await cacheService.cleanupExpired();
     deletedCount += cacheCleanup;
 
+    // Run archival for all entities
+    const orgId = job.configuration?.organization_id;
+    // Check if orgId is provided before attempting archival, or handle it within archivalService
+    let archivalResults = {};
+    let totalArchived = 0;
+    if (orgId) {
+      archivalResults = await archivalService.runFullArchival(orgId);
+      totalArchived = Object.values(archivalResults).reduce((sum, result) => {
+        // Ensure result.archived is a number before adding
+        return sum + (typeof result.archived === 'number' ? result.archived : 0);
+      }, 0);
+      deletedCount += totalArchived;
+    } else {
+      console.warn('[BackgroundJobs] Data cleanup job configured with archival but no organization_id provided. Skipping archival.');
+      archivalResults = { skipped: 'No organization_id provided' };
+    }
+    
     // Archive old transformed metrics
     const oldMetrics = await base44.entities.TransformedMetric.list();
     for (const metric of oldMetrics) {
@@ -230,7 +248,9 @@ class BackgroundJobService {
       summary: {
         deleted_records: deletedCount,
         cache_cleaned: cacheCleanup,
-        cutoff_date: cutoffDate.toISOString()
+        archived_records: totalArchived,
+        cutoff_date: cutoffDate.toISOString(),
+        archival_details: archivalResults
       }
     };
   }

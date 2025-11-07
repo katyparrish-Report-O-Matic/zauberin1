@@ -16,6 +16,7 @@ export default function Layout({ children }) {
     { name: "Dashboard Builder", path: createPageUrl("DashboardBuilder"), icon: Columns, requiredLevel: "editor" },
     { name: "Templates", path: createPageUrl("TemplateManager"), icon: LayoutIcon, requiredLevel: "editor" },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
+    { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" }, // Added new item
     { name: "Cache", path: createPageUrl("CacheManager"), icon: HardDrive, requiredLevel: "admin" },
     { name: "Backups", path: createPageUrl("BackupManager"), icon: Database, requiredLevel: "admin" },
     { name: "Integrations", path: createPageUrl("IntegrationsManager"), icon: Zap, requiredLevel: "admin" },
