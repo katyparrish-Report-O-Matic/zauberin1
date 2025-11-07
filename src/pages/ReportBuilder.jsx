@@ -394,7 +394,7 @@ Generate a complete report configuration that captures their intent.`,
     
     // Log audit
     const orgId = selectedOrgId || currentUser?.organization_id;
-    if (orgId && currentUser) {
+    if (orgId && currentUser && currentReport) {
       auditService.logReportAction(
         orgId,
         currentUser.email,
@@ -468,7 +468,7 @@ Generate a complete report configuration that captures their intent.`,
     URL.revokeObjectURL(url); // Clean up
     
     toast.success('Report exported');
-
+    
     // Log audit
     const orgId = selectedOrgId || currentUser?.organization_id;
     if (orgId && currentUser && reportData) {
