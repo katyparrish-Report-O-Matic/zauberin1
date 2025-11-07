@@ -1,4 +1,6 @@
+
 import { base44 } from "@/api/base44Client";
+import { environmentConfig } from "../config/EnvironmentConfig";
 
 /**
  * Cache Service
@@ -6,8 +8,8 @@ import { base44 } from "@/api/base44Client";
  */
 class CacheService {
   constructor() {
-    // Default TTLs for different cache types (in seconds)
-    this.defaultTTLs = {
+    // Get TTLs from environment config
+    this.defaultTTLs = environmentConfig.get('cacheTTL') || {
       query: 3600,           // 1 hour for database queries
       api_response: 1800,    // 30 minutes for API responses
       metric_data: 900,      // 15 minutes for metric data
@@ -88,6 +90,12 @@ class CacheService {
    */
   async set(key, data, options = {}) {
     try {
+      // Check if caching is enabled in environment
+      if (!environmentConfig.get('cacheEnabled')) {
+        environmentConfig.log('debug', '[Cache] Caching disabled in environment');
+        return;
+      }
+
       const {
         type = 'query',
         organizationId = null,
@@ -127,10 +135,10 @@ class CacheService {
       // Also set in memory cache
       this.setMemoryCache(key, data, expiresAt);
 
-      console.log(`[Cache] Set: ${key} (TTL: ${ttl}s)`);
+      environmentConfig.log('debug', `[Cache] Set: ${key} (TTL: ${ttl}s)`);
 
     } catch (error) {
-      console.error('[Cache] Error setting cache:', error);
+      environmentConfig.log('error', '[Cache] Error setting cache:', error);
     }
   }
 

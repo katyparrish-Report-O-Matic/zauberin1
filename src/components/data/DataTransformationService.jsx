@@ -1,6 +1,7 @@
 
 import { base44 } from "@/api/base44Client";
 import { cacheService } from "../cache/CacheService";
+import { environmentConfig } from "../config/EnvironmentConfig";
 
 /**
  * Data Transformation Service
@@ -19,6 +20,8 @@ class DataTransformationService {
     const qualityIssues = [];
 
     try {
+      environmentConfig.log('info', `[DataTransform] Transforming ${metric_name} data...`);
+
       // Validate schema
       const schemaValidation = this.validateSchema(rawData, config);
       if (!schemaValidation.valid) {
@@ -68,7 +71,7 @@ class DataTransformationService {
         await base44.entities.DataQualityLog.create(issue);
       }
 
-      console.log(`[DataTransform] Processed ${enrichedData.length} records, ${qualityIssues.length} issues`);
+      environmentConfig.log('info', `[DataTransform] Processed ${enrichedData.length} records, ${qualityIssues.length} issues`);
 
       return {
         data: enrichedData,
@@ -77,7 +80,7 @@ class DataTransformationService {
       };
 
     } catch (error) {
-      console.error('[DataTransform] Error:', error);
+      environmentConfig.log('error', '[DataTransform] Error:', error);
       throw error;
     }
   }
@@ -118,14 +121,14 @@ class DataTransformationService {
 
       // Handle missing values
       Object.keys(cleanedRecord).forEach(key => {
-        if (key !== 'date' && key !== 'name' && key !== 'segment') {
+        if (key !== 'date' && key !== 'name' && typeof cleanedRecord[key] !== 'object') { // Exclude objects like segment
           if (cleanedRecord[key] === null || cleanedRecord[key] === undefined) {
             nullCount++;
             cleanedRecord[key] = 0;
             cleanedRecord._imputed = true;
           }
           
-          // Ensure numeric values
+          // Ensure numeric values for potential metric fields
           if (typeof cleanedRecord[key] === 'string' && key !== 'date') {
             const parsed = parseFloat(cleanedRecord[key]);
             if (!isNaN(parsed)) {
@@ -175,7 +178,8 @@ class DataTransformationService {
       }
 
       Object.keys(record).forEach(key => {
-        if (key !== 'date' && key !== 'name' && typeof record[key] === 'number') {
+        // Collect numeric values that are not the 'date' or segment identifiers
+        if (key !== 'date' && !segmentBy.includes(key) && typeof record[key] === 'number') {
           groups[groupKey].values.push(record[key]);
         }
       });
@@ -188,12 +192,17 @@ class DataTransformationService {
       const group = groups[groupKey];
       const values = group.values;
       
+      // Ensure values array is not empty to prevent errors with min/max
+      if (values.length === 0) {
+        continue; 
+      }
+
       aggregated.push({
         period_start: group.period_start,
         period_end: group.period_end,
         segment: group.segment,
         value: this.sum(values),
-        raw_value: this.sum(values),
+        raw_value: this.sum(values), // raw_value is often the sum of cleaned values
         count: values.length,
         average: this.average(values),
         min: Math.min(...values),
@@ -202,6 +211,9 @@ class DataTransformationService {
       });
     }
 
+    // Sort by period_start to ensure correct order for derived metrics
+    aggregated.sort((a, b) => new Date(a.period_start).getTime() - new Date(b.period_start).getTime());
+
     return aggregated;
   }
 
@@ -209,31 +221,49 @@ class DataTransformationService {
    * Calculate derived metrics
    */
   calculateDerivedMetrics(data) {
-    return data.map((record, idx) => {
-      const enhanced = { ...record };
-
-      // Growth rate
-      if (idx > 0) {
-        const previousValue = data[idx - 1].value;
-        enhanced.growth_rate = previousValue > 0 
-          ? ((record.value - previousValue) / previousValue) * 100 
-          : 0;
-      } else {
-        enhanced.growth_rate = 0;
+    // Group data by segment to calculate derived metrics independently for each segment
+    const segmentedData = data.reduce((acc, record) => {
+      const segmentString = JSON.stringify(record.segment); // Use string representation of segment object as key
+      if (!acc[segmentString]) {
+        acc[segmentString] = [];
       }
+      acc[segmentString].push(record);
+      return acc;
+    }, {});
 
-      // Moving average (3-period)
-      const windowSize = 3;
-      const startIdx = Math.max(0, idx - windowSize + 1);
-      const window = data.slice(startIdx, idx + 1);
-      enhanced.moving_average = this.average(window.map(d => d.value));
+    const enrichedResults = [];
 
-      // Percent of total
-      const total = this.sum(data.map(d => d.value));
-      enhanced.percent_of_total = total > 0 ? (record.value / total) * 100 : 0;
+    for (const segmentKey in segmentedData) {
+      const segmentRecords = segmentedData[segmentKey];
+      const segmentTotal = this.sum(segmentRecords.map(d => d.value));
 
-      return enhanced;
-    });
+      segmentRecords.forEach((record, idx) => {
+        const enhanced = { ...record };
+
+        // Growth rate compared to previous period within the same segment
+        if (idx > 0) {
+          const previousValue = segmentRecords[idx - 1].value;
+          enhanced.growth_rate = previousValue !== 0 
+            ? ((record.value - previousValue) / previousValue) * 100 
+            : (record.value === 0 ? 0 : 100); // If previous is 0 and current is not, it's 100% growth or infinite. Handle as 100 for simplicity.
+        } else {
+          enhanced.growth_rate = 0; // First record in a segment has no previous period
+        }
+
+        // Moving average (e.g., 3-period) within the same segment
+        const windowSize = 3;
+        const startIdx = Math.max(0, idx - windowSize + 1);
+        const window = segmentRecords.slice(startIdx, idx + 1);
+        enhanced.moving_average = this.average(window.map(d => d.value));
+
+        // Percent of total within this segment (over the entire period covered by this segment's data)
+        enhanced.percent_of_total = segmentTotal > 0 ? (record.value / segmentTotal) * 100 : 0;
+        
+        enrichedResults.push(enhanced);
+      });
+    }
+
+    return enrichedResults;
   }
 
   /**
@@ -241,26 +271,41 @@ class DataTransformationService {
    */
   detectAnomalies(data, metricName) {
     const anomalies = [];
-    const values = data.map(d => d.value);
     
-    if (values.length < 3) return anomalies;
+    // Group data by segment for anomaly detection specific to each segment
+    const segmentedData = data.reduce((acc, record) => {
+      const segmentString = JSON.stringify(record.segment);
+      if (!acc[segmentString]) {
+        acc[segmentString] = [];
+      }
+      acc[segmentString].push(record);
+      return acc;
+    }, {});
 
-    const mean = this.average(values);
-    const stdDev = this.standardDeviation(values, mean);
+    for (const segmentKey in segmentedData) {
+      const segmentRecords = segmentedData[segmentKey];
+      const values = segmentRecords.map(d => d.value);
+      
+      if (values.length < 3) continue; // Need at least 3 points for meaningful std dev
 
-    for (let i = 0; i < data.length; i++) {
-      const value = data[i].value;
-      const zScore = stdDev > 0 ? Math.abs((value - mean) / stdDev) : 0;
+      const mean = this.average(values);
+      const stdDev = this.standardDeviation(values, mean);
 
-      if (zScore > this.anomalyThreshold) {
-        anomalies.push({
-          metric_name: metricName,
-          issue_type: 'anomaly',
-          severity: zScore > 4 ? 'critical' : 'high',
-          description: `Anomaly detected: value ${value.toFixed(2)} is ${zScore.toFixed(2)} standard deviations from mean`,
-          affected_records: 1,
-          raw_data_sample: data[i]
-        });
+      for (let i = 0; i < segmentRecords.length; i++) {
+        const record = segmentRecords[i];
+        const value = record.value;
+        const zScore = stdDev > 0 ? Math.abs((value - mean) / stdDev) : 0;
+
+        if (zScore > this.anomalyThreshold) {
+          anomalies.push({
+            metric_name: metricName,
+            issue_type: 'anomaly',
+            severity: zScore > 4 ? 'critical' : 'high',
+            description: `Anomaly detected: value ${value.toFixed(2)} is ${zScore.toFixed(2)} standard deviations from mean in segment ${segmentKey}`,
+            affected_records: 1,
+            raw_data_sample: record // Store the transformed record, which includes original values and segment
+          });
+        }
       }
     }
 
@@ -296,7 +341,9 @@ class DataTransformationService {
 
       const filtered = metrics.filter(record => {
         const recordDate = new Date(record.period_start);
-        return recordDate >= new Date(startDate) && recordDate <= new Date(endDate);
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        return recordDate >= start && recordDate <= end;
       });
 
       if (filtered.length > 0) {
@@ -349,7 +396,8 @@ class DataTransformationService {
       case 'monthly':
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       default:
-        return date;
+        // For unsupported time periods or raw, return the original date or a simple timestamp
+        return d.toISOString().split('T')[0]; // Default to daily representation if invalid
     }
   }
 
@@ -361,12 +409,21 @@ class DataTransformationService {
         break;
       case 'daily':
         d.setDate(d.getDate() + 1);
+        d.setHours(0, 0, 0, 0); // Ensure it's the beginning of the next day
         break;
       case 'weekly':
         d.setDate(d.getDate() + 7);
+        d.setHours(0, 0, 0, 0); // Ensure it's the beginning of the next week
         break;
       case 'monthly':
         d.setMonth(d.getMonth() + 1);
+        d.setDate(1); // Ensure it's the beginning of the next month
+        d.setHours(0, 0, 0, 0);
+        break;
+      default:
+        // For unsupported time periods, return the period start itself or add a day
+        d.setDate(d.getDate() + 1);
+        d.setHours(0, 0, 0, 0);
         break;
     }
     return d.toISOString();
@@ -375,21 +432,26 @@ class DataTransformationService {
   getWeekNumber(date) {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
+    // Thursday in current week decides the year.
     d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-    const yearStart = new Date(d.getFullYear(), 0, 1);
-    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    // January 4 is always in week 1.
+    const yearStart = new Date(d.getFullYear(), 0, 4);
+    // Calculate full weeks to nearest yearStart.
+    return Math.ceil((((d - yearStart) / 86400000) + yearStart.getDay() + 1) / 7);
   }
 
   getSegmentKey(record, segmentBy) {
     if (!segmentBy || segmentBy.length === 0) return 'all';
-    return segmentBy.map(seg => record[seg] || 'unknown').join('_');
+    // Create a consistent key from segment values
+    const segmentParts = segmentBy.map(seg => record[seg] !== undefined && record[seg] !== null ? String(record[seg]) : 'unknown');
+    return segmentParts.join('_');
   }
 
   extractSegment(record, segmentBy) {
     const segment = {};
     if (segmentBy && segmentBy.length > 0) {
       segmentBy.forEach(key => {
-        if (record[key]) {
+        if (record[key] !== undefined && record[key] !== null) {
           segment[key] = record[key];
         }
       });
@@ -398,7 +460,7 @@ class DataTransformationService {
   }
 
   sum(values) {
-    return values.reduce((acc, val) => acc + (val || 0), 0);
+    return values.reduce((acc, val) => acc + (typeof val === 'number' ? val : 0), 0);
   }
 
   average(values) {
@@ -407,10 +469,13 @@ class DataTransformationService {
   }
 
   standardDeviation(values, mean = null) {
-    if (values.length === 0) return 0;
+    if (values.length <= 1) return 0; // Standard deviation is undefined or zero for less than 2 points
     const avg = mean !== null ? mean : this.average(values);
     const squaredDiffs = values.map(val => Math.pow(val - avg, 2));
-    return Math.sqrt(this.average(squaredDiffs));
+    // Use N-1 for sample standard deviation if values are a sample
+    // Or N for population standard deviation if values are the whole population
+    // Here we assume N for simplicity in general metric calculation
+    return Math.sqrt(this.sum(squaredDiffs) / values.length); 
   }
 
   calculateOverallQuality(issues, recordCount) {
@@ -418,10 +483,22 @@ class DataTransformationService {
     
     const severityWeights = { low: 1, medium: 3, high: 7, critical: 15 };
     const totalDeductions = issues.reduce((sum, issue) => {
-      return sum + (severityWeights[issue.severity] * (issue.affected_records || 1));
+      // If issue.affected_records is 0, consider it affecting at least 1 record for deduction
+      const affected = issue.affected_records > 0 ? issue.affected_records : 1; 
+      return sum + (severityWeights[issue.severity] * affected);
     }, 0);
 
-    const score = Math.max(0, 100 - (totalDeductions / recordCount) * 10);
+    // Normalize deduction based on total possible records, max deduction 100 points
+    const maxPossibleDeduction = recordCount * severityWeights.critical; // Max theoretical deduction
+    let deductionPercentage = 0;
+    if (maxPossibleDeduction > 0) {
+      deductionPercentage = (totalDeductions / maxPossibleDeduction) * 100;
+    }
+    
+    // Scale the deduction so it doesn't drop too sharply, maybe logarithmically or cap it
+    // For simplicity, let's cap the effect and use a simple linear scaling as before
+    const score = Math.max(0, 100 - deductionPercentage); // Simple linear scale for now
+
     return Math.round(score);
   }
 }

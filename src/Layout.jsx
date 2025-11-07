@@ -6,6 +6,7 @@ import { Sparkles, Settings, Clock, Building2, Shield, Webhook, Layout as Layout
 import JobScheduler from "./components/jobs/JobScheduler";
 import { usePermissions } from "./components/auth/usePermissions";
 import { Badge } from "@/components/ui/badge";
+import EnvironmentIndicator from "./components/config/EnvironmentIndicator";
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -56,6 +57,7 @@ export default function Layout({ children }) {
                     )}
                   </div>
                 )}
+                <EnvironmentIndicator />
               </div>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
                 {visibleNavItems.map((item) => {

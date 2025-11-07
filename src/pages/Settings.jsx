@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { environmentConfig } from "../components/config/EnvironmentConfig";
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -136,6 +138,9 @@ export default function Settings() {
     );
   }
 
+  const validation = environmentConfig.validateEnvironment();
+  const envConfig = environmentConfig.getConfig();
+
   return (
     <PermissionGuard requiredLevel="admin">
       <div className="min-h-screen bg-gray-50">
@@ -163,6 +168,56 @@ export default function Settings() {
                 </Button>
               </div>
             </div>
+
+            {/* Environment Info Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <SettingsIcon className="w-5 h-5" />
+                  Environment Configuration
+                </CardTitle>
+                <CardDescription>
+                  Current environment: {environmentConfig.getEnvironmentName()}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Environment</p>
+                    <p className="font-medium capitalize">{environmentConfig.getEnvironment()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Mock Data</p>
+                    <p className="font-medium">{envConfig.useMockData ? 'Enabled' : 'Disabled'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Debug Mode</p>
+                    <p className="font-medium">{envConfig.enableDebugMode ? 'On' : 'Off'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Log Level</p>
+                    <p className="font-medium capitalize">{envConfig.monitoring.logLevel}</p>
+                  </div>
+                </div>
+
+                {!validation.valid && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-800 font-medium mb-2">Configuration Issues:</p>
+                    <ul className="list-disc list-inside text-sm text-red-700">
+                      {validation.issues.map((issue, idx) => (
+                        <li key={idx}>{issue}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="pt-3 border-t">
+                  <p className="text-xs text-gray-500">
+                    API Base URL: <span className="font-mono">{envConfig.apiBaseUrl}</span>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
 
             {apiConfigs.length === 0 ? (
               <Card>

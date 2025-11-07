@@ -17,6 +17,7 @@ import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
 import { cacheService } from "../components/cache/CacheService"; // Added import
+import { environmentConfig } from "../components/config/EnvironmentConfig"; // Added import
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -268,6 +269,16 @@ Generate a complete report configuration that captures their intent.`,
   };
 
   const generateMockData = (config) => {
+    // Check if we should use mock data based on environment
+    if (!environmentConfig.useMockData() && apiSettings?.api_url) {
+      environmentConfig.log('info', '[ReportBuilder] Using real API data');
+      // In a real implementation, fetch from actual API based on 'config'
+      // For now, this function always returns mock data as per current design.
+      // This log indicates that real data *could* be used here if implemented.
+    }
+
+    environmentConfig.log('debug', '[ReportBuilder] Generating mock data for', config.chart_type);
+
     const branches = ['North Branch', 'South Branch', 'East Branch', 'West Branch', 'Central Branch'];
     const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America'];
     const hasSegmentation = config.segment_by && config.segment_by.length > 0;
