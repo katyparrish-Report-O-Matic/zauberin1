@@ -272,9 +272,7 @@ Generate a complete report configuration that captures their intent.`,
     // Check if we should use mock data based on environment
     if (!environmentConfig.useMockData() && apiSettings?.api_url) {
       environmentConfig.log('info', '[ReportBuilder] Using real API data');
-      // In a real implementation, fetch from actual API based on 'config'
-      // For now, this function always returns mock data as per current design.
-      // This log indicates that real data *could* be used here if implemented.
+      // In a real implementation, fetch from actual API
     }
 
     environmentConfig.log('debug', '[ReportBuilder] Generating mock data for', config.chart_type);
