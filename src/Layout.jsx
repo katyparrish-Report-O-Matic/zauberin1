@@ -1,18 +1,21 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, Settings } from "lucide-react";
+import { Sparkles, Settings, Clock } from "lucide-react";
+import JobScheduler from "./components/jobs/JobScheduler";
 
 export default function Layout({ children }) {
   const location = useLocation();
 
   const navItems = [
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: Sparkles },
+    { name: "Jobs", path: createPageUrl("JobsManager"), icon: Clock },
     { name: "Settings", path: createPageUrl("Settings"), icon: Settings }
   ];
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <JobScheduler />
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex justify-between h-16">
