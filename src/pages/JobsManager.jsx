@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -90,7 +91,9 @@ export default function JobsManager() {
     const labels = {
       data_fetch: 'Data Fetch',
       report_generation: 'Report Generation',
-      data_cleanup: 'Data Cleanup'
+      data_cleanup: 'Data Cleanup',
+      quality_check: 'Quality Check',
+      backup: 'Backup'
     };
     return labels[type] || type;
   };
@@ -279,6 +282,8 @@ export default function JobsManager() {
                   <SelectItem value="data_fetch">Data Fetch</SelectItem>
                   <SelectItem value="report_generation">Report Generation</SelectItem>
                   <SelectItem value="data_cleanup">Data Cleanup</SelectItem>
+                  <SelectItem value="quality_check">Quality Check</SelectItem>
+                  <SelectItem value="backup">Backup</SelectItem>
                 </SelectContent>
               </Select>
             </div>

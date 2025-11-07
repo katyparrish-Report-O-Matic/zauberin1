@@ -6,7 +6,6 @@ import WebhookManager from './pages/WebhookManager';
 import TemplateManager from './pages/TemplateManager';
 import DashboardBuilder from './pages/DashboardBuilder';
 import AuditLogs from './pages/AuditLogs';
-import DataQuality from './pages/DataQuality';
 import Layout from './Layout.jsx';
 
 
@@ -19,7 +18,6 @@ export const PAGES = {
     "TemplateManager": TemplateManager,
     "DashboardBuilder": DashboardBuilder,
     "AuditLogs": AuditLogs,
-    "DataQuality": DataQuality,
 }
 
 export const pagesConfig = {
