@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -52,9 +53,6 @@ export default function Layout({ children }) {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center gap-3">
-                <div className="h-10 w-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                  <span className="text-2xl">🧙‍♀️</span>
-                </div>
                 <h1 className="text-xl font-bold text-gray-900">Zauberin</h1>
                 {userOrg && (
                   <div className="flex items-center gap-2">
