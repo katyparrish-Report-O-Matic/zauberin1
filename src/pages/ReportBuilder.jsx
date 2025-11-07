@@ -15,6 +15,15 @@ import { dataTransformationService } from "../components/data/DataTransformation
 import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
+import TemplateLibrary from "../components/templates/TemplateLibrary";
+import TemplateManager from "../components/templates/TemplateManager";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Layout as LayoutIcon } from "lucide-react";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -23,6 +32,8 @@ export default function ReportBuilder() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [dataQuality, setDataQuality] = useState(null);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
 
   const { currentUser, isAgency, hasPermission } = usePermissions();
 
@@ -442,6 +453,24 @@ Generate a complete report configuration that captures their intent.`,
     toast.success('Report exported');
   };
 
+  const handleSelectTemplate = (config, template) => {
+    // Apply template configuration
+    setCurrentReport({
+      title: config.title,
+      description: config.description,
+      organization_id: selectedOrgId || currentUser?.organization_id,
+      configuration: config,
+      status: 'draft'
+    });
+    
+    // Generate data based on template
+    const mockData = generateMockData(config);
+    setReportData(mockData);
+    setShowTemplateLibrary(false);
+    
+    toast.success(`Applied template: ${template.name}`);
+  };
+
   const isApiConfigured = apiSettings?.api_url && apiSettings?.api_token;
 
   return (
@@ -463,6 +492,14 @@ Generate a complete report configuration that captures their intent.`,
                   onChange={setSelectedOrgId}
                 />
               )}
+              <Button
+                variant="outline"
+                onClick={() => setShowTemplateLibrary(true)}
+                className="gap-2"
+              >
+                <LayoutIcon className="w-4 h-4" />
+                Templates
+              </Button>
               <RateLimitIndicator />
               <DataQualityIndicator />
             </div>
@@ -492,7 +529,7 @@ Generate a complete report configuration that captures their intent.`,
 
           {/* Main Layout */}
           <div className="grid lg:grid-cols-12 gap-6">
-            {/* Left Panel - Request Builder */}
+            {/* Left Panel */}
             <div className="lg:col-span-4 space-y-6">
               <ReportRequestPanel 
                 onGenerateReport={generateReport}
@@ -509,10 +546,18 @@ Generate a complete report configuration that captures their intent.`,
               />
             </div>
 
-            {/* Right Panel - Report Display */}
+            {/* Right Panel */}
             <div className="lg:col-span-8 space-y-4">
               {currentReport && (
                 <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTemplateManager(true)}
+                    className="gap-2"
+                  >
+                    <LayoutIcon className="w-4 h-4" />
+                    Manage Templates
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={handleExport}
@@ -541,6 +586,33 @@ Generate a complete report configuration that captures their intent.`,
           </div>
         </div>
       </div>
+
+      {/* Template Library Dialog */}
+      <Dialog open={showTemplateLibrary} onOpenChange={setShowTemplateLibrary}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Report Templates</DialogTitle>
+          </DialogHeader>
+          <TemplateLibrary
+            orgId={selectedOrgId || currentUser?.organization_id}
+            onSelectTemplate={handleSelectTemplate}
+            onClose={() => setShowTemplateLibrary(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Template Manager Dialog */}
+      <Dialog open={showTemplateManager} onOpenChange={setShowTemplateManager}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Template Manager</DialogTitle>
+          </DialogHeader>
+          <TemplateManager
+            orgId={selectedOrgId || currentUser?.organization_id}
+            currentReport={currentReport}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
