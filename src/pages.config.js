@@ -14,6 +14,7 @@ import IntegrationsManager from './pages/IntegrationsManager';
 import CacheManager from './pages/CacheManager';
 import PerformanceMonitor from './pages/PerformanceMonitor';
 import ProductionDashboard from './pages/ProductionDashboard';
+import ReportTemplates from './pages/ReportTemplates';
 import Layout from './Layout.jsx';
 
 
@@ -34,6 +35,7 @@ export const PAGES = {
     "CacheManager": CacheManager,
     "PerformanceMonitor": PerformanceMonitor,
     "ProductionDashboard": ProductionDashboard,
+    "ReportTemplates": ReportTemplates,
 }
 
 export const pagesConfig = {

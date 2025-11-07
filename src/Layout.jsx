@@ -14,9 +14,10 @@ export default function Layout({ children }) {
   const { userOrg, hasPermission, isAgency } = usePermissions();
 
   const navItems = [
+    { name: "Dashboard", path: createPageUrl("ProductionDashboard"), icon: Activity },
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: Sparkles },
+    { name: "Templates", path: createPageUrl("ReportTemplates"), icon: LayoutIcon },
     { name: "Dashboard Builder", path: createPageUrl("DashboardBuilder"), icon: Columns, requiredLevel: "editor" },
-    { name: "Templates", path: createPageUrl("TemplateManager"), icon: LayoutIcon, requiredLevel: "editor" },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
     { name: "Monitoring", path: createPageUrl("MonitoringDashboard"), icon: Activity, requiredLevel: "admin" },
     { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" },

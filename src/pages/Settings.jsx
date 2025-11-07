@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { environmentConfig } from "../components/config/EnvironmentConfig";
+import { productionApiService } from "../components/api/ProductionApiService";
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -37,6 +38,8 @@ export default function Settings() {
     rate_limit_per_hour: null,
     is_active: true
   });
+
+  const [testingConnection, setTestingConnection] = useState(null);
 
   const { currentUser, isAgency } = usePermissions();
 
@@ -86,6 +89,39 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiSettings'] });
       toast.success('API status updated');
+    }
+  });
+
+  // Test connection mutation
+  const testConnectionMutation = useMutation({
+    mutationFn: async (api) => {
+      setTestingConnection(api.id);
+      try {
+        const result = await productionApiService.testConnection(
+          api.api_url,
+          api.api_token,
+          api.auth_method
+        );
+        setTestingConnection(null);
+        return result;
+      } catch (error) {
+        setTestingConnection(null);
+        // It's possible for productionApiService.testConnection to throw directly
+        // if there's a network error or other unhandled exception.
+        // We catch it here to ensure setTestingConnection is called.
+        return { success: false, error: error.message };
+      }
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success(`Connection successful! (${result.duration}ms)`);
+      } else {
+        toast.error(`Connection failed: ${result.error || 'Unknown error'}`);
+      }
+    },
+    onError: (error) => {
+      setTestingConnection(null);
+      toast.error(`Connection test failed unexpectedly: ${error.message}`);
     }
   });
 
@@ -224,7 +260,7 @@ export default function Settings() {
                 <CardContent className="p-12 text-center">
                   <AlertCircle className="w-16 h-16 mx-auto text-gray-400 mb-4" />
                   <p className="text-gray-600">No API configurations yet. Add your first API to get started!</p>
-                  <Button onClick={handleOpenCreate} className="mt-4">
+                  <Button onClick={handleOpenCreate} className="mt-4 bg-teal-600 hover:bg-teal-700">
                     <Plus className="w-4 h-4 mr-2" />
                     Add First API
                   </Button>
@@ -250,6 +286,20 @@ export default function Settings() {
                           <CardDescription className="mt-1">{api.api_url}</CardDescription>
                         </div>
                         <div className="flex items-center gap-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => testConnectionMutation.mutate(api)}
+                            disabled={testingConnection === api.id || testConnectionMutation.isLoading}
+                            className="gap-2"
+                          >
+                            {testingConnection === api.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                            Test
+                          </Button>
                           <Switch
                             checked={api.is_active !== false}
                             onCheckedChange={(is_active) =>
@@ -292,6 +342,14 @@ export default function Settings() {
                             <p className="font-medium">
                               {api.current_usage} 
                               {api.rate_limit_per_hour && ` / ${api.rate_limit_per_hour}`}
+                            </p>
+                          </div>
+                        )}
+                        {api.connection_status && (
+                          <div>
+                            <span className="text-gray-600">Status</span>
+                            <p className={`font-medium ${api.connection_status === 'connected' ? 'text-green-600' : 'text-red-600'}`}>
+                              {api.connection_status === 'connected' ? 'Connected' : 'Error'}
                             </p>
                           </div>
                         )}

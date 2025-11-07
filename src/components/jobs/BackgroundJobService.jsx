@@ -1,9 +1,10 @@
 
 import { base44 } from "@/api/base44Client";
 import { dataTransformationService } from "../data/DataTransformationService";
-import { backupService } from "../backup/BackupService"; // Added import
+import { backupService } from "../backup/BackupService";
 import { cacheService } from "../cache/CacheService";
 import { archivalService } from "../performance/ArchivalService";
+import { productionApiService } from "../api/ProductionApiService";
 
 /**
  * Background Job Service
@@ -82,11 +83,17 @@ class BackgroundJobService {
         case 'data_cleanup':
           result = await this.executeDataCleanup(job);
           break;
-        case 'quality_check': // Added new case
+        case 'quality_check':
           result = await this.executeDataQualityCheck(job);
           break;
-        case 'backup': // Added new case
+        case 'backup':
           result = await this.executeBackup(job);
+          break;
+        case 'api_health_check':
+          result = await this.executeApiHealthCheck(job);
+          break;
+        case 'data_prefetch':
+          result = await this.executeDataPrefetch(job);
           break;
         default:
           throw new Error(`Unknown job type: ${job.job_type}`);
@@ -300,6 +307,50 @@ class BackgroundJobService {
         backup_id: backup.id,
         backup_size: backupService.formatBytes(backup.size_bytes),
         expired_backups_deleted: deletedCount
+      }
+    };
+  }
+
+  /**
+   * Execute API health check job
+   */
+  async executeApiHealthCheck(job) {
+    const orgId = job.configuration?.organization_id;
+    
+    if (!orgId) {
+      throw new Error('Organization ID required for health check');
+    }
+
+    const result = await productionApiService.checkApiHealth(orgId);
+
+    return {
+      recordsProcessed: 1,
+      summary: {
+        healthy: result.healthy,
+        duration_ms: result.duration,
+        error: result.error
+      }
+    };
+  }
+
+  /**
+   * Execute data prefetch job
+   */
+  async executeDataPrefetch(job) {
+    const orgId = job.configuration?.organization_id;
+    
+    if (!orgId) {
+      throw new Error('Organization ID required for data prefetch');
+    }
+
+    const result = await productionApiService.prefetchDashboardData(orgId);
+
+    return {
+      recordsProcessed: result.prefetched || 0,
+      summary: {
+        prefetched: result.prefetched,
+        total_metrics: result.total,
+        error: result.error
       }
     };
   }
