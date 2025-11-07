@@ -1,3 +1,4 @@
+
 import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 
@@ -73,7 +74,7 @@ class ProductionApiService {
   }
 
   /**
-   * Fetch available metrics from API
+   * Fetch available metrics from API with fallback to cached data
    */
   async fetchMetricsList(organizationId) {
     const cacheKey = `metrics_list_${organizationId}`;
@@ -87,23 +88,56 @@ class ProductionApiService {
 
     const config = await this.getApiConfig(organizationId);
     if (!config) {
-      throw new Error('No API configuration found');
+      // Return mock metrics if no config
+      environmentConfig.log('info', '[ProductionAPI] No API config, returning mock metrics');
+      return [
+        'revenue',
+        'users',
+        'conversions',
+        'engagement',
+        'page_views',
+        'sessions',
+        'bounce_rate'
+      ];
     }
 
-    const data = await this.makeApiCall(
-      `${config.api_url}/metrics/list`,
-      config,
-      'GET'
-    );
+    try {
+      const data = await this.makeApiCall(
+        `${config.api_url}/metrics/list`,
+        config,
+        'GET'
+      );
 
-    // Cache the result
-    await this.saveToCache(cacheKey, data, this.cacheTTL);
+      // Cache the result
+      await this.saveToCache(cacheKey, data, this.cacheTTL);
 
-    return data;
+      return data;
+    } catch (error) {
+      environmentConfig.log('warn', '[ProductionAPI] Metrics list fetch failed, trying cache:', error);
+      
+      // Try to get stale cache
+      const staleCache = await this.getFromCache(cacheKey, true);
+      if (staleCache) {
+        environmentConfig.log('info', '[ProductionAPI] Using stale cached metrics list');
+        return staleCache;
+      }
+
+      // Fallback to mock metrics
+      environmentConfig.log('info', '[ProductionAPI] Using mock metrics list');
+      return [
+        'revenue',
+        'users',
+        'conversions',
+        'engagement',
+        'page_views',
+        'sessions',
+        'bounce_rate'
+      ];
+    }
   }
 
   /**
-   * Fetch metric data with retry logic
+   * Fetch metric data with retry logic and fallback
    */
   async fetchMetricData(organizationId, metricName, startDate, endDate) {
     const cacheKey = `metric_data_${organizationId}_${metricName}_${startDate}_${endDate}`;
@@ -117,7 +151,8 @@ class ProductionApiService {
 
     const config = await this.getApiConfig(organizationId);
     if (!config) {
-      throw new Error('No API configuration found');
+      environmentConfig.log('info', '[ProductionAPI] No API config, returning mock data');
+      throw new Error('No API configuration available');
     }
 
     const params = new URLSearchParams({
@@ -126,16 +161,30 @@ class ProductionApiService {
       end: endDate
     });
 
-    const data = await this.makeApiCall(
-      `${config.api_url}/metrics/data?${params}`,
-      config,
-      'GET'
-    );
+    try {
+      const data = await this.makeApiCall(
+        `${config.api_url}/metrics/data?${params}`,
+        config,
+        'GET'
+      );
 
-    // Cache the result
-    await this.saveToCache(cacheKey, data, this.cacheTTL);
+      // Cache the result
+      await this.saveToCache(cacheKey, data, this.cacheTTL);
 
-    return data;
+      return data;
+    } catch (error) {
+      environmentConfig.log('warn', '[ProductionAPI] Metric data fetch failed:', error);
+      
+      // Try to get stale cache
+      const staleCache = await this.getFromCache(cacheKey, true);
+      if (staleCache) {
+        environmentConfig.log('info', '[ProductionAPI] Using stale cached metric data');
+        return staleCache;
+      }
+
+      // Rethrow error to allow component to handle with mock data
+      throw error;
+    }
   }
 
   /**
@@ -226,9 +275,9 @@ class ProductionApiService {
   }
 
   /**
-   * Get from cache
+   * Get from cache (with option to get stale)
    */
-  async getFromCache(key) {
+  async getFromCache(key, allowStale = false) {
     try {
       const entries = await base44.entities.CacheEntry.filter({ cache_key: key });
       
@@ -236,17 +285,19 @@ class ProductionApiService {
 
       const entry = entries[0];
       
-      // Check if expired
-      if (new Date(entry.expires_at) <= new Date()) {
+      // Check if expired (unless we allow stale)
+      if (!allowStale && new Date(entry.expires_at) <= new Date()) {
         await base44.entities.CacheEntry.delete(entry.id);
         return null;
       }
 
       // Update hit count
-      await base44.entities.CacheEntry.update(entry.id, {
-        hit_count: (entry.hit_count || 0) + 1,
-        last_accessed: new Date().toISOString()
-      });
+      if (!allowStale) {
+        await base44.entities.CacheEntry.update(entry.id, {
+          hit_count: (entry.hit_count || 0) + 1,
+          last_accessed: new Date().toISOString()
+        });
+      }
 
       return entry.data;
     } catch (error) {

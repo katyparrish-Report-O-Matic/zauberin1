@@ -158,12 +158,48 @@ export default function Settings() {
     setEditingApi(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.api_url || !formData.api_token) {
       toast.error('Please fill in all required fields');
       return;
     }
-    saveApiMutation.mutate(formData);
+
+    // Save API configuration
+    await saveApiMutation.mutateAsync(formData);
+
+    // If this is the first API for this org, trigger an initial health check
+    if (!editingApi && apiConfigs.length === 0) {
+      const orgId = selectedOrgId || currentUser?.organization_id;
+      
+      // Create scheduled jobs for this organization if they don't exist
+      const existingJobs = await base44.entities.ScheduledJob.filter({
+        'configuration.organization_id': orgId
+      });
+
+      if (existingJobs.length === 0) {
+        // Create API health check job
+        await base44.entities.ScheduledJob.create({
+          job_name: `API Health Check - Org ${orgId}`,
+          job_type: 'api_health_check',
+          schedule: 'hourly',
+          configuration: { organization_id: orgId },
+          enabled: true,
+          next_run: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 minutes from now
+        });
+
+        // Create data prefetch job
+        await base44.entities.ScheduledJob.create({
+          job_name: `Data Prefetch - Org ${orgId}`,
+          job_type: 'data_prefetch',
+          schedule: 'hourly',
+          configuration: { organization_id: orgId },
+          enabled: true,
+          next_run: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes from now
+        });
+
+        toast.success('API configured and background jobs scheduled');
+      }
+    }
   };
 
   if (isLoading) {
