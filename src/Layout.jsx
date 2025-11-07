@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -15,7 +16,6 @@ export default function Layout({ children }) {
   const isAdmin = currentUser?.permission_level === 'admin';
 
   const navItems = [
-    { name: "Dashboard", path: createPageUrl("ProductionDashboard"), icon: Activity },
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: FileBarChart },
     { name: "Templates", path: createPageUrl("ReportTemplates"), icon: LayoutIcon },
     { name: "Dashboard Builder", path: createPageUrl("DashboardBuilder"), icon: Columns, requiredLevel: "editor" },
