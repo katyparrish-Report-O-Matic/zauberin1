@@ -1,3 +1,4 @@
+
 import { base44 } from "@/api/base44Client";
 import { dataTransformationService } from "../data/DataTransformationService";
 
@@ -77,6 +78,9 @@ class BackgroundJobService {
           break;
         case 'data_cleanup':
           result = await this.executeDataCleanup(job);
+          break;
+        case 'quality_check':
+          result = await this.executeDataQualityCheck(job);
           break;
         default:
           throw new Error(`Unknown job type: ${job.job_type}`);
@@ -226,6 +230,55 @@ class BackgroundJobService {
       summary: {
         deleted_records: deletedCount,
         cutoff_date: cutoffDate.toISOString()
+      }
+    };
+  }
+
+  /**
+   * Execute data quality check job
+   */
+  async executeDataQualityCheck(job) {
+    const orgId = job.configuration?.organization_id;
+    
+    const results = await dataTransformationService.runQualityChecks(orgId);
+    
+    const failedChecks = results.checks.filter(check => !check.passed);
+    
+    // If checks failed and alerts configured, trigger notifications
+    if (failedChecks.length > 0) {
+      const alertRules = await base44.entities.AlertRule.filter({
+        organization_id: orgId,
+        rule_type: 'data_quality',
+        enabled: true
+      });
+
+      for (const rule of alertRules) {
+        if (rule.notification_channels && rule.notification_channels.length > 0) {
+          // Send email notifications
+          for (const email of rule.notification_channels) {
+            try {
+              await base44.integrations.Core.SendEmail({
+                to: email,
+                subject: `Data Quality Alert: ${rule.name}`,
+                body: `Quality checks failed:\n\n${failedChecks.map(check => 
+                  `- ${check.name}: ${JSON.stringify(check.details)}`
+                ).join('\n')}`
+              });
+            } catch (error) {
+              console.error('[BackgroundJobs] Failed to send alert email:', error);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      recordsProcessed: results.checks.length,
+      summary: {
+        total_checks: results.checks.length,
+        passed: results.checks.filter(c => c.passed).length,
+        failed: failedChecks.length,
+        checks: results.checks
       }
     };
   }
