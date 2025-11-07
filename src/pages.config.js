@@ -3,6 +3,7 @@ import Settings from './pages/Settings';
 import JobsManager from './pages/JobsManager';
 import OrganizationManager from './pages/OrganizationManager';
 import WebhookManager from './pages/WebhookManager';
+import TemplateManager from './pages/TemplateManager';
 import Layout from './Layout.jsx';
 
 
@@ -12,6 +13,7 @@ export const PAGES = {
     "JobsManager": JobsManager,
     "OrganizationManager": OrganizationManager,
     "WebhookManager": WebhookManager,
+    "TemplateManager": TemplateManager,
 }
 
 export const pagesConfig = {
