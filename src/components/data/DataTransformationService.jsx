@@ -1,5 +1,6 @@
 
 import { base44 } from "@/api/base44Client";
+import { cacheService } from "../cache/CacheService";
 
 /**
  * Data Transformation Service
@@ -269,20 +270,44 @@ class DataTransformationService {
   /**
    * Get cached transformed data
    */
-  async getCachedData(metricName, timePeriod, startDate, endDate) {
+  async getCachedData(metricName, timePeriod, startDate, endDate, organizationId = null) {
     try {
-      const cached = await base44.entities.TransformedMetric.filter({
+      // Generate cache key
+      const cacheKey = cacheService.generateKey('metric_data', {
+        metric: metricName,
+        period: timePeriod,
+        start: startDate.toISOString(),
+        end: endDate.toISOString(),
+        org: organizationId
+      });
+
+      // Try to get from cache
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        console.log(`[DataTransform] Using cached metric data: ${metricName}`);
+        return cached;
+      }
+
+      // Not cached, fetch from database
+      const metrics = await base44.entities.TransformedMetric.filter({
         metric_name: metricName,
         time_period: timePeriod
       });
 
-      const filtered = cached.filter(record => {
+      const filtered = metrics.filter(record => {
         const recordDate = new Date(record.period_start);
         return recordDate >= new Date(startDate) && recordDate <= new Date(endDate);
       });
 
       if (filtered.length > 0) {
-        console.log(`[DataTransform] Found ${filtered.length} cached records`);
+        // Cache for future use
+        await cacheService.set(cacheKey, filtered, {
+          type: 'metric_data',
+          organizationId,
+          ttl: 900 // 15 minutes
+        });
+        
+        console.log(`[DataTransform] Cached ${filtered.length} metric records`);
         return filtered;
       }
 
@@ -308,208 +333,6 @@ class DataTransformationService {
       console.error('[DataTransform] Error fetching quality issues:', error);
       return [];
     }
-  }
-
-  /**
-   * Validate data freshness
-   */
-  async validateDataFreshness(organizationId, maxAgeMinutes = 60) {
-    try {
-      // Assuming 'list' sorts by default or we need to specify a sort for 'created_date'
-      // If base44.entities.TransformedMetric.list('-created_date', 10) is not supported,
-      // it should be base44.entities.TransformedMetric.filter({}, '-created_date', 10)
-      // For this implementation, I will assume list accepts sorting or takes default sort.
-      // If not, a filter and then manual sort would be needed.
-      const metrics = await base44.entities.TransformedMetric.filter({}, '-created_date', 10);
-      
-      if (metrics.length === 0) {
-        return {
-          isFresh: false,
-          lastUpdate: null,
-          minutesOld: null,
-          issue: {
-            metric_name: 'all',
-            issue_type: 'missing_data',
-            severity: 'critical',
-            description: 'No data found in system',
-            affected_records: 0
-          }
-        };
-      }
-
-      const lastMetric = metrics[0];
-      const lastUpdateTime = new Date(lastMetric.created_date);
-      const minutesOld = Math.floor((Date.now() - lastUpdateTime.getTime()) / 60000);
-      
-      const isFresh = minutesOld <= maxAgeMinutes;
-
-      if (!isFresh) {
-        await base44.entities.DataQualityLog.create({
-          metric_name: 'system',
-          issue_type: 'stale_data',
-          severity: minutesOld > maxAgeMinutes * 2 ? 'critical' : 'high',
-          description: `Data is ${minutesOld} minutes old (threshold: ${maxAgeMinutes}m)`,
-          affected_records: 0
-        });
-      }
-
-      return {
-        isFresh,
-        lastUpdate: lastUpdateTime,
-        minutesOld,
-        issue: isFresh ? null : {
-          metric_name: 'system',
-          issue_type: 'stale_data',
-          severity: minutesOld > maxAgeMinutes * 2 ? 'critical' : 'high',
-          description: `Data is ${minutesOld} minutes old`,
-          affected_records: 0
-        }
-      };
-    } catch (error) {
-      console.error('[DataTransform] Error validating freshness:', error);
-      return { isFresh: false, lastUpdate: null, minutesOld: null, issue: null };
-    }
-  }
-
-  /**
-   * Check for data consistency across metrics
-   */
-  async validateDataConsistency(organizationId) {
-    try {
-      // Assuming 'list' sorts by default or we need to specify a sort for 'created_date'
-      const metrics = await base44.entities.TransformedMetric.filter({}, '-created_date', 1000);
-      
-      // Group by period to check for consistency
-      const byPeriod = {};
-      metrics.forEach(m => {
-        const key = `${m.time_period}_${m.period_start}`;
-        if (!byPeriod[key]) {
-          byPeriod[key] = [];
-        }
-        byPeriod[key].push(m);
-      });
-
-      const issues = [];
-
-      // Check each period for missing metrics
-      Object.entries(byPeriod).forEach(([periodKey, periodMetrics]) => {
-        const metricNames = new Set(periodMetrics.map(m => m.metric_name));
-        // This configuration should ideally come from the system's metric definitions
-        const expectedMetrics = ['revenue', 'users', 'conversions']; // Configure based on your metrics
-        
-        expectedMetrics.forEach(expected => {
-          if (!metricNames.has(expected)) {
-            issues.push({
-              metric_name: expected,
-              issue_type: 'missing_data',
-              severity: 'medium',
-              description: `Missing ${expected} data for period ${periodKey}`,
-              affected_records: 1
-            });
-          }
-        });
-      });
-
-      // Log issues
-      for (const issue of issues) {
-        await base44.entities.DataQualityLog.create(issue);
-      }
-
-      return {
-        isConsistent: issues.length === 0,
-        issues
-      };
-    } catch (error) {
-      console.error('[DataTransform] Error validating consistency:', error);
-      return { isConsistent: true, issues: [] };
-    }
-  }
-
-  /**
-   * Auto-retry failed API requests
-   */
-  async retryFailedRequests(organizationId, maxRetries = 3) {
-    try {
-      // Get recent rate limit logs with failures
-      // Assuming RateLimitLog has 'organization_id', 'created_date', and 'limit_remaining'
-      const failedLogs = await base44.entities.RateLimitLog.filter({
-        organization_id: organizationId
-      });
-
-      const recentFailures = failedLogs.filter(log => {
-        const logTime = new Date(log.created_date);
-        const minutesAgo = (Date.now() - logTime.getTime()) / 60000;
-        // Assuming limit_remaining === 0 indicates a rate limit failure
-        return minutesAgo < 60 && log.limit_remaining === 0;
-      });
-
-      console.log(`[DataTransform] Found ${recentFailures.length} recent failures to retry`);
-
-      // In production, implement actual retry logic here
-      // This would involve re-queuing the original API calls that failed
-      // For now, just log the intent and return counts.
-      // Example:
-      // let successfulRetries = 0;
-      // for (const failure of recentFailures) {
-      //   const originalRequest = this.getOriginalRequest(failure.requestId); // Hypothetical function
-      //   if (originalRequest) {
-      //     const success = await this.executeRequest(originalRequest, maxRetries - failure.retryCount);
-      //     if (success) {
-      //       successfulRetries++;
-      //       // Update log or mark as resolved
-      //     }
-      //   }
-      // }
-
-      return {
-        retriedCount: recentFailures.length,
-        successCount: 0 // Placeholder as actual retry logic isn't implemented here
-      };
-    } catch (error) {
-      console.error('[DataTransform] Error retrying requests:', error);
-      return { retriedCount: 0, successCount: 0 };
-    }
-  }
-
-  /**
-   * Run comprehensive quality checks
-   */
-  async runQualityChecks(organizationId) {
-    console.log('[DataTransform] Running quality checks...');
-
-    const results = {
-      timestamp: new Date().toISOString(),
-      checks: []
-    };
-
-    // Check data freshness
-    const freshnessCheck = await this.validateDataFreshness(organizationId);
-    results.checks.push({
-      name: 'Data Freshness',
-      passed: freshnessCheck.isFresh,
-      details: freshnessCheck
-    });
-
-    // Check consistency
-    const consistencyCheck = await this.validateDataConsistency(organizationId);
-    results.checks.push({
-      name: 'Data Consistency',
-      passed: consistencyCheck.isConsistent,
-      details: consistencyCheck
-    });
-
-    // Get recent quality issues
-    const recentIssues = await this.getQualityIssues(10);
-    results.checks.push({
-      name: 'Quality Issues',
-      passed: recentIssues.length === 0,
-      details: { issueCount: recentIssues.length }
-    });
-
-    const allPassed = results.checks.every(check => check.passed);
-    console.log(`[DataTransform] Quality checks ${allPassed ? 'PASSED' : 'FAILED'}`);
-
-    return results;
   }
 
   // Helper methods

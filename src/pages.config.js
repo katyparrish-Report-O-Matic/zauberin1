@@ -11,6 +11,7 @@ import DataQuality from './pages/DataQuality';
 import ApiKeysManager from './pages/ApiKeysManager';
 import ApiDocumentation from './pages/ApiDocumentation';
 import IntegrationsManager from './pages/IntegrationsManager';
+import CacheManager from './pages/CacheManager';
 import Layout from './Layout.jsx';
 
 
@@ -28,6 +29,7 @@ export const PAGES = {
     "ApiKeysManager": ApiKeysManager,
     "ApiDocumentation": ApiDocumentation,
     "IntegrationsManager": IntegrationsManager,
+    "CacheManager": CacheManager,
 }
 
 export const pagesConfig = {

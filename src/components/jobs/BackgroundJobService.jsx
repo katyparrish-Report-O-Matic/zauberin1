@@ -2,6 +2,7 @@
 import { base44 } from "@/api/base44Client";
 import { dataTransformationService } from "../data/DataTransformationService";
 import { backupService } from "../backup/BackupService"; // Added import
+import { cacheService } from "../cache/CacheService";
 
 /**
  * Background Job Service
@@ -203,13 +204,8 @@ class BackgroundJobService {
     let deletedCount = 0;
 
     // Clean expired cache
-    const cacheEntries = await base44.entities.MetricCache.list();
-    for (const entry of cacheEntries) {
-      if (new Date(entry.expires_at) < new Date()) {
-        await base44.entities.MetricCache.delete(entry.id);
-        deletedCount++;
-      }
-    }
+    const cacheCleanup = await cacheService.cleanupExpired();
+    deletedCount += cacheCleanup;
 
     // Archive old transformed metrics
     const oldMetrics = await base44.entities.TransformedMetric.list();
@@ -233,6 +229,7 @@ class BackgroundJobService {
       recordsProcessed: deletedCount,
       summary: {
         deleted_records: deletedCount,
+        cache_cleaned: cacheCleanup,
         cutoff_date: cutoffDate.toISOString()
       }
     };

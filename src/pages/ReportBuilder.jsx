@@ -16,6 +16,7 @@ import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
+import { cacheService } from "../components/cache/CacheService"; // Added import
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -40,29 +41,51 @@ export default function ReportBuilder() {
     enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
 
-  // Fetch saved reports filtered by organization
+  // Fetch saved reports filtered by organization (with caching)
   const { data: savedReports } = useQuery({
     queryKey: ['reportRequests', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
       
-      if (isAgency && selectedOrgId === 'all') {
-        return await base44.entities.ReportRequest.list('-created_date');
-      }
-      
-      if (!orgId || orgId === 'all') return []; // If no org selected or 'all' is selected for a non-agency user
-      return await base44.entities.ReportRequest.filter(
-        { organization_id: orgId },
-        '-created_date'
+      // Generate cache key
+      const cacheKey = cacheService.generateKey('report', { 
+        organization_id: orgId,
+        view: isAgency && selectedOrgId === 'all' ? 'all' : 'filtered'
+      });
+
+      // Try cached first
+      return await cacheService.cached(
+        cacheKey,
+        async () => {
+          if (isAgency && selectedOrgId === 'all') {
+            return await base44.entities.ReportRequest.list('-created_date');
+          }
+          
+          if (!orgId || orgId === 'all') return [];
+          return await base44.entities.ReportRequest.filter(
+            { organization_id: orgId },
+            '-created_date'
+          );
+        },
+        {
+          type: 'report',
+          organizationId: orgId,
+          ttl: 7200 // 2 hours
+        }
       );
     },
-    initialData: []
+    initialData: [],
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    cacheTime: 30 * 60 * 1000 // Keep in React Query cache for 30 minutes
   });
 
-  // Save report mutation
+  // Save report mutation (with cache invalidation)
   const saveReportMutation = useMutation({
     mutationFn: (report) => base44.entities.ReportRequest.create(report),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Invalidate report caches
+      await cacheService.invalidatePattern('report:');
+      
       queryClient.invalidateQueries({ queryKey: ['reportRequests'] });
       toast.success('Report saved successfully');
     },
@@ -75,7 +98,8 @@ export default function ReportBuilder() {
   // Delete report mutation
   const deleteReportMutation = useMutation({
     mutationFn: (id) => base44.entities.ReportRequest.delete(id),
-    onSuccess: () => {
+    onSuccess: async () => { // Added async for cache invalidation
+      await cacheService.invalidatePattern('report:'); // Invalidate report caches
       queryClient.invalidateQueries({ queryKey: ['reportRequests'] });
       toast.success('Report deleted');
       setCurrentReport(null); // Clear current report if deleted
