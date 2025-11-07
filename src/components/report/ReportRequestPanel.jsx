@@ -17,10 +17,11 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating }) {
   };
 
   const exampleRequests = [
-    "Show me revenue trends over the last 30 days broken down by region",
-    "Compare conversion rates between different marketing channels this quarter",
-    "Display top 10 products by sales with a bar chart",
-    "Create a pie chart of user engagement by device type"
+    "Show me revenue by branch for the last 30 days as a bar chart",
+    "Compare sales across all regions this quarter with a line graph",
+    "Display a pie chart of conversions broken down by branch",
+    "Create a table showing daily revenue for each branch and region",
+    "Show me user engagement trends by region over the past month"
   ];
 
   return (
@@ -36,7 +37,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating }) {
           <Label htmlFor="report-title">Report Title (optional)</Label>
           <Input
             id="report-title"
-            placeholder="e.g., Q4 Sales Analysis"
+            placeholder="e.g., Q4 Sales by Branch"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -46,12 +47,15 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating }) {
           <Label htmlFor="report-request">What would you like to visualize?</Label>
           <Textarea
             id="report-request"
-            placeholder="Describe the report you want to create... Be specific about metrics, time periods, filters, and visualization type."
+            placeholder="Describe the report you want... Include metrics, time periods, and segmentation (by branch, region, etc.)"
             value={request}
             onChange={(e) => setRequest(e.target.value)}
             rows={6}
             className="resize-none"
           />
+          <p className="text-xs text-gray-500">
+            Tip: Mention "by branch" or "by region" to segment your data
+          </p>
         </div>
 
         <Button 

@@ -1,9 +1,9 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const COLORS = ['#6b7280', '#9ca3af', '#d1d5db', '#4b5563'];
+const COLORS = ['#6b7280', '#9ca3af', '#4b5563', '#d1d5db', '#374151'];
 
 export default function ReportCanvas({ config, data }) {
   if (!config || !data) {
@@ -22,6 +22,15 @@ export default function ReportCanvas({ config, data }) {
     );
   }
 
+  // Get all data keys except 'date', 'name' for dynamic series
+  const getDataKeys = () => {
+    if (!data || data.length === 0) return [];
+    const firstRow = data[0];
+    return Object.keys(firstRow).filter(key => key !== 'date' && key !== 'name');
+  };
+
+  const dataKeys = getDataKeys();
+
   const renderVisualization = () => {
     switch (config.chart_type) {
       case 'line':
@@ -29,16 +38,18 @@ export default function ReportCanvas({ config, data }) {
           <ResponsiveContainer width="100%" height={400}>
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
+              <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '12px' }} />
+              <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
               <Tooltip />
-              {config.metrics?.map((metric, idx) => (
+              <Legend />
+              {dataKeys.map((key, idx) => (
                 <Line 
-                  key={metric}
+                  key={key}
                   type="monotone" 
-                  dataKey={metric} 
+                  dataKey={key} 
                   stroke={COLORS[idx % COLORS.length]} 
                   strokeWidth={2}
+                  name={key}
                 />
               ))}
             </LineChart>
@@ -50,14 +61,16 @@ export default function ReportCanvas({ config, data }) {
           <ResponsiveContainer width="100%" height={400}>
             <BarChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
+              <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '12px' }} />
+              <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
               <Tooltip />
-              {config.metrics?.map((metric, idx) => (
+              <Legend />
+              {dataKeys.map((key, idx) => (
                 <Bar 
-                  key={metric}
-                  dataKey={metric} 
-                  fill={COLORS[idx % COLORS.length]} 
+                  key={key}
+                  dataKey={key} 
+                  fill={COLORS[idx % COLORS.length]}
+                  name={key}
                 />
               ))}
             </BarChart>
@@ -65,43 +78,52 @@ export default function ReportCanvas({ config, data }) {
         );
 
       case 'pie':
+        const total = data.reduce((sum, item) => sum + item.value, 0);
         return (
-          <ResponsiveContainer width="100%" height={400}>
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={120}
-                label
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <div>
+            <ResponsiveContainer width="100%" height={400}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={120}
+                  label={({ name, value }) => `${name}: ${((value/total)*100).toFixed(1)}%`}
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => `${value.toLocaleString()} (${((value/total)*100).toFixed(1)}%)`} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="mt-4 text-center text-sm text-gray-600">
+              <strong>Total: {total.toLocaleString()}</strong>
+            </div>
+          </div>
         );
 
       case 'table':
         return (
-          <div className="border rounded-lg">
+          <div className="border rounded-lg max-h-96 overflow-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 bg-gray-50">
                 <TableRow>
                   {Object.keys(data[0] || {}).map(key => (
-                    <TableHead key={key}>{key}</TableHead>
+                    <TableHead key={key} className="font-semibold">{key}</TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.map((row, idx) => (
-                  <TableRow key={idx}>
+                  <TableRow key={idx} className="hover:bg-gray-50">
                     {Object.values(row).map((val, i) => (
-                      <TableCell key={i}>{val}</TableCell>
+                      <TableCell key={i}>
+                        {typeof val === 'number' ? val.toLocaleString() : val}
+                      </TableCell>
                     ))}
                   </TableRow>
                 ))}
@@ -121,6 +143,11 @@ export default function ReportCanvas({ config, data }) {
         <CardTitle>{config.title || 'Custom Report'}</CardTitle>
         {config.description && (
           <p className="text-sm text-gray-600 mt-1">{config.description}</p>
+        )}
+        {config.segment_by && config.segment_by.length > 0 && (
+          <p className="text-xs text-gray-500 mt-2">
+            Segmented by: {config.segment_by.join(', ')}
+          </p>
         )}
       </CardHeader>
       <CardContent>
