@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Wand2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false }) {
   const [title, setTitle] = useState('');
@@ -28,7 +28,11 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
     <Card className="border-gray-300">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Wand2 className="w-5 h-5" />
+          <img 
+            src="https://base44.app/api/apps/690dde1a97d67b2c9dbceb00/files/public/690dde1a97d67b2c9dbceb00/8b9ebd030_Zauberin.png"
+            alt=""
+            className="w-5 h-5 object-contain brightness-0"
+          />
           Create Bespoke Report
         </CardTitle>
       </CardHeader>
@@ -70,7 +74,11 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
             </>
           ) : (
             <>
-              <Wand2 className="w-4 h-4" />
+              <img 
+                src="https://base44.app/api/apps/690dde1a97d67b2c9dbceb00/files/public/690dde1a97d67b2c9dbceb00/8b9ebd030_Zauberin.png"
+                alt=""
+                className="w-4 h-4 object-contain brightness-0 invert"
+              />
               Generate Report
             </>
           )}
