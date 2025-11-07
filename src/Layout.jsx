@@ -7,6 +7,7 @@ import JobScheduler from "./components/jobs/JobScheduler";
 import { usePermissions } from "./components/auth/usePermissions";
 import { Badge } from "@/components/ui/badge";
 import EnvironmentIndicator from "./components/config/EnvironmentIndicator";
+import MonitoringInitializer from "./components/monitoring/MonitoringInitializer";
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -17,7 +18,8 @@ export default function Layout({ children }) {
     { name: "Dashboard Builder", path: createPageUrl("DashboardBuilder"), icon: Columns, requiredLevel: "editor" },
     { name: "Templates", path: createPageUrl("TemplateManager"), icon: LayoutIcon, requiredLevel: "editor" },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
-    { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" }, // Added new item
+    { name: "Monitoring", path: createPageUrl("MonitoringDashboard"), icon: Activity, requiredLevel: "admin" },
+    { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" },
     { name: "Cache", path: createPageUrl("CacheManager"), icon: HardDrive, requiredLevel: "admin" },
     { name: "Backups", path: createPageUrl("BackupManager"), icon: Database, requiredLevel: "admin" },
     { name: "Integrations", path: createPageUrl("IntegrationsManager"), icon: Zap, requiredLevel: "admin" },
@@ -38,6 +40,7 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen bg-gray-50">
       <JobScheduler />
+      <MonitoringInitializer />
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex justify-between h-16">
