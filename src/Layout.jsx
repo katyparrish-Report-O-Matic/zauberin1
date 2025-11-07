@@ -27,6 +27,7 @@ export default function Layout({ children }) {
     { name: "Integrations", path: createPageUrl("IntegrationsManager"), icon: Zap, requiredLevel: "admin" },
     { name: "API Keys", path: createPageUrl("ApiKeysManager"), icon: Key, requiredLevel: "admin" },
     { name: "Webhooks", path: createPageUrl("WebhookManager"), icon: Webhook, requiredLevel: "admin" },
+    { name: "Files", path: createPageUrl("FilesManager"), icon: FileText, requiredLevel: "admin" },
     { name: "Jobs", path: createPageUrl("JobsManager"), icon: Clock, requiredLevel: "editor" },
     { name: "Audit Logs", path: createPageUrl("AuditLogs"), icon: FileText, requiredLevel: "admin" },
     { name: "Organizations", path: createPageUrl("OrganizationManager"), icon: Building2, requiredLevel: "admin", agencyOnly: true },
