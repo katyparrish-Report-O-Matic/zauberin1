@@ -32,7 +32,11 @@ export function usePermissions() {
   const hasPermission = (requiredLevel) => {
     if (!currentUser) return false;
     
-    const userLevel = PERMISSION_HIERARCHY[currentUser.permission_level] || 0;
+    // Check custom permission_level first, then fall back to built-in role
+    const userPermissionLevel = currentUser.permission_level || 
+                                (currentUser.role === 'admin' ? 'admin' : 'viewer');
+    
+    const userLevel = PERMISSION_HIERARCHY[userPermissionLevel] || 0;
     const required = PERMISSION_HIERARCHY[requiredLevel] || 999;
     
     return userLevel >= required;
@@ -52,8 +56,15 @@ export function usePermissions() {
     return currentUser.organization_id === orgId;
   };
 
+  // Determine effective permission level (custom or built-in)
+  const effectivePermissionLevel = currentUser?.permission_level || 
+                                   (currentUser?.role === 'admin' ? 'admin' : 'viewer');
+
   return {
-    currentUser,
+    currentUser: currentUser ? {
+      ...currentUser,
+      permission_level: effectivePermissionLevel
+    } : null,
     userOrg,
     hasPermission,
     isAgency: isAgency(),
