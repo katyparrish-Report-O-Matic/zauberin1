@@ -73,7 +73,8 @@ export default function Settings() {
         ...data,
         organization_id: orgId,
         current_usage: 0,
-        usage_reset_at: new Date(Date.now() + 3600000).toISOString()
+        usage_reset_at: new Date(Date.now() + 3600000).toISOString(),
+        connection_status: 'disconnected'
       });
     },
     onSuccess: () => {
@@ -125,10 +126,12 @@ export default function Settings() {
       } else {
         toast.error(`Connection failed: ${result.error || 'Unknown error'}`);
       }
+      queryClient.invalidateQueries({ queryKey: ['apiSettings'] }); // Invalidate to show updated connection status
     },
     onError: (error) => {
       setTestingConnection(null);
       toast.error(`Connection test failed unexpectedly: ${error.message}`);
+      queryClient.invalidateQueries({ queryKey: ['apiSettings'] }); // Invalidate to show updated connection status
     }
   });
 
