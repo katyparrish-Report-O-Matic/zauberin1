@@ -151,6 +151,18 @@ export default function WebhookManager() {
     toast.success('Copied to clipboard');
   };
 
+  const formatActivityDate = (dateString) => {
+    try {
+      if (!dateString) return 'Invalid date';
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      return format(date, "MMM d, h:mm:ss a");
+    } catch (error) {
+      console.error('Date formatting error:', error, dateString);
+      return 'Invalid date';
+    }
+  };
+
   return (
     <PermissionGuard requiredLevel="admin">
       <div className="min-h-screen bg-gray-50">
@@ -323,7 +335,7 @@ export default function WebhookManager() {
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-medium text-gray-900">
-                                  {format(new Date(activity.created_date), "MMM d, h:mm:ss a")}
+                                  {formatActivityDate(activity.created_date)}
                                 </p>
                                 {activity.signature_valid !== undefined && (
                                   <Badge variant="outline" className="text-xs">
