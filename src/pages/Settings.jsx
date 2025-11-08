@@ -173,26 +173,28 @@ export default function Settings() {
       
       // Create scheduled jobs for this organization if they don't exist
       const existingJobs = await base44.entities.ScheduledJob.filter({
-        'configuration.organization_id': orgId
+        organization_id: orgId
       });
 
       if (existingJobs.length === 0) {
         // Create API health check job
         await base44.entities.ScheduledJob.create({
+          organization_id: orgId,
           job_name: `API Health Check - Org ${orgId}`,
           job_type: 'api_health_check',
           schedule: 'hourly',
-          configuration: { organization_id: orgId },
+          configuration: {},
           enabled: true,
           next_run: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 minutes from now
         });
 
         // Create data prefetch job
         await base44.entities.ScheduledJob.create({
+          organization_id: orgId,
           job_name: `Data Prefetch - Org ${orgId}`,
           job_type: 'data_prefetch',
           schedule: 'hourly',
-          configuration: { organization_id: orgId },
+          configuration: {},
           enabled: true,
           next_run: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes from now
         });
