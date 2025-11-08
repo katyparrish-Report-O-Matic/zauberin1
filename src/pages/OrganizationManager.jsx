@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,8 @@ import PermissionGuard from "../components/auth/PermissionGuard";
 export default function OrganizationManager() {
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showAssignDialog, setShowAssignDialog] = useState(false); // New state for assign dialog
+  const [selectedOrg, setSelectedOrg] = useState(null); // New state for selected organization
   const [newOrg, setNewOrg] = useState({
     name: '',
     slug: '',
@@ -40,6 +43,11 @@ export default function OrganizationManager() {
     initialData: []
   });
 
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
+
   const createOrgMutation = useMutation({
     mutationFn: (orgData) => base44.entities.Organization.create(orgData),
     onSuccess: () => {
@@ -47,6 +55,24 @@ export default function OrganizationManager() {
       toast.success('Organization created');
       setShowCreateDialog(false);
       setNewOrg({ name: '', slug: '', is_agency: false });
+    }
+  });
+
+  const assignUserMutation = useMutation({
+    mutationFn: async ({ userId, orgId }) => {
+      // Update user's organization
+      await base44.entities.User.update(userId, { organization_id: orgId });
+      return orgId;
+    },
+    onSuccess: (orgId) => {
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      toast.success('User assigned to organization');
+      setShowAssignDialog(false);
+      setSelectedOrg(null);
+    },
+    onError: (error) => {
+      toast.error('Failed to assign user: ' + error.message);
     }
   });
 
@@ -65,6 +91,19 @@ export default function OrganizationManager() {
 
   const getUsersForOrg = (orgId) => {
     return allUsers.filter(u => u.organization_id === orgId);
+  };
+
+  const handleAssignCurrentUser = (org) => {
+    setSelectedOrg(org);
+    setShowAssignDialog(true);
+  };
+
+  const confirmAssignUser = () => {
+    if (!currentUser?.id || !selectedOrg?.id) return;
+    assignUserMutation.mutate({
+      userId: currentUser.id,
+      orgId: selectedOrg.id
+    });
   };
 
   return (
@@ -86,10 +125,29 @@ export default function OrganizationManager() {
               </Button>
             </div>
 
+            {!currentUser?.organization_id && (
+              <Card className="border-yellow-500 bg-yellow-50">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <Shield className="w-5 h-5 text-yellow-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium text-yellow-900">
+                        You're not assigned to an organization
+                      </p>
+                      <p className="text-sm text-yellow-800 mt-1">
+                        Click "Assign Me" on an organization to gain access
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {organizations.map(org => {
                 const users = getUsersForOrg(org.id);
                 const admins = users.filter(u => u.permission_level === 'admin');
+                const isCurrentUserOrg = currentUser?.organization_id === org.id;
 
                 return (
                   <Card key={org.id} className={org.is_agency ? 'border-2 border-blue-500' : ''}>
@@ -102,6 +160,11 @@ export default function OrganizationManager() {
                               <Badge variant="default" className="bg-blue-600">
                                 <Shield className="w-3 h-3 mr-1" />
                                 Agency
+                              </Badge>
+                            )}
+                            {isCurrentUserOrg && (
+                              <Badge variant="outline" className="bg-green-50 border-green-600 text-green-700">
+                                Your Org
                               </Badge>
                             )}
                           </CardTitle>
@@ -126,6 +189,17 @@ export default function OrganizationManager() {
                       <div className="pt-2 border-t">
                         <Badge variant="outline">{org.subscription_tier || 'free'}</Badge>
                       </div>
+                      
+                      {!isCurrentUserOrg && !currentUser?.organization_id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => handleAssignCurrentUser(org)}
+                        >
+                          Assign Me
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -189,6 +263,34 @@ export default function OrganizationManager() {
                 Cancel
               </Button>
               <Button onClick={handleCreateOrg}>Create</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Assign User Dialog */}
+        <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Assign to Organization</DialogTitle>
+              <DialogDescription>
+                This will assign your user account to {selectedOrg?.name}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-sm text-gray-600">
+                Your email: <span className="font-medium">{currentUser?.email}</span>
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                Organization: <span className="font-medium">{selectedOrg?.name}</span>
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAssignDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={confirmAssignUser}>
+                Confirm Assignment
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
