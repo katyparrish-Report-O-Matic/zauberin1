@@ -60,14 +60,17 @@ export default function OrganizationManager() {
 
   const assignUserMutation = useMutation({
     mutationFn: async ({ userId, orgId }) => {
-      // Update user's organization
-      await base44.entities.User.update(userId, { organization_id: orgId });
+      // Update current user with organization and admin permission
+      await base44.auth.updateMe({ 
+        organization_id: orgId,
+        permission_level: 'admin'
+      });
       return orgId;
     },
     onSuccess: (orgId) => {
       queryClient.invalidateQueries({ queryKey: ['allUsers'] });
       queryClient.invalidateQueries({ queryKey: ['currentUser'] });
-      toast.success('User assigned to organization');
+      toast.success('You are now an admin of this organization!');
       setShowAssignDialog(false);
       setSelectedOrg(null);
     },
