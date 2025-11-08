@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +42,13 @@ export default function Settings() {
   const [testingConnection, setTestingConnection] = useState(null);
 
   const { currentUser, isAgency } = usePermissions();
+
+  // Initialize selectedOrgId for non-agency users
+  useEffect(() => {
+    if (!isAgency && currentUser?.organization_id && !selectedOrgId) {
+      setSelectedOrgId(currentUser.organization_id);
+    }
+  }, [currentUser, isAgency, selectedOrgId]);
 
   const { data: apiConfigs, isLoading } = useQuery({
     queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
@@ -161,8 +168,13 @@ export default function Settings() {
   const handleSave = async () => {
     const orgId = selectedOrgId || currentUser?.organization_id;
     
+    if (!currentUser?.organization_id) {
+      toast.error('Your user account is not associated with an organization. Please contact an administrator.');
+      return;
+    }
+
     if (!orgId || orgId === 'all') {
-      toast.error('Please select an organization');
+      toast.error('Please select a specific organization to add API settings');
       return;
     }
 
@@ -210,7 +222,7 @@ export default function Settings() {
       }
     } catch (error) {
       console.error('Error saving API:', error);
-      toast.error('Failed to save API configuration');
+      toast.error('Failed to save API configuration: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -219,6 +231,30 @@ export default function Settings() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
       </div>
+    );
+  }
+
+  // Check if user has organization
+  if (!currentUser?.organization_id) {
+    return (
+      <PermissionGuard requiredLevel="admin">
+        <div className="min-h-screen bg-gray-50">
+          <div className="p-6 md:p-8">
+            <div className="max-w-5xl mx-auto">
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">No Organization Assigned</h2>
+                  <p className="text-gray-600">
+                    Your user account is not associated with an organization. 
+                    Please contact an administrator to assign you to an organization.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </PermissionGuard>
     );
   }
 
