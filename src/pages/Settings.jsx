@@ -435,8 +435,14 @@ export default function Settings() {
                         {api.connection_status && (
                           <div>
                             <span className="text-gray-600">Status</span>
-                            <p className={`font-medium ${api.connection_status === 'connected' ? 'text-green-600' : 'text-red-600'}`}>
-                              {api.connection_status === 'connected' ? 'Connected' : 'Error'}
+                            <p className={`font-medium ${
+                              api.connection_status === 'connected' ? 'text-green-600' : 
+                              api.connection_status === 'disconnected' ? 'text-gray-600' : 
+                              'text-red-600'
+                            }`}>
+                              {api.connection_status === 'connected' ? 'Connected' : 
+                               api.connection_status === 'disconnected' ? 'Not Tested' : 
+                               'Error'}
                             </p>
                           </div>
                         )}
