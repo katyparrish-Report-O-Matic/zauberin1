@@ -48,6 +48,10 @@ export default function ReportBuilder() {
 
   const { currentUser, isAgency, hasPermission } = usePermissions();
 
+  // Check if user can edit - admins and editors can edit
+  const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
+  const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
+
   // Fetch API settings for current/selected organization
   const { data: apiSettings } = useQuery({
     queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
@@ -211,7 +215,7 @@ export default function ReportBuilder() {
   });
 
   const generateReport = async (request) => {
-    if (!hasPermission('editor')) {
+    if (!canEdit) {
       toast.error('You need editor permissions to create reports');
       return;
     }
@@ -533,7 +537,7 @@ Generate a complete report configuration that captures their intent.`,
 
   const handleSaveReport = () => {
     if (!currentReport) return;
-    if (!hasPermission('editor')) {
+    if (!canEdit) {
       toast.error('You need editor permissions to save reports');
       return;
     }
@@ -567,7 +571,7 @@ Generate a complete report configuration that captures their intent.`,
   };
 
   const handleDeleteReport = (id) => {
-    if (!hasPermission('admin')) {
+    if (!canDelete) {
       toast.error('You need admin permissions to delete reports');
       return;
     }
@@ -672,7 +676,7 @@ Generate a complete report configuration that captures their intent.`,
       return;
     }
     
-    if (!hasPermission('editor')) {
+    if (!canEdit) {
       toast.error('You need editor permissions to create templates');
       return;
     }
@@ -731,7 +735,7 @@ Generate a complete report configuration that captures their intent.`,
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
                 API not configured for this organization. Currently using mock data.{' '}
-                {hasPermission('admin') && (
+                {canDelete && (
                   <a href="/settings" className="underline font-medium">Configure API settings</a>
                 )}
               </AlertDescription>
@@ -755,7 +759,7 @@ Generate a complete report configuration that captures their intent.`,
               <ReportRequestPanel 
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
-                disabled={!hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
+                disabled={!canEdit}
                 accounts={mockAccounts}
               />
               
@@ -763,10 +767,10 @@ Generate a complete report configuration that captures their intent.`,
                 reports={savedReports}
                 onLoadReport={handleLoadReport}
                 onDeleteReport={handleDeleteReport}
-                onShareReport={(report) => toast.info('Sharing feature coming soon')}
                 onEmailReport={handleEmailReport}
                 onDownloadPDF={handleDownloadPDF}
-                canDelete={hasPermission('admin')}
+                canDelete={canDelete}
+                accounts={mockAccounts}
               />
             </div>
 
@@ -786,7 +790,7 @@ Generate a complete report configuration that captures their intent.`,
                   <Button
                     variant="outline"
                     onClick={handleSaveAsTemplate}
-                    disabled={!currentReport?.configuration || !hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
+                    disabled={!currentReport?.configuration || !canEdit}
                     className="gap-2"
                   >
                     <BookTemplate className="w-4 h-4" />
@@ -794,7 +798,7 @@ Generate a complete report configuration that captures their intent.`,
                   </Button>
                   <Button
                     onClick={handleSaveReport}
-                    disabled={!currentReport || currentReport.id || !hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
+                    disabled={!currentReport || currentReport.id || !canEdit}
                     className="gap-2"
                   >
                     <Save className="w-4 h-4" />
@@ -895,7 +899,7 @@ Generate a complete report configuration that captures their intent.`,
                   <li>Title: {currentReport.title}</li>
                   <li>Type: {currentReport.configuration?.chart_type || 'N/A'}</li>
                   {currentReport.account && (
-                    <li>Account: {mockAccounts.find(a => a.id === currentReport.account)?.name || currentReport.account}</li>
+                    <li>Account: {mockAccounts.find(a => a.id === currentReport.account)?.name}</li>
                   )}
                 </ul>
               </div>
