@@ -3,9 +3,20 @@ import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Download, Save, AlertCircle, AlertTriangle } from "lucide-react";
+import { Download, Save, AlertCircle, AlertTriangle, BookTemplate } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 import ReportRequestPanel from "../components/report/ReportRequestPanel";
 import ReportCanvas from "../components/report/ReportCanvas";
@@ -26,6 +37,11 @@ export default function ReportBuilder() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [dataQuality, setDataQuality] = useState(null);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [templateData, setTemplateData] = useState({
+    name: '',
+    description: ''
+  });
 
   const { currentUser, isAgency, hasPermission } = usePermissions();
 
@@ -110,6 +126,49 @@ export default function ReportBuilder() {
     onError: (error) => {
       toast.error('Failed to delete report');
       console.error("Delete report error:", error);
+    }
+  });
+
+  // Save as template mutation
+  const saveTemplateMutation = useMutation({
+    mutationFn: async (templateData) => {
+      const orgId = selectedOrgId || currentUser?.organization_id;
+      
+      return await base44.entities.ReportTemplate.create({
+        name: templateData.name,
+        description: templateData.description,
+        template_type: 'custom',
+        organization_id: orgId,
+        created_by: currentUser?.email,
+        layout_config: {
+          grid_layout: [],
+          refresh_interval: null
+        },
+        metric_configs: currentReport.configuration.metrics?.map(metric => ({
+          metric_name: metric,
+          chart_type: currentReport.configuration.chart_type,
+          segment_by: currentReport.configuration.segment_by || []
+        })) || [],
+        filter_presets: currentReport.configuration.filters || {},
+        chart_settings: {
+          chart_type: currentReport.configuration.chart_type,
+          date_range: currentReport.configuration.date_range,
+          segment_by: currentReport.configuration.segment_by || []
+        },
+        is_public: false,
+        usage_count: 0,
+        tags: ['custom', currentReport.configuration.chart_type]
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reportTemplates'] });
+      toast.success('Template saved successfully');
+      setShowTemplateDialog(false);
+      setTemplateData({ name: '', description: '' });
+    },
+    onError: (error) => {
+      toast.error('Failed to save template');
+      console.error('Save template error:', error);
     }
   });
 
@@ -514,6 +573,40 @@ Generate a complete report configuration that captures their intent.`,
     }
   };
 
+  const handleSaveAsTemplate = () => {
+    if (!currentReport || !currentReport.configuration) {
+      toast.error('No report to save as template');
+      return;
+    }
+    
+    if (!hasPermission('editor')) {
+      toast.error('You need editor permissions to create templates');
+      return;
+    }
+
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    if (!orgId || orgId === 'all') {
+      toast.error('Please select an organization');
+      return;
+    }
+
+    // Pre-fill template name from report title
+    setTemplateData({
+      name: currentReport.title || '',
+      description: currentReport.description || ''
+    });
+    setShowTemplateDialog(true);
+  };
+
+  const handleSaveTemplate = () => {
+    if (!templateData.name.trim()) {
+      toast.error('Template name is required');
+      return;
+    }
+
+    saveTemplateMutation.mutate(templateData);
+  };
+
   const isApiConfigured = apiSettings?.api_url && apiSettings?.api_token;
 
   return (
@@ -595,6 +688,15 @@ Generate a complete report configuration that captures their intent.`,
                     Export CSV
                   </Button>
                   <Button
+                    variant="outline"
+                    onClick={handleSaveAsTemplate}
+                    disabled={!currentReport?.configuration || !hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
+                    className="gap-2"
+                  >
+                    <BookTemplate className="w-4 h-4" />
+                    Save as Template
+                  </Button>
+                  <Button
                     onClick={handleSaveReport}
                     disabled={!currentReport || currentReport.id || !hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
                     className="gap-2"
@@ -613,6 +715,62 @@ Generate a complete report configuration that captures their intent.`,
           </div>
         </div>
       </div>
+
+      {/* Save as Template Dialog */}
+      <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as Template</DialogTitle>
+            <DialogDescription>
+              Create a reusable template from this report configuration
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="template-name">Template Name *</Label>
+              <Input
+                id="template-name"
+                placeholder="e.g., Sales by Branch Report"
+                value={templateData.name}
+                onChange={(e) => setTemplateData({ ...templateData, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-description">Description</Label>
+              <Textarea
+                id="template-description"
+                placeholder="Describe what this template is used for..."
+                value={templateData.description}
+                onChange={(e) => setTemplateData({ ...templateData, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            {currentReport?.configuration && (
+              <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-1">
+                <p className="font-medium text-gray-700">Template will include:</p>
+                <ul className="list-disc list-inside text-gray-600">
+                  <li>Chart type: {currentReport.configuration.chart_type}</li>
+                  <li>Metrics: {currentReport.configuration.metrics?.join(', ') || 'None'}</li>
+                  {currentReport.configuration.segment_by?.length > 0 && (
+                    <li>Segments: {currentReport.configuration.segment_by.join(', ')}</li>
+                  )}
+                  {currentReport.configuration.date_range && (
+                    <li>Date range: {currentReport.configuration.date_range.period}</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTemplateDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveTemplate} disabled={saveTemplateMutation.isPending}>
+              {saveTemplateMutation.isPending ? 'Saving...' : 'Save Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
