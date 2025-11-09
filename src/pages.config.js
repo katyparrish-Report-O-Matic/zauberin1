@@ -15,6 +15,7 @@ import PerformanceMonitor from './pages/PerformanceMonitor';
 import ProductionDashboard from './pages/ProductionDashboard';
 import ReportTemplates from './pages/ReportTemplates';
 import FilesManager from './pages/FilesManager';
+import DataSourceManager from './pages/DataSourceManager';
 import Layout from './Layout.jsx';
 
 
@@ -36,6 +37,7 @@ export const PAGES = {
     "ProductionDashboard": ProductionDashboard,
     "ReportTemplates": ReportTemplates,
     "FilesManager": FilesManager,
+    "DataSourceManager": DataSourceManager,
 }
 
 export const pagesConfig = {
