@@ -39,6 +39,8 @@ export default function ReportBuilder() {
   const [dataQuality, setDataQuality] = useState(null);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState('');
   const [templateData, setTemplateData] = useState({
     name: '',
     description: ''
@@ -177,6 +179,34 @@ export default function ReportBuilder() {
     onError: (error) => {
       toast.error('Failed to save template');
       console.error('Save template error:', error);
+    }
+  });
+
+  // Email report mutation
+  const emailReportMutation = useMutation({
+    mutationFn: async ({ report, recipient }) => {
+      const emailBody = `
+        <h2>${report.title}</h2>
+        <p>${report.description}</p>
+        <p><strong>Chart Type:</strong> ${report.configuration?.chart_type || 'N/A'}</p>
+        <p><strong>Created:</strong> ${format(new Date(report.created_date), "MMMM d, yyyy 'at' h:mm a")}</p>
+        <p>View full report in the dashboard.</p>
+      `;
+
+      return await base44.integrations.Core.SendEmail({
+        to: recipient,
+        subject: `Report: ${report.title}`,
+        body: emailBody
+      });
+    },
+    onSuccess: () => {
+      toast.success('Report sent via email');
+      setShowEmailDialog(false);
+      setEmailRecipient('');
+    },
+    onError: (error) => {
+      toast.error('Failed to send email');
+      console.error('Email error:', error);
     }
   });
 
@@ -558,6 +588,43 @@ Generate a complete report configuration that captures their intent.`,
     }
   };
 
+  const handleEmailReport = (report) => {
+    setCurrentReport(report);
+    setEmailRecipient(currentUser?.email || '');
+    setShowEmailDialog(true);
+  };
+
+  const handleSendEmail = () => {
+    if (!emailRecipient) {
+      toast.error('Email address is required');
+      return;
+    }
+    if (!currentReport) {
+      toast.error('No report selected to email.');
+      return;
+    }
+
+    emailReportMutation.mutate({
+      report: currentReport,
+      recipient: emailRecipient
+    });
+  };
+
+  const handleDownloadPDF = async (report) => {
+    toast.info('PDF generation coming soon');
+    
+    // Log audit
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    if (orgId && currentUser) {
+      auditService.logDataExport(
+        orgId,
+        currentUser.email,
+        'pdf',
+        1
+      );
+    }
+  };
+
   const handleExport = () => {
     if (!reportData || reportData.length === 0) {
       toast.info('No data to export.');
@@ -697,6 +764,8 @@ Generate a complete report configuration that captures their intent.`,
                 onLoadReport={handleLoadReport}
                 onDeleteReport={handleDeleteReport}
                 onShareReport={(report) => toast.info('Sharing feature coming soon')}
+                onEmailReport={handleEmailReport}
+                onDownloadPDF={handleDownloadPDF}
                 canDelete={hasPermission('admin')}
               />
             </div>
@@ -794,6 +863,50 @@ Generate a complete report configuration that captures their intent.`,
             </Button>
             <Button onClick={handleSaveTemplate} disabled={saveTemplateMutation.isPending}>
               {saveTemplateMutation.isPending ? 'Saving...' : 'Save Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Report Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Email Report</DialogTitle>
+            <DialogDescription>
+              Send this report via email
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-recipient">Recipient Email</Label>
+              <Input
+                id="email-recipient"
+                type="email"
+                placeholder="recipient@example.com"
+                value={emailRecipient}
+                onChange={(e) => setEmailRecipient(e.target.value)}
+              />
+            </div>
+            {currentReport && (
+              <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-1">
+                <p className="font-medium text-gray-700">Report Details:</p>
+                <ul className="list-disc list-inside text-gray-600">
+                  <li>Title: {currentReport.title}</li>
+                  <li>Type: {currentReport.configuration?.chart_type || 'N/A'}</li>
+                  {currentReport.account && (
+                    <li>Account: {mockAccounts.find(a => a.id === currentReport.account)?.name || currentReport.account}</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendEmail} disabled={emailReportMutation.isPending}>
+              {emailReportMutation.isPending ? 'Sending...' : 'Send Email'}
             </Button>
           </DialogFooter>
         </DialogContent>
