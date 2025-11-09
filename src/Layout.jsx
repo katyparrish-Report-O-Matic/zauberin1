@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -17,6 +18,7 @@ export default function Layout({ children }) {
   const navItems = [
     { name: "Report Builder", path: createPageUrl("ReportBuilder"), icon: FileBarChart },
     { name: "Templates", path: createPageUrl("ReportTemplates"), icon: FlaskConical },
+    { name: "Data Sources", path: createPageUrl("DataSourceManager"), icon: Database, requiredLevel: "admin" },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
     { name: "Monitoring", path: createPageUrl("MonitoringDashboard"), icon: Activity, requiredLevel: "admin" },
     { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" },
