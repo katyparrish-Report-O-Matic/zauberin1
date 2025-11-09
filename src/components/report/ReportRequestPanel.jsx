@@ -4,15 +4,26 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Moon } from "lucide-react";
+import { Loader2, Moon, Calendar as CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format } from "date-fns";
 
-export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false }) {
+export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false, accounts = [] }) {
   const [title, setTitle] = useState('');
   const [request, setRequest] = useState('');
+  const [dateRange, setDateRange] = useState({ from: null, to: null });
+  const [selectedAccount, setSelectedAccount] = useState('all');
 
   const handleGenerate = () => {
     if (request.trim()) {
-      onGenerateReport({ title: title || 'Custom Report', description: request });
+      onGenerateReport({ 
+        title: title || 'Custom Report', 
+        description: request,
+        dateRange,
+        account: selectedAccount
+      });
     }
   };
 
@@ -41,6 +52,53 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="account-select">Account</Label>
+          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+            <SelectTrigger id="account-select">
+              <SelectValue placeholder="Select account" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Accounts</SelectItem>
+              {accounts.map(account => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Date Range (optional)</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full justify-start text-left font-normal">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateRange.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")}
+                    </>
+                  ) : (
+                    format(dateRange.from, "MMM d, yyyy")
+                  )
+                ) : (
+                  <span>Pick a date range</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={(range) => setDateRange(range || { from: null, to: null })}
+                numberOfMonths={2}
+              />
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="space-y-2">

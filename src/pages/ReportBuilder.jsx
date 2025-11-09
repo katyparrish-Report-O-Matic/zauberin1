@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { format } from 'date-fns'; // Import format for date handling
 
 import ReportRequestPanel from "../components/report/ReportRequestPanel";
 import ReportCanvas from "../components/report/ReportCanvas";
@@ -50,13 +51,20 @@ export default function ReportBuilder() {
     queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') return null; // 'all' is for agency view, not a specific org for settings
+      if (!orgId || orgId === 'all') return null;
       
       const settings = await base44.entities.ApiSettings.filter({ organization_id: orgId });
       return settings[0] || null;
     },
     enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
+
+  // Fetch accounts (mock data for now)
+  const mockAccounts = [
+    { id: 'acc1', name: 'Main Account' },
+    { id: 'acc2', name: 'Secondary Account' },
+    { id: 'acc3', name: 'Test Account' }
+  ];
 
   // Fetch saved reports filtered by organization (with caching)
   const { data: savedReports } = useQuery({
@@ -188,11 +196,29 @@ export default function ReportBuilder() {
     setDataQuality(null);
 
     try {
+      // Build date range context for LLM
+      let dateContext = '';
+      if (request.dateRange?.from) {
+        if (request.dateRange.to) {
+          dateContext = `The report should cover the period from ${format(request.dateRange.from, 'MMMM d, yyyy')} to ${format(request.dateRange.to, 'MMMM d, yyyy')}.`;
+        } else {
+          dateContext = `The report should start from ${format(request.dateRange.from, 'MMMM d, yyyy')}.`;
+        }
+      }
+
+      // Build account context
+      const accountContext = request.account && request.account !== 'all' 
+        ? `Filter data for account: ${mockAccounts.find(a => a.id === request.account)?.name || request.account}.`
+        : '';
+
       // Use LLM to interpret the request and generate configuration
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `You are a business intelligence expert helping staff create data visualizations.
 
 User's request: "${request.description}"
+
+${dateContext}
+${accountContext}
 
 IMPORTANT INSTRUCTIONS:
 1. Identify what metrics they want to see (revenue, users, conversions, engagement, etc.)
@@ -254,7 +280,7 @@ Generate a complete report configuration that captures their intent.`,
 
       setCurrentReport({
         ...request,
-        organization_id: orgId, // Assign current organization ID
+        organization_id: orgId,
         configuration: response,
         status: 'generated'
       });
@@ -663,6 +689,7 @@ Generate a complete report configuration that captures their intent.`,
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
                 disabled={!hasPermission('editor') || !selectedOrgId || selectedOrgId === 'all'}
+                accounts={mockAccounts}
               />
               
               <SavedReportsList
