@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -46,6 +45,19 @@ export default function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <style>{`
+        .shadcn-card,
+        [class*="rounded-lg"],
+        [class*="rounded-xl"] {
+          border: 1px solid black !important;
+        }
+        
+        main > div {
+          border: 3px solid #0d9488 !important;
+          border-radius: 8px;
+        }
+      `}</style>
+      
       <JobScheduler />
       <MonitoringInitializer />
       <nav className="bg-white border-b border-gray-200">
