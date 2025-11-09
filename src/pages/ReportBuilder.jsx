@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { format } from 'date-fns'; // Import format for date handling
+import { format } from 'date-fns';
 
 import ReportRequestPanel from "../components/report/ReportRequestPanel";
 import ReportCanvas from "../components/report/ReportCanvas";
@@ -30,6 +29,9 @@ import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
 import { cacheService } from "../components/cache/CacheService";
 import { environmentConfig } from "../components/config/EnvironmentConfig";
+import DataFreshnessIndicator from "../components/report/DataFreshnessIndicator";
+import AnnotationManager from "../components/report/AnnotationManager";
+import ReportVersionManager, { saveReportVersion } from "../components/report/ReportVersionManager";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
@@ -106,17 +108,29 @@ export default function ReportBuilder() {
       );
     },
     initialData: [],
-    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    cacheTime: 30 * 60 * 1000 // Keep in React Query cache for 30 minutes
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 30 * 60 * 1000
   });
 
-  // Save report mutation (with cache invalidation)
+  // Save report mutation (with cache invalidation & versioning)
   const saveReportMutation = useMutation({
-    mutationFn: (report) => base44.entities.ReportRequest.create(report),
-    onSuccess: async () => {
-      // Invalidate report caches
-      await cacheService.invalidatePattern('report:');
+    mutationFn: async (report) => {
+      const savedReport = await base44.entities.ReportRequest.create(report);
       
+      // Create initial version
+      if (savedReport && savedReport.id) {
+        await saveReportVersion(
+          savedReport.id,
+          savedReport.configuration,
+          'Initial version',
+          report.organization_id
+        );
+      }
+      
+      return savedReport;
+    },
+    onSuccess: async () => {
+      await cacheService.invalidatePattern('report:');
       queryClient.invalidateQueries({ queryKey: ['reportRequests'] });
       toast.success('Report saved successfully');
     },
@@ -126,14 +140,39 @@ export default function ReportBuilder() {
     }
   });
 
+  // Update report mutation (with versioning)
+  const updateReportMutation = useMutation({
+    mutationFn: async ({ reportId, updates, changeSummary }) => {
+      const updated = await base44.entities.ReportRequest.update(reportId, updates);
+      
+      // Save new version
+      if (updated && updated.configuration) {
+        await saveReportVersion(
+          reportId,
+          updated.configuration,
+          changeSummary || 'Report updated',
+          updates.organization_id
+        );
+      }
+      
+      return updated;
+    },
+    onSuccess: async () => {
+      await cacheService.invalidatePattern('report:');
+      queryClient.invalidateQueries({ queryKey: ['reportRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['reportVersions'] });
+      toast.success('Report updated');
+    }
+  });
+
   // Delete report mutation
   const deleteReportMutation = useMutation({
     mutationFn: (id) => base44.entities.ReportRequest.delete(id),
-    onSuccess: async () => { // Added async for cache invalidation
-      await cacheService.invalidatePattern('report:'); // Invalidate report caches
+    onSuccess: async () => {
+      await cacheService.invalidatePattern('report:');
       queryClient.invalidateQueries({ queryKey: ['reportRequests'] });
       toast.success('Report deleted');
-      setCurrentReport(null); // Clear current report if deleted
+      setCurrentReport(null);
       setReportData(null);
       setDataQuality(null);
     },
@@ -339,23 +378,22 @@ Generate a complete report configuration that captures their intent.`,
     const metricName = config.metrics?.[0] || 'value';
 
     try {
-      // Check for cached transformed data first
       const endDate = new Date();
       const startDate = new Date();
-      startDate.setDate(endDate.getDate() - 30); // Default to last 30 days for cache key
+      startDate.setDate(endDate.getDate() - 30);
 
       const cached = await dataTransformationService.getCachedData(
         metricName,
         timePeriod,
         startDate,
         endDate,
-        selectedOrgId || currentUser?.organization_id // Pass organization ID to cache key
+        selectedOrgId || currentUser?.organization_id
       );
 
       if (cached && cached.length > 0) {
         console.log('[ReportBuilder] Using cached transformed data');
         return {
-          data: rawData, // Use original format for display
+          data: rawData,
           quality: {
             quality_score: cached[0].data_quality_score || 100,
             issues: []
@@ -363,16 +401,15 @@ Generate a complete report configuration that captures their intent.`,
         };
       }
 
-      // Transform and store new data
       const transformed = await dataTransformationService.transformData(rawData, {
         metric_name: metricName,
         time_period: timePeriod,
         segment_by: config.segment_by,
-        organization_id: selectedOrgId || currentUser?.organization_id // Pass organization ID
+        organization_id: selectedOrgId || currentUser?.organization_id
       });
 
       return {
-        data: rawData, // Keep original format for charts
+        data: rawData,
         quality: {
           quality_score: transformed.quality_score,
           issues: transformed.quality_issues
@@ -388,10 +425,8 @@ Generate a complete report configuration that captures their intent.`,
   };
 
   const generateMockData = (config) => {
-    // Check if we should use mock data based on environment
     if (!environmentConfig.useMockData() && apiSettings?.api_url) {
       environmentConfig.log('info', '[ReportBuilder] Using real API data');
-      // In a real implementation, fetch from actual API
     }
 
     environmentConfig.log('debug', '[ReportBuilder] Generating mock data for', config.chart_type);
@@ -400,14 +435,12 @@ Generate a complete report configuration that captures their intent.`,
     const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America'];
     const hasSegmentation = config.segment_by && config.segment_by.length > 0;
     
-    // For pie charts with segmentation
     if (config.chart_type === 'pie' && hasSegmentation) {
       const segmentDimension = config.segment_by[0];
       const categories = segmentDimension === 'branch' ? branches : 
                         segmentDimension === 'region' ? regions :
                         ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'];
       
-      // Generate proportional data that adds up correctly
       const total = 10000;
       const values = [];
       let remaining = total;
@@ -428,7 +461,6 @@ Generate a complete report configuration that captures their intent.`,
       }));
     }
     
-    // For pie charts without segmentation
     if (config.chart_type === 'pie') {
       return [
         { name: 'Category A', value: 4000 },
@@ -438,7 +470,6 @@ Generate a complete report configuration that captures their intent.`,
       ];
     }
 
-    // For tables with segmentation
     if (config.chart_type === 'table' && hasSegmentation) {
       const rows = [];
       const numDays = 10;
@@ -476,7 +507,6 @@ Generate a complete report configuration that captures their intent.`,
       return rows;
     }
 
-    // For tables without segmentation
     if (config.chart_type === 'table') {
       return Array.from({ length: 10 }, (_, i) => ({
         date: `2025-11-${String(i + 1).padStart(2, '0')}`,
@@ -487,7 +517,6 @@ Generate a complete report configuration that captures their intent.`,
       }));
     }
 
-    // For line/bar charts with segmentation
     if (hasSegmentation && (config.chart_type === 'line' || config.chart_type === 'bar')) {
       const days = 30;
       const data = [];
@@ -499,7 +528,6 @@ Generate a complete report configuration that captures their intent.`,
         
         const row = { date: dateStr };
         
-        // Add segmented data
         if (config.segment_by.includes('branch')) {
           branches.forEach(branch => {
             const baseValue = 100 + Math.floor(Math.random() * 100);
@@ -518,7 +546,6 @@ Generate a complete report configuration that captures their intent.`,
       return data;
     }
 
-    // Default line/bar chart without segmentation
     const days = 30;
     return Array.from({ length: days }, (_, i) => {
       const date = new Date();
@@ -544,7 +571,6 @@ Generate a complete report configuration that captures their intent.`,
     
     saveReportMutation.mutate(currentReport);
     
-    // Log audit
     const orgId = selectedOrgId || currentUser?.organization_id;
     if (orgId && currentUser && currentReport) {
       auditService.logReportAction(
@@ -559,7 +585,6 @@ Generate a complete report configuration that captures their intent.`,
 
   const handleLoadReport = async (report) => {
     setCurrentReport(report);
-    // Ensure the selectedOrgId is set when a report from a specific organization is loaded
     if (report.organization_id && selectedOrgId !== report.organization_id) {
       setSelectedOrgId(report.organization_id);
     }
@@ -579,7 +604,6 @@ Generate a complete report configuration that captures their intent.`,
     const report = savedReports.find(r => r.id === id);
     deleteReportMutation.mutate(id);
     
-    // Log audit
     const orgId = selectedOrgId || currentUser?.organization_id;
     if (orgId && currentUser && report) {
       auditService.logReportAction(
@@ -617,7 +641,6 @@ Generate a complete report configuration that captures their intent.`,
   const handleDownloadPDF = async (report) => {
     toast.info('PDF generation coming soon');
     
-    // Log audit
     const orgId = selectedOrgId || currentUser?.organization_id;
     if (orgId && currentUser) {
       auditService.logDataExport(
@@ -638,7 +661,6 @@ Generate a complete report configuration that captures their intent.`,
     const csvContent = [
       Object.keys(reportData[0]).join(','),
       ...reportData.map(row => Object.values(row).map(value => {
-        // Escape commas and double quotes for CSV format
         if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
           return `"${value.replace(/"/g, '""')}"`;
         }
@@ -654,11 +676,10 @@ Generate a complete report configuration that captures their intent.`,
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url); // Clean up
+    URL.revokeObjectURL(url);
     
     toast.success('Report exported');
     
-    // Log audit
     const orgId = selectedOrgId || currentUser?.organization_id;
     if (orgId && currentUser && reportData) {
       auditService.logDataExport(
@@ -687,7 +708,6 @@ Generate a complete report configuration that captures their intent.`,
       return;
     }
 
-    // Pre-fill template name from report title
     setTemplateData({
       name: currentReport.title || '',
       description: currentReport.description || ''
@@ -702,6 +722,26 @@ Generate a complete report configuration that captures their intent.`,
     }
 
     saveTemplateMutation.mutate(templateData);
+  };
+
+  const handleRestoreVersion = (configuration) => {
+    if (currentReport && currentReport.id) {
+      updateReportMutation.mutate({
+        reportId: currentReport.id,
+        updates: {
+          ...currentReport,
+          configuration
+        },
+        changeSummary: 'Restored previous version'
+      });
+      
+      // Reload with new config
+      const mockData = generateMockData(configuration);
+      transformAndStoreData(configuration, mockData).then(result => {
+        setReportData(result.data);
+        setDataQuality(result.quality);
+      });
+    }
   };
 
   const isApiConfigured = apiSettings?.api_url && apiSettings?.api_token;
@@ -725,6 +765,7 @@ Generate a complete report configuration that captures their intent.`,
                   onChange={setSelectedOrgId}
                 />
               )}
+              <DataFreshnessIndicator organizationId={selectedOrgId || currentUser?.organization_id} />
               <RateLimitIndicator />
               <DataQualityIndicator />
             </div>
@@ -763,6 +804,11 @@ Generate a complete report configuration that captures their intent.`,
                 accounts={mockAccounts}
               />
               
+              <AnnotationManager 
+                organizationId={selectedOrgId || currentUser?.organization_id}
+                compact={true}
+              />
+              
               <SavedReportsList
                 reports={savedReports}
                 onLoadReport={handleLoadReport}
@@ -777,33 +823,45 @@ Generate a complete report configuration that captures their intent.`,
             {/* Right Panel - Report Display */}
             <div className="lg:col-span-8 space-y-4">
               {currentReport && (
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleExport}
-                    disabled={!reportData || reportData.length === 0}
-                    className="gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export CSV
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleSaveAsTemplate}
-                    disabled={!currentReport?.configuration || !canEdit}
-                    className="gap-2"
-                  >
-                    <BookTemplate className="w-4 h-4" />
-                    Save as Template
-                  </Button>
-                  <Button
-                    onClick={handleSaveReport}
-                    disabled={!currentReport || currentReport.id || !canEdit}
-                    className="gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save Report
-                  </Button>
+                <div className="flex justify-between items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    {currentReport.id && (
+                      <ReportVersionManager 
+                        reportId={currentReport.id}
+                        currentConfig={currentReport.configuration}
+                        onRestore={handleRestoreVersion}
+                      />
+                    )}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleExport}
+                      disabled={!reportData || reportData.length === 0}
+                      className="gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export CSV
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleSaveAsTemplate}
+                      disabled={!currentReport?.configuration || !canEdit}
+                      className="gap-2"
+                    >
+                      <BookTemplate className="w-4 h-4" />
+                      Save as Template
+                    </Button>
+                    <Button
+                      onClick={handleSaveReport}
+                      disabled={!currentReport || currentReport.id || !canEdit}
+                      className="gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save Report
+                    </Button>
+                  </div>
                 </div>
               )}
 
