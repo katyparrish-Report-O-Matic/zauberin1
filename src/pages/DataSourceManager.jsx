@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon, Edit, Trash2 } from "lucide-react";
+import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
@@ -40,8 +40,8 @@ export default function DataSourceManager() {
   const [selectedOrgId, setSelectedOrgId] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
   const [editingSource, setEditingSource] = useState(null);
+  const [deletingSource, setDeletingSource] = useState(null);
   const [selectedSource, setSelectedSource] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     platform_type: 'call_tracking',
@@ -90,7 +90,7 @@ export default function DataSourceManager() {
     initialData: []
   });
 
-  // Save (create or update) data source mutation
+  // Create/Update data source mutation
   const saveSourceMutation = useMutation({
     mutationFn: async (data) => {
       const orgId = selectedOrgId || currentUser?.organization_id;
@@ -145,14 +145,12 @@ export default function DataSourceManager() {
 
   // Delete data source mutation
   const deleteSourceMutation = useMutation({
-    mutationFn: async (id) => {
-      return await base44.entities.DataSource.delete(id);
-    },
+    mutationFn: (id) => base44.entities.DataSource.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataSources'] });
       toast.success('Data source deleted');
-      setDeleteConfirm(null);
-      if (selectedSource?.id === deleteConfirm?.id) {
+      setDeletingSource(null);
+      if (selectedSource?.id === deletingSource?.id) {
         setSelectedSource(null);
       }
     },
@@ -198,11 +196,14 @@ export default function DataSourceManager() {
     });
   };
 
-  const handleEdit = (source, e) => {
-    e.stopPropagation();
+  const handleCreate = () => {
+    setEditingSource(null);
+    resetForm();
+    setShowDialog(true);
+  };
+
+  const handleEdit = (source) => {
     setEditingSource(source);
-    
-    // Populate form with existing data
     setFormData({
       name: source.name,
       platform_type: source.platform_type,
@@ -216,18 +217,16 @@ export default function DataSourceManager() {
       enabled: source.enabled,
       last_sync_status: source.last_sync_status
     });
-    
     setShowDialog(true);
   };
 
-  const handleDelete = (source, e) => {
-    e.stopPropagation();
-    setDeleteConfirm(source);
+  const handleDelete = (source) => {
+    setDeletingSource(source);
   };
 
   const confirmDelete = () => {
-    if (deleteConfirm) {
-      deleteSourceMutation.mutate(deleteConfirm.id);
+    if (deletingSource) {
+      deleteSourceMutation.mutate(deletingSource.id);
     }
   };
 
@@ -338,11 +337,7 @@ export default function DataSourceManager() {
                     showLabel={false}
                   />
                 )}
-                <Button onClick={() => {
-                  setEditingSource(null);
-                  resetForm();
-                  setShowDialog(true);
-                }} className="gap-2">
+                <Button onClick={handleCreate} className="gap-2">
                   <Plus className="w-4 h-4" />
                   Add Data Source
                 </Button>
@@ -352,8 +347,7 @@ export default function DataSourceManager() {
             {/* Data Sources Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {dataSources.map(source => (
-                <Card key={source.id} className="hover:shadow-lg transition-shadow cursor-pointer"
-                      onClick={() => setSelectedSource(source)}>
+                <Card key={source.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -393,15 +387,13 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.total_records_synced.toLocaleString()}</p>
                       </div>
                     )}
+                    
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         className="flex-1 gap-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          triggerSyncMutation.mutate(source.id);
-                        }}
+                        onClick={() => triggerSyncMutation.mutate(source.id)}
                         disabled={!source.enabled || triggerSyncMutation.isPending}
                       >
                         <RefreshCw className="w-3 h-3" />
@@ -410,18 +402,29 @@ export default function DataSourceManager() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={(e) => handleEdit(source, e)}
+                        onClick={() => handleEdit(source)}
                       >
-                        <Edit className="w-3 h-3" />
+                        <Pencil className="w-3 h-3" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={(e) => handleDelete(source, e)}
+                        onClick={() => handleDelete(source)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={() => setSelectedSource(source)}
+                    >
+                      <SettingsIcon className="w-3 h-3" />
+                      View Sync History
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -493,9 +496,9 @@ export default function DataSourceManager() {
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingSource ? 'Edit' : 'Add'} Data Source</DialogTitle>
+              <DialogTitle>{editingSource ? 'Edit Data Source' : 'Add Data Source'}</DialogTitle>
               <DialogDescription>
-                {editingSource ? 'Update data source configuration' : 'Connect Call Tracking Metrics or other data platforms'}
+                {editingSource ? 'Update your data source configuration' : 'Connect Call Tracking Metrics or other data platforms'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -526,9 +529,6 @@ export default function DataSourceManager() {
                     <SelectItem value="facebook_ads">Facebook Ads</SelectItem>
                   </SelectContent>
                 </Select>
-                {editingSource && (
-                  <p className="text-xs text-gray-500">Platform type cannot be changed after creation</p>
-                )}
               </div>
 
               {/* Call Tracking Specific Fields */}
@@ -570,14 +570,12 @@ export default function DataSourceManager() {
                     <Input
                       id="api_key"
                       type="password"
-                      placeholder={editingSource ? 'Leave blank to keep existing' : 'Paste your API key or token here'}
+                      placeholder="Paste your API key or token here"
                       value={formData.api_key}
                       onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
                     />
                     <p className="text-xs text-gray-500">
-                      {editingSource 
-                        ? 'Only enter a new key/token if you want to change it'
-                        : 'Find this in your Call Tracking Metrics account settings'}
+                      Find this in your Call Tracking Metrics account settings
                     </p>
                   </div>
 
@@ -714,24 +712,24 @@ export default function DataSourceManager() {
                 Cancel
               </Button>
               <Button onClick={handleSave} disabled={saveSourceMutation.isPending}>
-                {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update' : 'Create'}
+                {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update' : 'Create Data Source'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Delete Confirmation Dialog */}
-        <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialog open={!!deletingSource} onOpenChange={() => setDeletingSource(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Data Source?</AlertDialogTitle>
+              <AlertDialogTitle>Delete Data Source</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{deleteConfirm?.name}"? This will remove all sync history and cannot be undone.
+                Are you sure you want to delete "{deletingSource?.name}"? This will also delete all associated sync history. This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
+              <AlertDialogAction
                 onClick={confirmDelete}
                 className="bg-red-600 hover:bg-red-700"
               >
