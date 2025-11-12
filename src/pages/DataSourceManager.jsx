@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon } from "lucide-react";
+import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon, Edit, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
@@ -19,6 +19,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { usePermissions } from "../components/auth/usePermissions";
 import OrganizationSelector from "../components/org/OrganizationSelector";
 import PermissionGuard from "../components/auth/PermissionGuard";
@@ -28,8 +38,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export default function DataSourceManager() {
   const queryClient = useQueryClient();
   const [selectedOrgId, setSelectedOrgId] = useState(null);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingSource, setEditingSource] = useState(null);
   const [selectedSource, setSelectedSource] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     platform_type: 'call_tracking',
@@ -78,8 +90,8 @@ export default function DataSourceManager() {
     initialData: []
   });
 
-  // Create data source mutation
-  const createSourceMutation = useMutation({
+  // Save (create or update) data source mutation
+  const saveSourceMutation = useMutation({
     mutationFn: async (data) => {
       const orgId = selectedOrgId || currentUser?.organization_id;
 
@@ -93,7 +105,7 @@ export default function DataSourceManager() {
       const accountIds = data.account_ids ? data.account_ids.split(',').map(s => s.trim()) : [];
       const propertyIds = data.property_ids ? data.property_ids.split(',').map(s => s.trim()) : [];
 
-      return await base44.entities.DataSource.create({
+      const payload = {
         organization_id: orgId,
         name: data.name,
         platform_type: data.platform_type,
@@ -106,21 +118,46 @@ export default function DataSourceManager() {
           backfill_days: parseInt(data.backfill_days),
           incremental_only: false
         },
-        enabled: true,
-        last_sync_status: 'pending',
+        enabled: data.enabled !== undefined ? data.enabled : true,
+        last_sync_status: data.last_sync_status || 'pending',
         metadata: {
           api_url: data.api_url || null
         }
-      });
+      };
+
+      if (editingSource) {
+        return await base44.entities.DataSource.update(editingSource.id, payload);
+      } else {
+        return await base44.entities.DataSource.create(payload);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataSources'] });
-      toast.success('Data source created');
-      setShowCreateDialog(false);
+      toast.success(editingSource ? 'Data source updated' : 'Data source created');
+      setShowDialog(false);
+      setEditingSource(null);
       resetForm();
     },
     onError: (error) => {
-      toast.error(`Failed to create data source: ${error.message}`);
+      toast.error(`Failed to save data source: ${error.message}`);
+    }
+  });
+
+  // Delete data source mutation
+  const deleteSourceMutation = useMutation({
+    mutationFn: async (id) => {
+      return await base44.entities.DataSource.delete(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dataSources'] });
+      toast.success('Data source deleted');
+      setDeleteConfirm(null);
+      if (selectedSource?.id === deleteConfirm?.id) {
+        setSelectedSource(null);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete data source: ${error.message}`);
     }
   });
 
@@ -161,7 +198,40 @@ export default function DataSourceManager() {
     });
   };
 
-  const handleCreate = () => {
+  const handleEdit = (source, e) => {
+    e.stopPropagation();
+    setEditingSource(source);
+    
+    // Populate form with existing data
+    setFormData({
+      name: source.name,
+      platform_type: source.platform_type,
+      auth_type: source.auth_type,
+      api_url: source.metadata?.api_url || '',
+      api_key: source.credentials?.api_key || source.credentials?.access_token || '',
+      account_ids: source.account_ids?.join(', ') || '',
+      property_ids: source.property_ids?.join(', ') || '',
+      schedule: source.sync_config?.schedule || 'hourly',
+      backfill_days: source.sync_config?.backfill_days || 90,
+      enabled: source.enabled,
+      last_sync_status: source.last_sync_status
+    });
+    
+    setShowDialog(true);
+  };
+
+  const handleDelete = (source, e) => {
+    e.stopPropagation();
+    setDeleteConfirm(source);
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirm) {
+      deleteSourceMutation.mutate(deleteConfirm.id);
+    }
+  };
+
+  const handleSave = () => {
     if (!formData.name) {
       toast.error('Name is required');
       return;
@@ -182,7 +252,7 @@ export default function DataSourceManager() {
       }
     }
 
-    createSourceMutation.mutate(formData);
+    saveSourceMutation.mutate(formData);
   };
 
   const getStatusColor = (status) => {
@@ -268,7 +338,11 @@ export default function DataSourceManager() {
                     showLabel={false}
                   />
                 )}
-                <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+                <Button onClick={() => {
+                  setEditingSource(null);
+                  resetForm();
+                  setShowDialog(true);
+                }} className="gap-2">
                   <Plus className="w-4 h-4" />
                   Add Data Source
                 </Button>
@@ -319,19 +393,35 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.total_records_synced.toLocaleString()}</p>
                       </div>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        triggerSyncMutation.mutate(source.id);
-                      }}
-                      disabled={!source.enabled || triggerSyncMutation.isPending}
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Sync Now
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          triggerSyncMutation.mutate(source.id);
+                        }}
+                        disabled={!source.enabled || triggerSyncMutation.isPending}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Sync
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => handleEdit(source, e)}
+                      >
+                        <Edit className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => handleDelete(source, e)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -399,13 +489,13 @@ export default function DataSourceManager() {
           </div>
         </div>
 
-        {/* Create Data Source Dialog */}
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        {/* Create/Edit Data Source Dialog */}
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add Data Source</DialogTitle>
+              <DialogTitle>{editingSource ? 'Edit' : 'Add'} Data Source</DialogTitle>
               <DialogDescription>
-                Connect Call Tracking Metrics or other data platforms
+                {editingSource ? 'Update data source configuration' : 'Connect Call Tracking Metrics or other data platforms'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -424,6 +514,7 @@ export default function DataSourceManager() {
                 <Select
                   value={formData.platform_type}
                   onValueChange={handlePlatformChange}
+                  disabled={!!editingSource}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -435,6 +526,9 @@ export default function DataSourceManager() {
                     <SelectItem value="facebook_ads">Facebook Ads</SelectItem>
                   </SelectContent>
                 </Select>
+                {editingSource && (
+                  <p className="text-xs text-gray-500">Platform type cannot be changed after creation</p>
+                )}
               </div>
 
               {/* Call Tracking Specific Fields */}
@@ -476,12 +570,14 @@ export default function DataSourceManager() {
                     <Input
                       id="api_key"
                       type="password"
-                      placeholder="Paste your API key or token here"
+                      placeholder={editingSource ? 'Leave blank to keep existing' : 'Paste your API key or token here'}
                       value={formData.api_key}
                       onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
                     />
                     <p className="text-xs text-gray-500">
-                      Find this in your Call Tracking Metrics account settings
+                      {editingSource 
+                        ? 'Only enter a new key/token if you want to change it'
+                        : 'Find this in your Call Tracking Metrics account settings'}
                     </p>
                   </div>
 
@@ -611,17 +707,39 @@ export default function DataSourceManager() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => {
-                setShowCreateDialog(false);
+                setShowDialog(false);
+                setEditingSource(null);
                 resetForm();
               }}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={createSourceMutation.isPending}>
-                {createSourceMutation.isPending ? 'Creating...' : 'Create Data Source'}
+              <Button onClick={handleSave} disabled={saveSourceMutation.isPending}>
+                {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update' : 'Create'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Data Source?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{deleteConfirm?.name}"? This will remove all sync history and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={confirmDelete}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </PermissionGuard>
   );
