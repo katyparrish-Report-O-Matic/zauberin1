@@ -32,12 +32,13 @@ export default function DataSourceManager() {
   const [selectedSource, setSelectedSource] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    platform_type: 'google_ads',
-    auth_type: 'oauth2',
+    platform_type: 'call_tracking',
+    auth_type: 'api_key',
+    api_url: '',
+    api_key: '',
     account_ids: '',
     property_ids: '',
-    api_key: '',
-    schedule: 'daily',
+    schedule: 'hourly',
     backfill_days: 90
   });
 
@@ -85,6 +86,8 @@ export default function DataSourceManager() {
       const credentials = {};
       if (data.auth_type === 'api_key') {
         credentials.api_key = data.api_key;
+      } else if (data.auth_type === 'bearer_token') {
+        credentials.access_token = data.api_key;
       }
 
       const accountIds = data.account_ids ? data.account_ids.split(',').map(s => s.trim()) : [];
@@ -104,7 +107,10 @@ export default function DataSourceManager() {
           incremental_only: false
         },
         enabled: true,
-        last_sync_status: 'pending'
+        last_sync_status: 'pending',
+        metadata: {
+          api_url: data.api_url || null
+        }
       });
     },
     onSuccess: () => {
@@ -112,6 +118,9 @@ export default function DataSourceManager() {
       toast.success('Data source created');
       setShowCreateDialog(false);
       resetForm();
+    },
+    onError: (error) => {
+      toast.error(`Failed to create data source: ${error.message}`);
     }
   });
 
@@ -141,12 +150,13 @@ export default function DataSourceManager() {
   const resetForm = () => {
     setFormData({
       name: '',
-      platform_type: 'google_ads',
-      auth_type: 'oauth2',
+      platform_type: 'call_tracking',
+      auth_type: 'api_key',
+      api_url: '',
+      api_key: '',
       account_ids: '',
       property_ids: '',
-      api_key: '',
-      schedule: 'daily',
+      schedule: 'hourly',
       backfill_days: 90
     });
   };
@@ -155,6 +165,21 @@ export default function DataSourceManager() {
     if (!formData.name) {
       toast.error('Name is required');
       return;
+    }
+
+    if (formData.platform_type === 'call_tracking') {
+      if (!formData.api_url) {
+        toast.error('API URL is required for Call Tracking');
+        return;
+      }
+      if (!formData.api_key) {
+        toast.error('API Key/Token is required');
+        return;
+      }
+      if (!formData.account_ids) {
+        toast.error('Account ID is required for Call Tracking');
+        return;
+      }
     }
 
     createSourceMutation.mutate(formData);
@@ -185,6 +210,42 @@ export default function DataSourceManager() {
     return labels[type] || type;
   };
 
+  // Get platform-specific defaults
+  const getPlatformDefaults = (platformType) => {
+    switch (platformType) {
+      case 'call_tracking':
+        return {
+          api_url: 'https://api.calltrackingmetrics.com/api/v1',
+          auth_type: 'api_key',
+          schedule: 'hourly'
+        };
+      case 'google_ads':
+        return {
+          auth_type: 'oauth2',
+          schedule: 'daily'
+        };
+      case 'google_analytics_4':
+        return {
+          auth_type: 'oauth2',
+          schedule: 'daily'
+        };
+      default:
+        return {
+          auth_type: 'api_key',
+          schedule: 'daily'
+        };
+    }
+  };
+
+  const handlePlatformChange = (platformType) => {
+    const defaults = getPlatformDefaults(platformType);
+    setFormData({
+      ...formData,
+      platform_type: platformType,
+      ...defaults
+    });
+  };
+
   return (
     <PermissionGuard requiredLevel="admin">
       <div className="min-h-screen bg-gray-50">
@@ -197,7 +258,7 @@ export default function DataSourceManager() {
                   <Database className="w-8 h-8" />
                   Data Sources
                 </h1>
-                <p className="text-gray-600 mt-1">Connect and sync data from Google Ads, GA4, and call tracking</p>
+                <p className="text-gray-600 mt-1">Connect and sync data from Call Tracking, Google Ads, and GA4</p>
               </div>
               <div className="flex gap-3">
                 {isAgency && (
@@ -280,7 +341,8 @@ export default function DataSourceManager() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <Database className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-600">No data sources configured. Add your first data source to start syncing!</p>
+                  <p className="text-gray-600 mb-2">No data sources configured yet.</p>
+                  <p className="text-sm text-gray-500">Add Call Tracking Metrics to start syncing call data!</p>
                 </CardContent>
               </Card>
             )}
@@ -339,11 +401,11 @@ export default function DataSourceManager() {
 
         {/* Create Data Source Dialog */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Data Source</DialogTitle>
               <DialogDescription>
-                Connect a new data platform to sync metrics
+                Connect Call Tracking Metrics or other data platforms
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -351,72 +413,137 @@ export default function DataSourceManager() {
                 <Label htmlFor="name">Name *</Label>
                 <Input
                   id="name"
-                  placeholder="e.g., Main Google Ads Account"
+                  placeholder="e.g., Client Name - Call Tracking"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="platform">Platform *</Label>
-                  <Select
-                    value={formData.platform_type}
-                    onValueChange={(value) => setFormData({ ...formData, platform_type: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="google_ads">Google Ads</SelectItem>
-                      <SelectItem value="google_analytics_4">Google Analytics 4</SelectItem>
-                      <SelectItem value="call_tracking">Call Tracking</SelectItem>
-                      <SelectItem value="facebook_ads">Facebook Ads</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="auth_type">Authentication</Label>
-                  <Select
-                    value={formData.auth_type}
-                    onValueChange={(value) => setFormData({ ...formData, auth_type: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="oauth2">OAuth 2.0</SelectItem>
-                      <SelectItem value="api_key">API Key</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="platform">Platform Type *</Label>
+                <Select
+                  value={formData.platform_type}
+                  onValueChange={handlePlatformChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="call_tracking">Call Tracking Metrics</SelectItem>
+                    <SelectItem value="google_ads">Google Ads</SelectItem>
+                    <SelectItem value="google_analytics_4">Google Analytics 4</SelectItem>
+                    <SelectItem value="facebook_ads">Facebook Ads</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              {formData.auth_type === 'api_key' && (
-                <div className="space-y-2">
-                  <Label htmlFor="api_key">API Key</Label>
-                  <Input
-                    id="api_key"
-                    type="password"
-                    value={formData.api_key}
-                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                  />
-                </div>
+              {/* Call Tracking Specific Fields */}
+              {formData.platform_type === 'call_tracking' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="api_url">API Base URL *</Label>
+                    <Input
+                      id="api_url"
+                      placeholder="https://api.calltrackingmetrics.com/api/v1"
+                      value={formData.api_url}
+                      onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Default: https://api.calltrackingmetrics.com/api/v1
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="auth_type">Authentication Method *</Label>
+                    <Select
+                      value={formData.auth_type}
+                      onValueChange={(value) => setFormData({ ...formData, auth_type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="api_key">API Key</SelectItem>
+                        <SelectItem value="bearer_token">Bearer Token</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="api_key">
+                      {formData.auth_type === 'bearer_token' ? 'Access Token *' : 'API Key *'}
+                    </Label>
+                    <Input
+                      id="api_key"
+                      type="password"
+                      placeholder="Paste your API key or token here"
+                      value={formData.api_key}
+                      onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Find this in your Call Tracking Metrics account settings
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="account_ids">Account ID *</Label>
+                    <Input
+                      id="account_ids"
+                      placeholder="e.g., 12345"
+                      value={formData.account_ids}
+                      onChange={(e) => setFormData({ ...formData, account_ids: e.target.value })}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Your Call Tracking Metrics account ID (found in account settings)
+                    </p>
+                  </div>
+                </>
               )}
 
+              {/* Google Ads Fields */}
               {formData.platform_type === 'google_ads' && (
-                <div className="space-y-2">
-                  <Label htmlFor="account_ids">Account IDs (comma-separated)</Label>
-                  <Input
-                    id="account_ids"
-                    placeholder="e.g., 123-456-7890, 098-765-4321"
-                    value={formData.account_ids}
-                    onChange={(e) => setFormData({ ...formData, account_ids: e.target.value })}
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="auth_type">Authentication</Label>
+                    <Select
+                      value={formData.auth_type}
+                      onValueChange={(value) => setFormData({ ...formData, auth_type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="oauth2">OAuth 2.0</SelectItem>
+                        <SelectItem value="api_key">API Key</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {formData.auth_type === 'api_key' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="api_key">API Key</Label>
+                      <Input
+                        id="api_key"
+                        type="password"
+                        value={formData.api_key}
+                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="account_ids">Account IDs (comma-separated)</Label>
+                    <Input
+                      id="account_ids"
+                      placeholder="e.g., 123-456-7890, 098-765-4321"
+                      value={formData.account_ids}
+                      onChange={(e) => setFormData({ ...formData, account_ids: e.target.value })}
+                    />
+                  </div>
+                </>
               )}
 
+              {/* GA4 Fields */}
               {formData.platform_type === 'google_analytics_4' && (
                 <div className="space-y-2">
                   <Label htmlFor="property_ids">Property IDs (comma-separated)</Label>
@@ -429,6 +556,7 @@ export default function DataSourceManager() {
                 </div>
               )}
 
+              {/* Common Sync Settings */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="schedule">Sync Schedule</Label>
@@ -440,7 +568,7 @@ export default function DataSourceManager() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="hourly">Hourly</SelectItem>
+                      <SelectItem value="hourly">Hourly (Recommended for calls)</SelectItem>
                       <SelectItem value="daily">Daily</SelectItem>
                       <SelectItem value="manual">Manual Only</SelectItem>
                     </SelectContent>
@@ -455,18 +583,37 @@ export default function DataSourceManager() {
                     value={formData.backfill_days}
                     onChange={(e) => setFormData({ ...formData, backfill_days: e.target.value })}
                   />
+                  <p className="text-xs text-gray-500">How many days back to sync</p>
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> After creating the data source, you'll need to complete OAuth authentication 
-                  if using OAuth 2.0. The initial sync will fetch the last {formData.backfill_days} days of data.
-                </p>
-              </div>
+              {/* Platform-specific help text */}
+              {formData.platform_type === 'call_tracking' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-900 font-semibold mb-2">📞 Call Tracking Setup</p>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• API credentials found in CTM Settings → API Access</li>
+                    <li>• Account ID found in CTM Settings → Account Info</li>
+                    <li>• Initial sync will fetch calls from last {formData.backfill_days} days</li>
+                    <li>• Hourly sync recommended for real-time call tracking</li>
+                  </ul>
+                </div>
+              )}
+
+              {formData.platform_type !== 'call_tracking' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> After creating the data source, you'll need to complete OAuth authentication 
+                    if using OAuth 2.0. The initial sync will fetch the last {formData.backfill_days} days of data.
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              <Button variant="outline" onClick={() => {
+                setShowCreateDialog(false);
+                resetForm();
+              }}>
                 Cancel
               </Button>
               <Button onClick={handleCreate} disabled={createSourceMutation.isPending}>
