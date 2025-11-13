@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon, Pencil, Trash2 } from "lucide-react";
+import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon, Pencil, Trash2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +57,13 @@ export default function DataSourceManager() {
   });
 
   const { currentUser, isAgency } = usePermissions();
+
+  // Auto-select organization when user loads
+  useEffect(() => {
+    if (currentUser?.organization_id && !selectedOrgId) {
+      setSelectedOrgId(currentUser.organization_id);
+    }
+  }, [currentUser, selectedOrgId]);
 
   // Fetch data sources
   const { data: dataSources } = useQuery({
@@ -336,6 +344,9 @@ export default function DataSourceManager() {
     });
   };
 
+  // Check if user has organization
+  const hasOrganization = currentUser?.organization_id && currentUser.organization_id !== 'none';
+
   return (
     <PermissionGuard requiredLevel="admin">
       <div className="min-h-screen bg-gray-50">
@@ -358,20 +369,22 @@ export default function DataSourceManager() {
                     showLabel={false}
                   />
                 )}
-                <Button onClick={handleCreate} className="gap-2">
+                <Button onClick={handleCreate} className="gap-2" disabled={!hasOrganization}>
                   <Plus className="w-4 h-4" />
                   Add Data Source
                 </Button>
               </div>
             </div>
 
-            {/* Debug Info */}
-            {currentUser && (
-              <div className="bg-gray-100 p-3 rounded text-xs font-mono">
-                <p>Current User Org: {currentUser.organization_id || 'none'}</p>
-                <p>Selected Org: {selectedOrgId || 'none'}</p>
-                <p>Is Agency: {isAgency ? 'yes' : 'no'}</p>
-              </div>
+            {/* No Organization Warning */}
+            {!hasOrganization && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  You need to be assigned to an organization to create data sources. 
+                  Please contact your administrator.
+                </AlertDescription>
+              </Alert>
             )}
 
             {/* Data Sources Grid */}
@@ -460,7 +473,7 @@ export default function DataSourceManager() {
               ))}
             </div>
 
-            {dataSources.length === 0 && (
+            {dataSources.length === 0 && hasOrganization && (
               <Card>
                 <CardContent className="p-12 text-center">
                   <Database className="w-16 h-16 mx-auto text-gray-400 mb-4" />
