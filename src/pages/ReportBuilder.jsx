@@ -54,6 +54,23 @@ export default function ReportBuilder() {
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
 
+  // Fetch accounts for dropdown
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['accountHierarchy', selectedOrgId || currentUser?.organization_id],
+    queryFn: async () => {
+      const orgId = selectedOrgId || currentUser?.organization_id;
+      if (!orgId || orgId === 'all') return [];
+      
+      const accounts = await base44.entities.AccountHierarchy.filter({
+        organization_id: orgId,
+        hierarchy_level: 'account'
+      });
+      return accounts;
+    },
+    enabled: !!(selectedOrgId || currentUser?.organization_id),
+    initialData: []
+  });
+
   // Fetch API settings for current/selected organization
   const { data: apiSettings } = useQuery({
     queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
@@ -68,7 +85,7 @@ export default function ReportBuilder() {
   });
 
   // Fetch saved reports filtered by organization (with caching)
-  const { data: savedReports } = useQuery({
+  const { data: savedReports = [] } = useQuery({
     queryKey: ['reportRequests', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
@@ -794,7 +811,7 @@ Generate a complete report configuration that captures their intent.`,
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
                 disabled={!canEdit}
-                organizationId={selectedOrgId || currentUser?.organization_id}
+                accounts={accounts}
               />
               
               <AnnotationManager 
@@ -809,7 +826,7 @@ Generate a complete report configuration that captures their intent.`,
                 onEmailReport={handleEmailReport}
                 onDownloadPDF={handleDownloadPDF}
                 canDelete={canDelete}
-                organizationId={selectedOrgId || currentUser?.organization_id}
+                accounts={accounts}
               />
             </div>
 
