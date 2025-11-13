@@ -5,8 +5,8 @@ import { googleAdsService } from "../integrations/GoogleAdsService";
 import { googleAnalyticsService } from "../integrations/GoogleAnalyticsService";
 
 /**
- * Data Synchronization Service - OPTIMIZED v3
- * Fixed CTM data storage - direct insertion without transformation
+ * Data Synchronization Service - OPTIMIZED v4
+ * Fixed: Proper batch storage with error handling
  */
 class DataSyncService {
   constructor() {
@@ -63,6 +63,8 @@ class DataSyncService {
    * Execute sync job
    */
   async executeSyncJob(syncJobId) {
+    const startTime = Date.now();
+
     try {
       // Update status to in_progress
       await base44.entities.SyncJob.update(syncJobId, {
@@ -94,16 +96,18 @@ class DataSyncService {
           throw new Error(`Unsupported platform: ${dataSource.platform_type}`);
       }
 
+      const duration = Math.floor((Date.now() - startTime) / 1000);
+
       // Mark as completed
       await base44.entities.SyncJob.update(syncJobId, {
         status: 'completed',
         completed_at: new Date().toISOString(),
-        duration_seconds: Math.floor((new Date() - new Date(syncJob.started_at)) / 1000),
+        duration_seconds: duration,
         records_synced: result.recordsSynced,
         records_created: result.recordsCreated,
         records_updated: result.recordsUpdated,
         progress_percentage: 100,
-        current_step: `✅ Complete! ${result.recordsCreated} records stored`
+        current_step: `✅ Complete! ${result.recordsCreated} records stored in ${duration}s`
       });
 
       // Update data source
@@ -129,14 +133,14 @@ class DataSyncService {
       // Update data source
       const syncJobs = await base44.entities.SyncJob.list();
       const syncJob = syncJobs.find(sj => sj.id === syncJobId);
-      
+
       await base44.entities.DataSource.update(syncJob.data_source_id, {
         last_sync_status: 'failed',
         last_sync_error: error.message
       });
     }
   }
-  
+
   /**
    * Sync Google Ads data
    */
@@ -268,8 +272,8 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - ULTRA OPTIMIZED v3
-   * Fixed: Direct insertion without unnecessary transformation
+   * Sync call tracking data - ULTRA OPTIMIZED v4
+   * Fixed: Sequential storage with proper error handling
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
@@ -283,7 +287,7 @@ class DataSyncService {
     if (accountIds.length === 0) {
       throw new Error('No account IDs configured for Call Tracking sync');
     }
-    
+
     if (!apiKey) {
       throw new Error('No API credentials found for Call Tracking sync');
     }
@@ -313,7 +317,7 @@ class DataSyncService {
 
       const progressIncrement = 40 / accountIds.length;
       const currentProgress = 10 + ((index + 1) * progressIncrement);
-      
+
       await base44.entities.SyncJob.update(syncJob.id, {
         current_step: `Fetched ${index + 1}/${accountIds.length} accounts (${result.data.totalCalls} calls)`,
         progress_percentage: Math.round(currentProgress)
@@ -327,70 +331,91 @@ class DataSyncService {
     });
 
     const accountResults = await Promise.all(accountPromises);
-    
+
     const totalCalls = accountResults.reduce((sum, r) => sum + r.callCount, 0);
     console.log(`[DataSync] ✅ Fetched ${totalCalls} total calls from ${accountResults.length} accounts`);
 
-    // ⚡ STEP 2: Store metrics directly - no transformation needed (50% → 90%)
+    // ⚡ STEP 2: Store metrics (50% → 95%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Storing metrics...',
+      current_step: 'Storing metrics in database...',
       progress_percentage: 50
     });
 
     const allMetrics = accountResults.flatMap(r => r.metrics);
+
+    console.log(`[DataSync] 💾 Processing ${allMetrics.length} days of data`);
+
     const metricsToStore = [
-      { key: 'total_calls', name: 'total_calls' },
-      { key: 'answered_calls', name: 'answered_calls' },
-      { key: 'missed_calls', name: 'missed_calls' },
-      { key: 'qualified_calls', name: 'qualified_calls' },
-      { key: 'average_duration', name: 'average_duration' },
-      { key: 'answer_rate', name: 'answer_rate' }
+      'total_calls',
+      'answered_calls',
+      'missed_calls',
+      'qualified_calls',
+      'average_duration',
+      'answer_rate'
     ];
 
     let totalRecordsCreated = 0;
+    const errors = [];
 
-    // Store each metric type in parallel batches
-    for (let i = 0; i < metricsToStore.length; i++) {
-      const { key, name } = metricsToStore[i];
-      
-      console.log(`[DataSync] 💾 Storing ${name}...`);
-      
-      // Create records for each day
-      const createPromises = allMetrics.map(dayMetrics => {
-        const value = dayMetrics[key];
-        
-        if (value === undefined) return null;
+    // Store each metric type sequentially to avoid overwhelming the database
+    for (let metricIndex = 0; metricIndex < metricsToStore.length; metricIndex++) {
+      const metricName = metricsToStore[metricIndex];
 
-        return base44.entities.TransformedMetric.create({
-          metric_name: name,
-          time_period: 'daily',
-          period_start: dayMetrics.date + 'T00:00:00Z',
-          period_end: dayMetrics.date + 'T23:59:59Z',
-          raw_value: value,
-          aggregated_value: value,
-          segment: {
-            platform: 'call_tracking',
-            data_source_id: dataSource.id
-          },
-          derived_metrics: {
-            growth_rate: 0,
-            moving_average: value,
-            percent_of_total: 0
-          },
-          data_quality_score: 100
+      console.log(`[DataSync] 💾 [${metricIndex + 1}/${metricsToStore.length}] Storing ${metricName}...`);
+
+      // Store all days for this metric in small batches
+      const batchSize = 10;
+      let batchCount = 0;
+
+      for (let i = 0; i < allMetrics.length; i += batchSize) {
+        const batch = allMetrics.slice(i, i + batchSize);
+
+        const createPromises = batch.map(async (dayMetrics) => {
+          const value = dayMetrics[metricName];
+
+          if (value === undefined || value === null) return null;
+
+          try {
+            await base44.entities.TransformedMetric.create({
+              metric_name: metricName,
+              time_period: 'daily',
+              period_start: dayMetrics.date + 'T00:00:00.000Z',
+              period_end: dayMetrics.date + 'T23:59:59.999Z',
+              raw_value: value,
+              aggregated_value: value,
+              segment: {
+                platform: 'call_tracking',
+                data_source_id: dataSource.id,
+                account_id: String(accountResults.find(r => r.metrics.includes(dayMetrics))?.accountId || 'unknown')
+              },
+              derived_metrics: {
+                growth_rate: 0,
+                moving_average: value,
+                percent_of_total: 0
+              },
+              data_quality_score: 100
+            });
+            return 1;
+          } catch (error) {
+            console.error(`[DataSync] ❌ Failed to create record for ${metricName} on ${dayMetrics.date}:`, error.message);
+            errors.push({ metric: metricName, date: dayMetrics.date, error: error.message });
+            return null;
+          }
         });
-      });
 
-      // Filter out nulls and store
-      const validPromises = createPromises.filter(p => p !== null);
-      await Promise.all(validPromises);
-      
-      totalRecordsCreated += validPromises.length;
-      
-      const progressIncrement = 40 / metricsToStore.length;
+        const results = await Promise.all(createPromises);
+        const successCount = results.filter(r => r !== null).length;
+        totalRecordsCreated += successCount;
+        batchCount++;
+
+        console.log(`[DataSync] ✓ Batch ${batchCount}: ${successCount} records created for ${metricName}`);
+      }
+
+      // Update progress after each metric type
+      const progressIncrement = 45 / metricsToStore.length;
       await base44.entities.SyncJob.update(syncJob.id, {
-        current_step: `Stored ${i + 1}/${metricsToStore.length} metrics (${totalRecordsCreated} records)`,
-        progress_percentage: Math.round(50 + ((i + 1) * progressIncrement))
+        current_step: `Stored ${metricIndex + 1}/${metricsToStore.length} metrics (${totalRecordsCreated} records)`,
+        progress_percentage: Math.round(50 + ((metricIndex + 1) * progressIncrement))
       });
     }
 
@@ -399,10 +424,14 @@ class DataSyncService {
 
     console.log(`[DataSync] ✅ Stored ${recordsCreated} metric records`);
 
+    if (errors.length > 0) {
+      console.warn(`[DataSync] ⚠️ ${errors.length} errors occurred during storage`);
+    }
+
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: '✅ Finalizing...',
+      current_step: `✅ Finalizing... (${recordsCreated} records, ${errors.length} errors)`,
       progress_percentage: 95,
-      metrics_synced: metricsToStore.map(m => m.name)
+      metrics_synced: metricsToStore
     });
 
     return { recordsSynced, recordsCreated, recordsUpdated };
@@ -421,14 +450,14 @@ class DataSyncService {
         const backfillDays = dataSource.sync_config?.backfill_days || 90;
         startDate = new Date(endDate.getTime() - backfillDays * 24 * 60 * 60 * 1000);
         break;
-      
+
       case 'incremental':
         // Since last sync
-        startDate = dataSource.last_sync_at 
+        startDate = dataSource.last_sync_at
           ? new Date(dataSource.last_sync_at)
           : new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000); // Default to last 7 days if no previous sync
         break;
-      
+
       case 'manual':
       case 'scheduled':
       default:
