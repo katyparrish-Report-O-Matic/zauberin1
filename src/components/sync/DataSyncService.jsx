@@ -6,8 +6,8 @@ import { googleAnalyticsService } from "../integrations/GoogleAnalyticsService";
 import { dataTransformationService } from "../data/DataTransformationService";
 
 /**
- * Data Synchronization Service - OPTIMIZED
- * Parallel processing for multi-account syncs
+ * Data Synchronization Service - OPTIMIZED v2
+ * Parallel account fetching + parallel metric transformation
  */
 class DataSyncService {
   constructor() {
@@ -103,7 +103,8 @@ class DataSyncService {
         records_synced: result.recordsSynced,
         records_created: result.recordsCreated,
         records_updated: result.recordsUpdated,
-        progress_percentage: 100
+        progress_percentage: 100,
+        current_step: `✅ Complete! ${result.recordsSynced} records synced` // Added current_step
       });
 
       // Update data source
@@ -122,7 +123,8 @@ class DataSyncService {
       await base44.entities.SyncJob.update(syncJobId, {
         status: 'failed',
         completed_at: new Date().toISOString(),
-        error_message: error.message
+        error_message: error.message,
+        current_step: `❌ Failed: ${error.message}` // Added current_step
       });
 
       // Update data source
@@ -267,47 +269,41 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - OPTIMIZED with parallel processing
+   * Sync call tracking data - ULTRA OPTIMIZED
+   * - Parallel account fetching
+   * - Parallel metric transformation
+   * - Live progress updates
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
     let recordsCreated = 0;
-    let recordsUpdated = 0; // Not currently used, but kept for consistency
-
-    await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Preparing sync...',
-      progress_percentage: 5
-    });
+    let recordsUpdated = 0;
 
     const accountIds = dataSource.account_ids || [];
-    
-    if (accountIds.length === 0) {
-      throw new Error('No account IDs configured');
-    }
-
     const apiKey = dataSource.credentials?.api_key || dataSource.credentials?.access_token;
+    const isAgencyLevel = dataSource.metadata?.access_level === 'agency' || apiKey.includes(':');
+
+    if (accountIds.length === 0) {
+      throw new Error('No account IDs configured for Call Tracking sync');
+    }
     
     if (!apiKey) {
-      throw new Error('No API credentials found');
+      throw new Error('No API credentials found for Call Tracking sync');
     }
 
-    const isAgencyLevel = dataSource.metadata?.access_level === 'agency' || 
-                          dataSource.auth_type === 'api_key' ||
-                          apiKey.includes(':');
+    console.log(`[DataSync] 🚀 Processing ${accountIds.length} account(s) in parallel`);
 
-    console.log(`[DataSync] 🚀 Syncing ${accountIds.length} account(s) in parallel for Call Tracking`);
-
+    // ⚡ STEP 1: Fetch all accounts in parallel (10% → 60%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: `Fetching data from ${accountIds.length} account(s)...`,
-      progress_percentage: 20
+      current_step: `Fetching ${accountIds.length} account(s) in parallel...`,
+      progress_percentage: 10
     });
 
-    // ⚡ OPTIMIZATION: Process all accounts in parallel
     const accountPromises = accountIds.map(async (accountId, index) => {
-      environmentConfig.log('info', `[DataSync] 📞 Account ${index + 1}/${accountIds.length}: ${accountId}`);
+      console.log(`[DataSync] 📞 [${index + 1}/${accountIds.length}] Fetching account ${accountId}`);
 
       const result = await base44.functions.invoke('syncCallTrackingData', {
-        accountId: String(accountId), // Ensure string type for backend function
+        accountId: String(accountId),
         startDate: syncJob.date_range.start_date,
         endDate: syncJob.date_range.end_date,
         apiKey,
@@ -315,31 +311,43 @@ class DataSyncService {
       });
 
       if (!result.data?.success) {
-        throw new Error(result.data?.error || `Failed to sync account ${accountId}`);
+        throw new Error(result.data?.error || `Account ${accountId} failed`);
       }
+
+      // Update progress incrementally
+      const progressIncrement = 50 / accountIds.length; // 50% of total for fetching
+      const currentProgress = 10 + ((index + 1) * progressIncrement);
+      
+      await base44.entities.SyncJob.update(syncJob.id, {
+        current_step: `Fetched ${index + 1}/${accountIds.length} accounts (${result.data.totalCalls} calls)`,
+        progress_percentage: Math.round(currentProgress)
+      });
 
       return {
         accountId,
         metrics: result.data.metrics,
-        callCount: result.data.totalCalls // Assuming totalCalls is returned by the backend function
+        callCount: result.data.totalCalls
       };
     });
 
-    // Wait for all accounts to complete
     const accountResults = await Promise.all(accountPromises);
     
-    console.log(`[DataSync] ✅ All ${accountResults.length} accounts fetched for Call Tracking`);
+    const totalCalls = accountResults.reduce((sum, r) => sum + r.callCount, 0);
+    console.log(`[DataSync] ✅ Fetched ${totalCalls} total calls from ${accountResults.length} accounts`);
 
+    // ⚡ STEP 2: Transform all metrics in parallel (60% → 90%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Processing and storing data...',
-      progress_percentage: 70
+      current_step: 'Transforming and storing metrics...',
+      progress_percentage: 60
     });
 
-    // Combine and transform all metrics
     const allMetrics = accountResults.flatMap(r => r.metrics);
     const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];
     
-    for (const metricName of metricsToSync) {
+    // Transform all metrics in parallel
+    const transformPromises = metricsToSync.map(async (metricName, index) => {
+      console.log(`[DataSync] 📊 Transforming ${metricName}...`);
+      
       const transformedData = await dataTransformationService.transformData(
         allMetrics,
         {
@@ -349,13 +357,23 @@ class DataSyncService {
         }
       );
 
-      recordsCreated += transformedData.data.length;
-    }
+      const progressIncrement = 30 / metricsToSync.length; // 30% for transformation
+      await base44.entities.SyncJob.update(syncJob.id, {
+        current_step: `Transformed ${index + 1}/${metricsToSync.length} metrics`,
+        progress_percentage: Math.round(60 + ((index + 1) * progressIncrement))
+      });
 
-    recordsSynced = accountResults.reduce((sum, r) => sum + (r.callCount || 0), 0); // Sum up total calls from all accounts
+      return transformedData.data.length;
+    });
+
+    const recordCounts = await Promise.all(transformPromises);
+    recordsCreated = recordCounts.reduce((sum, count) => sum + count, 0);
+    recordsSynced = totalCalls;
+
+    console.log(`[DataSync] ✅ Created ${recordsCreated} metric records`);
 
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Sync complete!',
+      current_step: '✅ Finalizing...',
       progress_percentage: 95,
       metrics_synced: metricsToSync
     });

@@ -92,7 +92,7 @@ export default function DataSourceManager() {
     initialData: []
   });
 
-  // Fetch sync jobs for selected source
+  // Fetch sync jobs for selected source - WITH AUTO REFRESH
   const { data: syncJobs } = useQuery({
     queryKey: ['syncJobs', selectedSource?.id],
     queryFn: async () => {
@@ -104,7 +104,12 @@ export default function DataSourceManager() {
       );
     },
     enabled: !!selectedSource,
-    initialData: []
+    initialData: [],
+    refetchInterval: (data) => {
+      // Auto-refresh every 2 seconds if any job is in progress
+      const hasActiveJobs = data?.some(job => job.status === 'in_progress');
+      return hasActiveJobs ? 2000 : false;
+    }
   });
 
   // Test connection and fetch accounts
@@ -562,7 +567,14 @@ export default function DataSourceManager() {
                   <div className="flex justify-between items-start">
                     <div>
                       <CardTitle>{selectedSource.name} - Sync History</CardTitle>
-                      <CardDescription>Recent synchronization jobs</CardDescription>
+                      <CardDescription>
+                        Recent synchronization jobs
+                        {syncJobs.some(j => j.status === 'in_progress') && (
+                          <span className="ml-2 text-blue-600 font-medium">
+                            • Live updates every 2s
+                          </span>
+                        )}
+                      </CardDescription>
                     </div>
                     <Button variant="outline" onClick={() => setSelectedSource(null)}>
                       Close
@@ -574,27 +586,54 @@ export default function DataSourceManager() {
                     {syncJobs.map(job => (
                       <div
                         key={job.id}
-                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                        className="flex flex-col gap-2 p-4 border border-gray-200 rounded-lg"
                       >
-                        <div className="flex items-center gap-3">
-                          {job.status === 'completed' && <CheckCircle className="w-5 h-5 text-green-600" />}
-                          {job.status === 'failed' && <XCircle className="w-5 h-5 text-red-600" />}
-                          {job.status === 'in_progress' && <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />}
-                          <div>
-                            <p className="font-medium capitalize">{job.sync_type} Sync</p>
-                            <p className="text-sm text-gray-600">
-                              {job.date_range?.start_date} to {job.date_range?.end_date}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {job.status === 'completed' && <CheckCircle className="w-5 h-5 text-green-600" />}
+                            {job.status === 'failed' && <XCircle className="w-5 h-5 text-red-600" />}
+                            {job.status === 'in_progress' && <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />}
+                            {job.status === 'pending' && <AlertCircle className="w-5 h-5 text-gray-400" />}
+                            <div>
+                              <p className="font-medium capitalize">{job.sync_type} Sync</p>
+                              <p className="text-sm text-gray-600">
+                                {job.date_range?.start_date} to {job.date_range?.end_date}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium">
+                              {job.records_synced || 0} records
+                              {job.status === 'in_progress' && ` (${job.progress_percentage || 0}%)`}
                             </p>
+                            {job.completed_at && (
+                              <p className="text-xs text-gray-500">
+                                {format(new Date(job.completed_at), "MMM d, h:mm a")}
+                                {job.duration_seconds && ` (${job.duration_seconds}s)`}
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium">{job.records_synced || 0} records</p>
-                          {job.completed_at && (
-                            <p className="text-xs text-gray-500">
-                              {format(new Date(job.completed_at), "MMM d, h:mm a")}
-                            </p>
-                          )}
-                        </div>
+                        
+                        {/* Progress bar for active jobs */}
+                        {job.status === 'in_progress' && (
+                          <div className="space-y-1">
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${job.progress_percentage || 0}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-gray-600">{job.current_step || 'Processing...'}</p>
+                          </div>
+                        )}
+                        
+                        {/* Error message */}
+                        {job.status === 'failed' && job.error_message && (
+                          <div className="bg-red-50 border border-red-200 rounded p-2">
+                            <p className="text-xs text-red-800">{job.error_message}</p>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {syncJobs.length === 0 && (
