@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
 /**
- * Test CTM API Connection and List Available Accounts
+ * Test CTM API Connection and List ALL Available Accounts (with pagination)
  * Use this to verify credentials and see which account IDs are accessible
  */
 
@@ -56,41 +56,57 @@ Deno.serve(async (req) => {
 
     const baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
 
-    // Test 1: Fetch list of accessible accounts
-    console.log('[CTM Test] Fetching accounts list...');
+    // Fetch ALL accounts with pagination
+    console.log('[CTM Test] Fetching accounts list with pagination...');
     
-    const accountsResponse = await fetch(`${baseUrl}/accounts.json`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json'
+    let allAccounts = [];
+    let currentPage = 1;
+    let totalPages = 1;
+
+    do {
+      const accountsResponse = await fetch(
+        `${baseUrl}/accounts.json?page=${currentPage}&per_page=100`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!accountsResponse.ok) {
+        const errorText = await accountsResponse.text();
+        return Response.json({
+          success: false,
+          error: 'Failed to fetch accounts',
+          status: accountsResponse.status,
+          details: errorText,
+          hint: accountsResponse.status === 401 
+            ? 'Invalid credentials - check Access Key and Secret Key'
+            : 'API connection failed'
+        }, { status: accountsResponse.status });
       }
-    });
 
-    if (!accountsResponse.ok) {
-      const errorText = await accountsResponse.text();
-      return Response.json({
-        success: false,
-        error: 'Failed to fetch accounts',
-        status: accountsResponse.status,
-        details: errorText,
-        hint: accountsResponse.status === 401 
-          ? 'Invalid credentials - check Access Key and Secret Key'
-          : 'API connection failed'
-      }, { status: accountsResponse.status });
-    }
+      const accountsData = await accountsResponse.json();
+      
+      if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
+        allAccounts = allAccounts.concat(accountsData.accounts);
+      }
 
-    const accountsData = await accountsResponse.json();
-    
-    // Extract account details
-    const accounts = accountsData.accounts || [];
-    
-    console.log(`[CTM Test] Found ${accounts.length} accessible accounts`);
+      totalPages = accountsData.total_pages || 1;
+      currentPage++;
 
-    // Test 2: Try to fetch calls from the first account (if any)
+      console.log(`[CTM Test] Fetched page ${currentPage - 1}/${totalPages}: ${accountsData.accounts?.length || 0} accounts`);
+
+    } while (currentPage <= totalPages && currentPage <= 100); // Safety limit
+
+    console.log(`[CTM Test] Total accounts found: ${allAccounts.length}`);
+
+    // Test calls endpoint with first account
     let callsTest = null;
-    if (accounts.length > 0) {
-      const firstAccountId = accounts[0].id;
+    if (allAccounts.length > 0) {
+      const firstAccountId = allAccounts[0].id;
       console.log(`[CTM Test] Testing calls endpoint for account ${firstAccountId}...`);
       
       try {
@@ -110,8 +126,7 @@ Deno.serve(async (req) => {
           callsTest = {
             success: true,
             account_id: firstAccountId,
-            total_calls: callsData.total_entries || 0,
-            sample_call: callsData.calls?.[0] || null
+            total_calls: callsData.total_entries || 0
           };
         } else {
           const errorText = await callsResponse.text();
@@ -133,16 +148,16 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       connection: 'established',
-      accounts_found: accounts.length,
-      accounts: accounts.map(acc => ({
+      accounts_found: allAccounts.length,
+      accounts: allAccounts.map(acc => ({
         id: acc.id,
         name: acc.name,
         status: acc.status,
         created: acc.created
       })),
       calls_endpoint_test: callsTest,
-      instructions: accounts.length > 0 
-        ? `Use one of these account IDs (${accounts.map(a => a.id).join(', ')}) in your Data Source configuration`
+      instructions: allAccounts.length > 0 
+        ? `Select the accounts you want to sync from the ${allAccounts.length} available account(s)`
         : 'No accounts found - verify your agency has sub-accounts configured'
     });
 
