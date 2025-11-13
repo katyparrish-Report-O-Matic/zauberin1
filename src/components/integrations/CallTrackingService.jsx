@@ -3,6 +3,7 @@ import { environmentConfig } from "../config/EnvironmentConfig";
 /**
  * Call Tracking Metrics API Service
  * Handles all interactions with the CallTrackingMetrics API
+ * Supports both Basic Token and Access Key + Secret Key authentication
  */
 class CallTrackingService {
   constructor() {
@@ -10,11 +11,41 @@ class CallTrackingService {
   }
 
   /**
+   * Parse credentials - supports multiple formats:
+   * 1. Pre-encoded Basic Token (e.g., "Basic dGVzdDp0ZXN0" or just "dGVzdDp0ZXN0")
+   * 2. Access Key + Secret Key with colon separator (e.g., "access123:secret456")
+   * 3. Two separate parameters (accessKey, secretKey) - backward compatible
+   */
+  parseCredentials(accessKeyOrToken, secretKey = null) {
+    // Format 1: If it looks like a base64 token (length > 50, no colons)
+    if (accessKeyOrToken && !secretKey && accessKeyOrToken.length > 40 && !accessKeyOrToken.includes(':')) {
+      // Already encoded - use directly
+      environmentConfig.log('info', '[CTM] Using pre-encoded Basic Token');
+      return accessKeyOrToken;
+    }
+
+    // Format 2: Access Key + Secret Key with colon
+    if (accessKeyOrToken && accessKeyOrToken.includes(':') && !secretKey) {
+      const [access, secret] = accessKeyOrToken.split(':');
+      environmentConfig.log('info', '[CTM] Encoding Access Key + Secret Key from colon-separated string');
+      return btoa(`${access}:${secret}`);
+    }
+
+    // Format 3: Two separate parameters
+    if (accessKeyOrToken && secretKey) {
+      environmentConfig.log('info', '[CTM] Encoding separate Access Key + Secret Key');
+      return btoa(`${accessKeyOrToken}:${secretKey}`);
+    }
+
+    throw new Error('Invalid CTM credentials format. Use either: Basic Token, "accessKey:secretKey", or separate keys');
+  }
+
+  /**
    * Make authenticated request to CTM API
    */
-  async makeRequest(endpoint, accessKey, secretKey, params = {}) {
+  async makeRequest(endpoint, accessKeyOrToken, secretKey = null, params = {}) {
     try {
-      const auth = btoa(`${accessKey}:${secretKey}`);
+      const auth = this.parseCredentials(accessKeyOrToken, secretKey);
       const queryString = new URLSearchParams(params).toString();
       const url = `${this.baseUrl}${endpoint}${queryString ? '?' + queryString : ''}`;
 
@@ -45,9 +76,9 @@ class CallTrackingService {
    * Fetch call data for date range
    * Returns aggregated metrics by day
    */
-  async fetchCallMetrics(accountId, startDate, endDate, accessKey, secretKey) {
+  async fetchCallMetrics(accountId, startDate, endDate, accessKeyOrToken, secretKey = null) {
     try {
-      const allCalls = await this.fetchAllCalls(accountId, startDate, endDate, accessKey, secretKey);
+      const allCalls = await this.fetchAllCalls(accountId, startDate, endDate, accessKeyOrToken, secretKey);
 
       // Aggregate by date
       const metricsByDate = {};
@@ -105,7 +136,7 @@ class CallTrackingService {
    * Fetch all calls for an account with pagination
    * Based on: GET /accounts/{account_id}/calls.json
    */
-  async fetchAllCalls(accountId, startDate, endDate, accessKey, secretKey, filters = {}) {
+  async fetchAllCalls(accountId, startDate, endDate, accessKeyOrToken, secretKey = null, filters = {}) {
     try {
       let allCalls = [];
       let currentPage = 1;
@@ -132,7 +163,7 @@ class CallTrackingService {
         
         const response = await this.makeRequest(
           `/accounts/${accountId}/calls.json`,
-          accessKey,
+          accessKeyOrToken,
           secretKey,
           params
         );
@@ -162,7 +193,7 @@ class CallTrackingService {
    * Fetch call logs with detailed information
    * GET /accounts/{account_id}/calls.json
    */
-  async fetchCallLogs(accountId, startDate, endDate, accessKey, secretKey, page = 1, perPage = 50) {
+  async fetchCallLogs(accountId, startDate, endDate, accessKeyOrToken, secretKey = null, page = 1, perPage = 50) {
     try {
       const params = {
         page,
@@ -174,7 +205,7 @@ class CallTrackingService {
 
       const response = await this.makeRequest(
         `/accounts/${accountId}/calls.json`,
-        accessKey,
+        accessKeyOrToken,
         secretKey,
         params
       );
@@ -221,11 +252,11 @@ class CallTrackingService {
    * Fetch call attribution data
    * Returns marketing attribution details for calls
    */
-  async fetchCallAttribution(accountId, callId, accessKey, secretKey) {
+  async fetchCallAttribution(accountId, callId, accessKeyOrToken, secretKey = null) {
     try {
       const response = await this.makeRequest(
         `/accounts/${accountId}/calls/${callId}.json`,
-        accessKey,
+        accessKeyOrToken,
         secretKey
       );
 
@@ -255,7 +286,7 @@ class CallTrackingService {
    * Fetch tracking numbers for account
    * GET /accounts/{account_id}/numbers.json
    */
-  async fetchTrackingNumbers(accountId, accessKey, secretKey) {
+  async fetchTrackingNumbers(accountId, accessKeyOrToken, secretKey = null) {
     try {
       let allNumbers = [];
       let currentPage = 1;
@@ -264,7 +295,7 @@ class CallTrackingService {
       do {
         const response = await this.makeRequest(
           `/accounts/${accountId}/numbers.json`,
-          accessKey,
+          accessKeyOrToken,
           secretKey,
           { page: currentPage, per_page: 100 }
         );
@@ -318,11 +349,11 @@ class CallTrackingService {
    * Get account information
    * GET /accounts/{account_id}.json
    */
-  async fetchAccountInfo(accountId, accessKey, secretKey) {
+  async fetchAccountInfo(accountId, accessKeyOrToken, secretKey = null) {
     try {
       const response = await this.makeRequest(
         `/accounts/${accountId}.json`,
-        accessKey,
+        accessKeyOrToken,
         secretKey
       );
 
@@ -344,9 +375,9 @@ class CallTrackingService {
    * Test connection to CTM API
    * Verifies credentials and returns account info
    */
-  async testConnection(accountId, accessKey, secretKey) {
+  async testConnection(accountId, accessKeyOrToken, secretKey = null) {
     try {
-      const account = await this.fetchAccountInfo(accountId, accessKey, secretKey);
+      const account = await this.fetchAccountInfo(accountId, accessKeyOrToken, secretKey);
       
       return {
         success: true,
@@ -367,7 +398,7 @@ class CallTrackingService {
    * Fetch account summary statistics
    * Returns high-level metrics for the account
    */
-  async fetchAccountSummary(accountId, accessKey, secretKey, days = 30) {
+  async fetchAccountSummary(accountId, accessKeyOrToken, secretKey = null, days = 30) {
     try {
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
@@ -376,7 +407,7 @@ class CallTrackingService {
         accountId,
         startDate.toISOString().split('T')[0],
         endDate.toISOString().split('T')[0],
-        accessKey,
+        accessKeyOrToken,
         secretKey
       );
 
