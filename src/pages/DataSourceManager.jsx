@@ -109,9 +109,12 @@ export default function DataSourceManager() {
   // Test connection and fetch accounts
   const testConnectionMutation = useMutation({
     mutationFn: async (credentials) => {
+      console.log('[DataSourceManager] Testing connection...');
       const result = await base44.functions.invoke('testCtmConnection', {
         apiKey: credentials.api_key
       });
+      
+      console.log('[DataSourceManager] Test result:', result.data);
       
       if (!result.data.success) {
         throw new Error(result.data.error || 'Connection test failed');
@@ -120,12 +123,14 @@ export default function DataSourceManager() {
       return result.data;
     },
     onSuccess: (data) => {
+      console.log('[DataSourceManager] Connection successful, accounts:', data.accounts?.length);
       setAvailableAccounts(data.accounts || []);
       setConnectionTested(true);
       setCurrentStep(2);
       toast.success(`Connection successful! Found ${data.accounts_found} account(s)`);
     },
     onError: (error) => {
+      console.error('[DataSourceManager] Connection test failed:', error);
       toast.error(`Connection failed: ${error.message}`);
       setConnectionTested(false);
       setAvailableAccounts([]);
@@ -135,7 +140,11 @@ export default function DataSourceManager() {
   // Create/Update data source mutation
   const saveSourceMutation = useMutation({
     mutationFn: async (data) => {
+      console.log('[DataSourceManager] Starting save mutation...');
+      console.log('[DataSourceManager] Form data:', data);
+      
       const orgId = selectedOrgId || currentUser?.organization_id;
+      console.log('[DataSourceManager] Organization ID:', orgId);
 
       const credentials = {};
       if (data.auth_type === 'api_key') {
@@ -165,13 +174,18 @@ export default function DataSourceManager() {
         }
       };
 
+      console.log('[DataSourceManager] Payload to save:', payload);
+
       if (editingSource) {
+        console.log('[DataSourceManager] Updating existing source:', editingSource.id);
         return await base44.entities.DataSource.update(editingSource.id, payload);
       } else {
+        console.log('[DataSourceManager] Creating new source');
         return await base44.entities.DataSource.create(payload);
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      console.log('[DataSourceManager] Save successful:', result);
       queryClient.invalidateQueries({ queryKey: ['dataSources'] });
       toast.success(editingSource ? 'Data source updated' : 'Data source created');
       setShowDialog(false);
@@ -180,6 +194,11 @@ export default function DataSourceManager() {
     },
     onError: (error) => {
       console.error('[DataSourceManager] Save error:', error);
+      console.error('[DataSourceManager] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response
+      });
       toast.error(`Failed to save data source: ${error.message}`);
     }
   });
@@ -295,19 +314,33 @@ export default function DataSourceManager() {
       return;
     }
 
+    console.log('[DataSourceManager] Testing connection with:', {
+      name: formData.name,
+      hasApiKey: !!formData.api_key
+    });
+
     testConnectionMutation.mutate(formData);
   };
 
   const handleAccountToggle = (accountId) => {
-    setFormData(prev => ({
-      ...prev,
-      account_ids: prev.account_ids.includes(accountId)
+    console.log('[DataSourceManager] Toggling account:', accountId);
+    setFormData(prev => {
+      const newAccountIds = prev.account_ids.includes(accountId)
         ? prev.account_ids.filter(id => id !== accountId)
-        : [...prev.account_ids, accountId]
-    }));
+        : [...prev.account_ids, accountId];
+      
+      console.log('[DataSourceManager] New account_ids:', newAccountIds);
+      return {
+        ...prev,
+        account_ids: newAccountIds
+      };
+    });
   };
 
   const handleSave = () => {
+    console.log('[DataSourceManager] handleSave called');
+    console.log('[DataSourceManager] Current formData:', formData);
+    
     const orgId = selectedOrgId || currentUser?.organization_id;
     
     if (!orgId || orgId === 'all') {
@@ -330,6 +363,7 @@ export default function DataSourceManager() {
       return;
     }
 
+    console.log('[DataSourceManager] All validations passed, calling mutation...');
     saveSourceMutation.mutate(formData);
   };
 
