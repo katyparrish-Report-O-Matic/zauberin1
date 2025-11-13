@@ -23,6 +23,7 @@ import AdvancedTableGenerator from "../components/report/AdvancedTableGenerator"
 import SavedReportsList from "../components/report/SavedReportsList";
 import DataQualityIndicator from "../components/data/DataQualityIndicator";
 import OrganizationSelector from "../components/org/OrganizationSelector";
+import AccountFilter from "../components/report/AccountFilter";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
@@ -38,6 +39,7 @@ export default function ReportBuilder() {
   const [reportData, setReportData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [selectedAccountId, setSelectedAccountId] = useState('all');
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState('');
@@ -251,6 +253,7 @@ export default function ReportBuilder() {
 
     try {
       console.log('[ReportBuilder] 🚀 Generating report from real CTM data...');
+      console.log('[ReportBuilder] 🎯 Selected account:', selectedAccountId);
 
       // Build date range context
       let dateContext = '';
@@ -277,8 +280,12 @@ export default function ReportBuilder() {
 
       console.log('[ReportBuilder] 🔍 Querying real CallRecord data...');
       
-      // Execute query to get real data
-      const realData = await tableQueryService.executeTableQuery(tableConfig, orgId);
+      // Execute query to get real data - pass selected account filter
+      const realData = await tableQueryService.executeTableQuery(
+        tableConfig, 
+        orgId,
+        selectedAccountId
+      );
 
       console.log(`[ReportBuilder] ✅ Retrieved ${realData.length} real records`);
 
@@ -337,7 +344,8 @@ export default function ReportBuilder() {
       console.log('[ReportBuilder] 🔄 Loading saved report...');
       const realData = await tableQueryService.executeTableQuery(
         report.configuration,
-        report.organization_id
+        report.organization_id,
+        selectedAccountId
       );
       
       setReportData({
@@ -495,7 +503,8 @@ export default function ReportBuilder() {
       try {
         const realData = await tableQueryService.executeTableQuery(
           configuration,
-          currentReport.organization_id
+          currentReport.organization_id,
+          selectedAccountId
         );
         setReportData({
           config: configuration,
@@ -521,13 +530,18 @@ export default function ReportBuilder() {
                 Describe what you want to see from your call tracking data
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               {isAgency && (
                 <OrganizationSelector
                   value={selectedOrgId || currentUser?.organization_id}
                   onChange={setSelectedOrgId}
                 />
               )}
+              <AccountFilter
+                organizationId={selectedOrgId || currentUser?.organization_id}
+                value={selectedAccountId}
+                onChange={setSelectedAccountId}
+              />
               <DataFreshnessIndicator organizationId={selectedOrgId || currentUser?.organization_id} />
               <RateLimitIndicator />
               <DataQualityIndicator />

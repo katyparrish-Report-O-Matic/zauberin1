@@ -27,7 +27,7 @@ class TableQueryService {
       ];
 
       const availableDimensions = [
-        'account_name (dealer name)',
+        'account_name',
         'region',
         'date',
         'call_status'
@@ -44,11 +44,11 @@ Available metrics: ${availableMetrics.join(', ')}
 Available dimensions: ${availableDimensions.join(', ')}
 
 IMPORTANT RULES:
-1. Identify dimensions to GROUP BY (account_name=dealer, region, date)
+1. Identify dimensions to GROUP BY (account_name, region, date)
 2. Metrics should be aggregated (sum for counts, avg for rates/durations)
-3. ALWAYS include account_name (dealer) unless user specifically says otherwise
-4. For "by region and dealer" → groupBy: ["region", "account_name"]
-5. For "by dealer" → groupBy: ["account_name"]
+3. ALWAYS include account_name unless user specifically says otherwise
+4. For "by region and account" → groupBy: ["region", "account_name"]
+5. For "by account" → groupBy: ["account_name"]
 6. Show subtotals when grouping by multiple levels
 7. Format percentages (answer_rate), numbers (calls), durations (seconds)
 
@@ -118,14 +118,20 @@ Generate a complete table configuration that queries REAL data.`,
   /**
    * Execute query to fetch real CallRecord data
    */
-  async executeTableQuery(config, organizationId) {
+  async executeTableQuery(config, organizationId, accountId = 'all') {
     try {
       environmentConfig.log('info', '[TableQuery] Executing query for organization:', organizationId);
+      environmentConfig.log('info', '[TableQuery] Account filter:', accountId);
 
-      // Fetch call records for this organization
+      // Build query filter
       const queryFilter = {
         organization_id: organizationId
       };
+
+      // Add account filter if specific account is selected
+      if (accountId && accountId !== 'all') {
+        queryFilter.account_id = accountId;
+      }
 
       environmentConfig.log('info', '[TableQuery] Fetching CallRecords with filter:', queryFilter);
       const callRecords = await base44.entities.CallRecord.filter(queryFilter, '-start_time', 1000);
