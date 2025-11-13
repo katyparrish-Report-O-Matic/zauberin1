@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    const { accountId, startDate, endDate, apiKey, isAgencyLevel, includeRawCalls = false } = body;
+    const { accountId, startDate, endDate, apiKey, isAgencyLevel, includeRawCalls = false, accountRegion = null } = body;
 
     if (!accountId || !startDate || !endDate || !apiKey) {
       return Response.json({ 
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     console.log(`[CTM Sync] 📋 Fetching account metadata for ${accountId}...`);
     const accountUrl = `${baseUrl}/accounts/${accountId}.json`;
     
-    let accountMetadata = { id: accountId, name: `Account ${accountId}`, status: 'active' };
+    let accountMetadata = { id: accountId, name: `Account ${accountId}`, status: 'active', region: accountRegion };
     
     try {
       const accountResponse = await fetch(accountUrl, {
@@ -79,9 +79,10 @@ Deno.serve(async (req) => {
           name: accountData.name || `Account ${accountId}`,
           status: accountData.status || 'active',
           timezone: accountData.timezone,
-          country: accountData.country
+          country: accountData.country,
+          region: accountRegion || accountData.region || null
         };
-        console.log(`[CTM Sync] ✓ Found account: ${accountMetadata.name}`);
+        console.log(`[CTM Sync] ✓ Found account: ${accountMetadata.name} (Region: ${accountMetadata.region || 'None'})`);
       } else {
         console.warn(`[CTM Sync] ⚠️ Could not fetch account metadata (${accountResponse.status}), using defaults`);
       }
@@ -192,18 +193,34 @@ Deno.serve(async (req) => {
           total_calls: 0,
           answered_calls: 0,
           missed_calls: 0,
+          voicemail_calls: 0,
           qualified_calls: 0,
+          working_hours_calls: 0,
+          after_hours_calls: 0,
           total_duration: 0
         };
       }
 
       metricsByDate[date].total_calls++;
       
-      if (call.talk_time && call.talk_time > 0) {
+      // Determine call status
+      const isVoicemail = call.status === 'voicemail' || call.voicemail === true;
+      const isAnswered = call.talk_time && call.talk_time > 0;
+      const isWorkingHours = call.during_business_hours === true;
+      
+      if (isVoicemail) {
+        metricsByDate[date].voicemail_calls++;
+      } else if (isAnswered) {
         metricsByDate[date].answered_calls++;
         metricsByDate[date].total_duration += call.talk_time;
       } else {
         metricsByDate[date].missed_calls++;
+      }
+
+      if (isWorkingHours) {
+        metricsByDate[date].working_hours_calls++;
+      } else {
+        metricsByDate[date].after_hours_calls++;
       }
 
       if (call.sale_status === 'qualified' || call.qualified === true) {
@@ -232,49 +249,57 @@ Deno.serve(async (req) => {
     if (includeRawCalls) {
       console.log(`[CTM Sync] 📞 Processing ${allCalls.length} raw call records...`);
       
-      callRecords = allCalls.map(call => ({
-        call_id: String(call.id),
-        tracking_number: call.tracking_number,
-        caller_number: call.caller_number,
-        start_time: call.start_time,
-        end_time: call.end_time,
-        duration: call.duration || 0,
-        talk_time: call.talk_time || 0,
-        call_status: call.status || (call.talk_time > 0 ? 'answered' : 'missed'),
-        qualified: call.qualified || false,
-        sale_status: call.sale_status,
-        first_time_caller: call.first_time_caller || false,
-        keypress: call.keypress,
+      callRecords = allCalls.map(call => {
+        const isVoicemail = call.status === 'voicemail' || call.voicemail === true;
+        const isAnswered = call.talk_time && call.talk_time > 0;
+        const isWorkingHours = call.during_business_hours === true;
         
-        // Web attribution fields - CORRECTED MAPPING
-        web_source: call.tracking_source,
-        web_medium: call.tracking_medium,
-        web_campaign: call.utm_campaign,
-        web_campaign_id: call.utm_campaign_id,
-        web_keyword: call.keyword,
-        web_visit_keywords: call.keywords,
-        web_ad_group_id: call.gclid_ad_group_id,
-        web_adgroup_id: call.gclid_adgroup_id,
-        web_creative_id: call.gclid_creative_id,
-        web_ad_network: call.gclid_network,
-        web_ad_match_type: call.gclid_match_type,
-        web_ad_slot: call.gclid_slot,
-        web_ad_slot_position: call.gclid_slot_position,
-        web_ad_targeting_type: call.gclid_targeting_type,
-        
-        // Additional fields
-        landing_page: call.landing_page_url,
-        referrer: call.referrer,
-        city: call.city,
-        state: call.state,
-        country: call.country,
-        recording_url: call.recording,
-        transcription: call.transcription,
-        tags: call.tags || [],
-        custom_fields: call.custom_source_data || {},
-        
-        sync_date: new Date().toISOString().split('T')[0]
-      }));
+        return {
+          call_id: String(call.id),
+          tracking_number: call.tracking_number,
+          caller_number: call.caller_number,
+          start_time: call.start_time,
+          end_time: call.end_time,
+          duration: call.duration || 0,
+          talk_time: call.talk_time || 0,
+          call_status: isVoicemail ? 'voicemail' : (isAnswered ? 'answered' : 'missed'),
+          is_voicemail: isVoicemail,
+          is_working_hours: isWorkingHours,
+          qualified: call.qualified || false,
+          sale_status: call.sale_status,
+          first_time_caller: call.first_time_caller || false,
+          keypress: call.keypress,
+          
+          // Web attribution fields - CORRECTED MAPPING
+          web_source: call.tracking_source,
+          web_medium: call.tracking_medium,
+          web_campaign: call.utm_campaign,
+          web_campaign_id: call.utm_campaign_id,
+          web_keyword: call.keyword,
+          web_visit_keywords: call.keywords,
+          web_ad_group_id: call.gclid_ad_group_id,
+          web_adgroup_id: call.gclid_adgroup_id,
+          web_creative_id: call.gclid_creative_id,
+          web_ad_network: call.gclid_network,
+          web_ad_match_type: call.gclid_match_type,
+          web_ad_slot: call.gclid_slot,
+          web_ad_slot_position: call.gclid_slot_position,
+          web_ad_targeting_type: call.gclid_targeting_type,
+          
+          // Additional fields
+          landing_page: call.landing_page_url,
+          referrer: call.referrer,
+          city: call.city,
+          state: call.state,
+          country: call.country,
+          recording_url: call.recording,
+          transcription: call.transcription,
+          tags: call.tags || [],
+          custom_fields: call.custom_source_data || {},
+          
+          sync_date: new Date().toISOString().split('T')[0]
+        };
+      });
       
       console.log(`[CTM Sync] ✓ Processed ${callRecords.length} call records`);
     }
@@ -289,6 +314,7 @@ Deno.serve(async (req) => {
       summary: {
         account_id: accountId,
         account_name: accountMetadata.name,
+        region: accountMetadata.region,
         total_calls: allCalls.length,
         days_with_data: metrics.length,
         pages_fetched: totalPages,

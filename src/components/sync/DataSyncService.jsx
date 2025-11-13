@@ -112,8 +112,8 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - ULTRA OPTIMIZED v6
-   * Now syncs BOTH aggregated metrics AND raw call records with full attribution
+   * Sync call tracking data - ULTRA OPTIMIZED v7
+   * Now syncs with region support + voicemail/working hours metrics
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
@@ -140,8 +140,21 @@ class DataSyncService {
       progress_percentage: 5
     });
 
+    // Get account hierarchy records to get region info
+    const accountHierarchies = await base44.entities.AccountHierarchy.filter({
+      data_source_id: dataSource.id
+    });
+
+    const accountRegionMap = {};
+    accountHierarchies.forEach(ah => {
+      if (ah.external_id && ah.region) {
+        accountRegionMap[ah.external_id] = ah.region;
+      }
+    });
+
     const accountPromises = accountIds.map(async (accountId, index) => {
-      console.log(`[DataSync] 📞 [${index + 1}/${accountIds.length}] Fetching account ${accountId}`);
+      const accountRegion = accountRegionMap[String(accountId)] || null;
+      console.log(`[DataSync] 📞 [${index + 1}/${accountIds.length}] Fetching account ${accountId} (Region: ${accountRegion || 'None'})`);
 
       const result = await base44.functions.invoke('syncCallTrackingData', {
         accountId: String(accountId),
@@ -149,7 +162,8 @@ class DataSyncService {
         endDate: syncJob.date_range.end_date,
         apiKey,
         isAgencyLevel,
-        includeRawCalls: true // 🔥 Include raw call records
+        includeRawCalls: true,
+        accountRegion
       });
 
       if (!result.data?.success) {
@@ -200,6 +214,7 @@ class DataSyncService {
             hierarchy_level: 'account',
             external_id: accountResult.accountId,
             name: accountResult.accountName,
+            region: accountResult.accountMetadata.region,
             status: accountResult.accountMetadata.status || 'active',
             metadata: {
               synced_at: new Date().toISOString(),
@@ -208,10 +223,11 @@ class DataSyncService {
             },
             last_updated: new Date().toISOString()
           });
-          console.log(`[DataSync] ✓ Created AccountHierarchy: ${accountResult.accountName}`);
+          console.log(`[DataSync] ✓ Created AccountHierarchy: ${accountResult.accountName} (Region: ${accountResult.accountMetadata.region || 'None'})`);
         } else {
           await base44.entities.AccountHierarchy.update(existing[0].id, {
             name: accountResult.accountName,
+            region: accountResult.accountMetadata.region || existing[0].region,
             status: accountResult.accountMetadata.status || 'active',
             metadata: {
               synced_at: new Date().toISOString(),
@@ -239,7 +255,8 @@ class DataSyncService {
         organization_id: dataSource.organization_id,
         data_source_id: dataSource.id,
         account_id: r.accountId,
-        account_name: r.accountName
+        account_name: r.accountName,
+        region: r.accountMetadata.region
       }))
     );
 
@@ -295,7 +312,8 @@ class DataSyncService {
       r.metrics.map(m => ({
         ...m,
         accountId: r.accountId,
-        accountName: r.accountName
+        accountName: r.accountName,
+        region: r.accountMetadata.region
       }))
     );
 
@@ -305,7 +323,10 @@ class DataSyncService {
       'total_calls',
       'answered_calls',
       'missed_calls',
+      'voicemail_calls',
       'qualified_calls',
+      'working_hours_calls',
+      'after_hours_calls',
       'average_duration',
       'answer_rate'
     ];
@@ -336,7 +357,8 @@ class DataSyncService {
                 platform: 'call_tracking',
                 data_source_id: dataSource.id,
                 account_id: dayMetrics.accountId,
-                account_name: dayMetrics.accountName
+                account_name: dayMetrics.accountName,
+                region: dayMetrics.region
               },
               derived_metrics: {
                 growth_rate: 0,
