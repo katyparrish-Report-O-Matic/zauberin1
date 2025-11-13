@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Users, Shield } from "lucide-react";
+import { Building2, Plus, Users, Shield, Settings, UserPlus, Pencil, Trash2, Mail } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -17,18 +16,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PermissionGuard from "../components/auth/PermissionGuard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function OrganizationManager() {
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showAssignDialog, setShowAssignDialog] = useState(false); // New state for assign dialog
-  const [selectedOrg, setSelectedOrg] = useState(null); // New state for selected organization
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [showUsersDialog, setShowUsersDialog] = useState(false);
+  const [showEditUserDialog, setShowEditUserDialog] = useState(false);
+  const [selectedOrg, setSelectedOrg] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [removingUser, setRemovingUser] = useState(null);
   const [newOrg, setNewOrg] = useState({
     name: '',
     slug: '',
     is_agency: false
+  });
+  const [editUserData, setEditUserData] = useState({
+    permission_level: 'viewer'
   });
 
   const { data: organizations } = useQuery({
@@ -60,7 +79,6 @@ export default function OrganizationManager() {
 
   const assignUserMutation = useMutation({
     mutationFn: async ({ userId, orgId }) => {
-      // Update current user with organization and admin permission
       await base44.auth.updateMe({ 
         organization_id: orgId,
         permission_level: 'admin'
@@ -76,6 +94,38 @@ export default function OrganizationManager() {
     },
     onError: (error) => {
       toast.error('Failed to assign user: ' + error.message);
+    }
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, updates }) => {
+      return await base44.entities.User.update(userId, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      toast.success('User updated successfully');
+      setShowEditUserDialog(false);
+      setSelectedUser(null);
+    },
+    onError: (error) => {
+      toast.error('Failed to update user: ' + error.message);
+    }
+  });
+
+  const removeUserMutation = useMutation({
+    mutationFn: async (userId) => {
+      return await base44.entities.User.update(userId, { 
+        organization_id: null,
+        permission_level: 'viewer'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      toast.success('User removed from organization');
+      setRemovingUser(null);
+    },
+    onError: (error) => {
+      toast.error('Failed to remove user: ' + error.message);
     }
   });
 
@@ -107,6 +157,47 @@ export default function OrganizationManager() {
       userId: currentUser.id,
       orgId: selectedOrg.id
     });
+  };
+
+  const handleManageUsers = (org) => {
+    setSelectedOrg(org);
+    setShowUsersDialog(true);
+  };
+
+  const handleEditUser = (user) => {
+    setSelectedUser(user);
+    setEditUserData({
+      permission_level: user.permission_level || 'viewer'
+    });
+    setShowEditUserDialog(true);
+  };
+
+  const handleUpdateUser = () => {
+    if (!selectedUser) return;
+    updateUserMutation.mutate({
+      userId: selectedUser.id,
+      updates: editUserData
+    });
+  };
+
+  const handleRemoveUser = (user) => {
+    setRemovingUser(user);
+  };
+
+  const confirmRemoveUser = () => {
+    if (!removingUser) return;
+    removeUserMutation.mutate(removingUser.id);
+  };
+
+  const getPermissionBadgeColor = (level) => {
+    switch (level) {
+      case 'admin':
+        return 'bg-purple-600';
+      case 'editor':
+        return 'bg-blue-600';
+      default:
+        return 'bg-gray-600';
+    }
   };
 
   return (
@@ -193,13 +284,26 @@ export default function OrganizationManager() {
                         <Badge variant="outline">{org.subscription_tier || 'free'}</Badge>
                       </div>
                       
-                      {!isCurrentUserOrg && !currentUser?.organization_id && (
+                      <div className="flex gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="w-full"
+                          className="flex-1 gap-2"
+                          onClick={() => handleManageUsers(org)}
+                        >
+                          <Settings className="w-3 h-3" />
+                          Manage Users
+                        </Button>
+                      </div>
+
+                      {!isCurrentUserOrg && !currentUser?.organization_id && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="w-full gap-2"
                           onClick={() => handleAssignCurrentUser(org)}
                         >
+                          <UserPlus className="w-3 h-3" />
                           Assign Me
                         </Button>
                       )}
@@ -220,6 +324,7 @@ export default function OrganizationManager() {
           </div>
         </div>
 
+        {/* Create Organization Dialog */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogContent>
             <DialogHeader>
@@ -297,6 +402,137 @@ export default function OrganizationManager() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Manage Users Dialog */}
+        <Dialog open={showUsersDialog} onOpenChange={setShowUsersDialog}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>{selectedOrg?.name} - Users</DialogTitle>
+              <DialogDescription>
+                Manage users and their permissions for this organization
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="max-h-[500px] pr-4">
+              <div className="space-y-3">
+                {getUsersForOrg(selectedOrg?.id).map(user => (
+                  <Card key={user.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Mail className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium">{user.email}</span>
+                            <Badge className={getPermissionBadgeColor(user.permission_level)}>
+                              {user.permission_level || 'viewer'}
+                            </Badge>
+                          </div>
+                          {user.full_name && (
+                            <p className="text-sm text-gray-600">{user.full_name}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditUser(user)}
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRemoveUser(user)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {getUsersForOrg(selectedOrg?.id).length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No users in this organization yet
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowUsersDialog(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit User Dialog */}
+        <Dialog open={showEditUserDialog} onOpenChange={setShowEditUserDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit User Permissions</DialogTitle>
+              <DialogDescription>
+                Update {selectedUser?.email}'s access level
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="permission-level">Permission Level</Label>
+                <Select
+                  value={editUserData.permission_level}
+                  onValueChange={(value) => setEditUserData({ ...editUserData, permission_level: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin - Full access</SelectItem>
+                    <SelectItem value="editor">Editor - Can create & edit</SelectItem>
+                    <SelectItem value="viewer">Viewer - Read only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                <p className="text-blue-900 font-medium mb-1">Permission Levels:</p>
+                <ul className="text-blue-800 space-y-1 text-xs">
+                  <li>• <strong>Admin:</strong> Full access including settings and user management</li>
+                  <li>• <strong>Editor:</strong> Can create reports, data sources, and templates</li>
+                  <li>• <strong>Viewer:</strong> Can view reports and dashboards only</li>
+                </ul>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditUserDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateUser} disabled={updateUserMutation.isPending}>
+                {updateUserMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Remove User Confirmation Dialog */}
+        <AlertDialog open={!!removingUser} onOpenChange={() => setRemovingUser(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove User from Organization</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove {removingUser?.email} from this organization? 
+                They will lose access to all organization data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmRemoveUser}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Remove User
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </PermissionGuard>
   );
