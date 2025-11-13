@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -67,13 +66,6 @@ export default function ReportBuilder() {
     },
     enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
-
-  // Fetch accounts (mock data for now)
-  const mockAccounts = [
-    { id: 'acc1', name: 'Main Account' },
-    { id: 'acc2', name: 'Secondary Account' },
-    { id: 'acc3', name: 'Test Account' }
-  ];
 
   // Fetch saved reports filtered by organization (with caching)
   const { data: savedReports } = useQuery({
@@ -958,7 +950,7 @@ Generate a complete report configuration that captures their intent.`,
                   <li>Title: {currentReport.title}</li>
                   <li>Type: {currentReport.configuration?.chart_type || 'N/A'}</li>
                   {currentReport.account && (
-                    <li>Account: {mockAccounts.find(a => a.id === currentReport.account)?.name}</li>
+                    <li>Account: {currentReport.account}</li>
                   )}
                 </ul>
               </div>
