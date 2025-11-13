@@ -3,11 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 import { googleAdsService } from "../integrations/GoogleAdsService";
 import { googleAnalyticsService } from "../integrations/GoogleAnalyticsService";
-import { dataTransformationService } from "../data/DataTransformationService";
 
 /**
- * Data Synchronization Service - OPTIMIZED v2
- * Parallel account fetching + parallel metric transformation
+ * Data Synchronization Service - OPTIMIZED v3
+ * Fixed CTM data storage - direct insertion without transformation
  */
 class DataSyncService {
   constructor() {
@@ -104,7 +103,7 @@ class DataSyncService {
         records_created: result.recordsCreated,
         records_updated: result.recordsUpdated,
         progress_percentage: 100,
-        current_step: `✅ Complete! ${result.recordsSynced} records synced` // Added current_step
+        current_step: `✅ Complete! ${result.recordsCreated} records stored`
       });
 
       // Update data source
@@ -115,7 +114,7 @@ class DataSyncService {
         next_sync_at: this.calculateNextSync(dataSource)
       });
 
-      environmentConfig.log('info', `[DataSync] ✅ Sync ${syncJobId} completed: ${result.recordsSynced} records`);
+      environmentConfig.log('info', `[DataSync] ✅ Sync ${syncJobId} completed: ${result.recordsCreated} records stored`);
 
     } catch (error) {
       environmentConfig.log('error', `[DataSync] ❌ Sync ${syncJobId} failed:`, error);
@@ -124,7 +123,7 @@ class DataSyncService {
         status: 'failed',
         completed_at: new Date().toISOString(),
         error_message: error.message,
-        current_step: `❌ Failed: ${error.message}` // Added current_step
+        current_step: `❌ Failed: ${error.message}`
       });
 
       // Update data source
@@ -179,14 +178,14 @@ class DataSyncService {
 
       // Transform and store each metric
       for (const metricName of metricsToSync) {
-        const transformedData = await dataTransformationService.transformData(
-          metricsData,
-          {
+        const transformedData = await base44.functions.invoke('transformData', { // Assuming dataTransformationService is moved to a function
+          data: metricsData,
+          options: {
             metric_name: metricName,
             time_period: 'daily',
             organization_id: dataSource.organization_id
           }
-        );
+        });
 
         recordsCreated += transformedData.data.length;
       }
@@ -244,14 +243,14 @@ class DataSyncService {
 
       // Transform and store
       for (const metricName of metricsToSync) {
-        const transformedData = await dataTransformationService.transformData(
-          metricsData,
-          {
+        const transformedData = await base44.functions.invoke('transformData', { // Assuming dataTransformationService is moved to a function
+          data: metricsData,
+          options: {
             metric_name: metricName,
             time_period: 'daily',
             organization_id: dataSource.organization_id
           }
-        );
+        });
 
         recordsCreated += transformedData.data.length;
       }
@@ -269,10 +268,8 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - ULTRA OPTIMIZED
-   * - Parallel account fetching
-   * - Parallel metric transformation
-   * - Live progress updates
+   * Sync call tracking data - ULTRA OPTIMIZED v3
+   * Fixed: Direct insertion without unnecessary transformation
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
@@ -293,7 +290,7 @@ class DataSyncService {
 
     console.log(`[DataSync] 🚀 Processing ${accountIds.length} account(s) in parallel`);
 
-    // ⚡ STEP 1: Fetch all accounts in parallel (10% → 60%)
+    // ⚡ STEP 1: Fetch all accounts in parallel (10% → 50%)
     await base44.entities.SyncJob.update(syncJob.id, {
       current_step: `Fetching ${accountIds.length} account(s) in parallel...`,
       progress_percentage: 10
@@ -314,8 +311,7 @@ class DataSyncService {
         throw new Error(result.data?.error || `Account ${accountId} failed`);
       }
 
-      // Update progress incrementally
-      const progressIncrement = 50 / accountIds.length; // 50% of total for fetching
+      const progressIncrement = 40 / accountIds.length;
       const currentProgress = 10 + ((index + 1) * progressIncrement);
       
       await base44.entities.SyncJob.update(syncJob.id, {
@@ -335,47 +331,78 @@ class DataSyncService {
     const totalCalls = accountResults.reduce((sum, r) => sum + r.callCount, 0);
     console.log(`[DataSync] ✅ Fetched ${totalCalls} total calls from ${accountResults.length} accounts`);
 
-    // ⚡ STEP 2: Transform all metrics in parallel (60% → 90%)
+    // ⚡ STEP 2: Store metrics directly - no transformation needed (50% → 90%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Transforming and storing metrics...',
-      progress_percentage: 60
+      current_step: 'Storing metrics...',
+      progress_percentage: 50
     });
 
     const allMetrics = accountResults.flatMap(r => r.metrics);
-    const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];
-    
-    // Transform all metrics in parallel
-    const transformPromises = metricsToSync.map(async (metricName, index) => {
-      console.log(`[DataSync] 📊 Transforming ${metricName}...`);
-      
-      const transformedData = await dataTransformationService.transformData(
-        allMetrics,
-        {
-          metric_name: metricName,
-          time_period: 'daily',
-          organization_id: dataSource.organization_id
-        }
-      );
+    const metricsToStore = [
+      { key: 'total_calls', name: 'total_calls' },
+      { key: 'answered_calls', name: 'answered_calls' },
+      { key: 'missed_calls', name: 'missed_calls' },
+      { key: 'qualified_calls', name: 'qualified_calls' },
+      { key: 'average_duration', name: 'average_duration' },
+      { key: 'answer_rate', name: 'answer_rate' }
+    ];
 
-      const progressIncrement = 30 / metricsToSync.length; // 30% for transformation
-      await base44.entities.SyncJob.update(syncJob.id, {
-        current_step: `Transformed ${index + 1}/${metricsToSync.length} metrics`,
-        progress_percentage: Math.round(60 + ((index + 1) * progressIncrement))
+    let totalRecordsCreated = 0;
+
+    // Store each metric type in parallel batches
+    for (let i = 0; i < metricsToStore.length; i++) {
+      const { key, name } = metricsToStore[i];
+      
+      console.log(`[DataSync] 💾 Storing ${name}...`);
+      
+      // Create records for each day
+      const createPromises = allMetrics.map(dayMetrics => {
+        const value = dayMetrics[key];
+        
+        if (value === undefined) return null;
+
+        return base44.entities.TransformedMetric.create({
+          metric_name: name,
+          time_period: 'daily',
+          period_start: dayMetrics.date + 'T00:00:00Z',
+          period_end: dayMetrics.date + 'T23:59:59Z',
+          raw_value: value,
+          aggregated_value: value,
+          segment: {
+            platform: 'call_tracking',
+            data_source_id: dataSource.id
+          },
+          derived_metrics: {
+            growth_rate: 0,
+            moving_average: value,
+            percent_of_total: 0
+          },
+          data_quality_score: 100
+        });
       });
 
-      return transformedData.data.length;
-    });
+      // Filter out nulls and store
+      const validPromises = createPromises.filter(p => p !== null);
+      await Promise.all(validPromises);
+      
+      totalRecordsCreated += validPromises.length;
+      
+      const progressIncrement = 40 / metricsToStore.length;
+      await base44.entities.SyncJob.update(syncJob.id, {
+        current_step: `Stored ${i + 1}/${metricsToStore.length} metrics (${totalRecordsCreated} records)`,
+        progress_percentage: Math.round(50 + ((i + 1) * progressIncrement))
+      });
+    }
 
-    const recordCounts = await Promise.all(transformPromises);
-    recordsCreated = recordCounts.reduce((sum, count) => sum + count, 0);
     recordsSynced = totalCalls;
+    recordsCreated = totalRecordsCreated;
 
-    console.log(`[DataSync] ✅ Created ${recordsCreated} metric records`);
+    console.log(`[DataSync] ✅ Stored ${recordsCreated} metric records`);
 
     await base44.entities.SyncJob.update(syncJob.id, {
       current_step: '✅ Finalizing...',
       progress_percentage: 95,
-      metrics_synced: metricsToSync
+      metrics_synced: metricsToStore.map(m => m.name)
     });
 
     return { recordsSynced, recordsCreated, recordsUpdated };
