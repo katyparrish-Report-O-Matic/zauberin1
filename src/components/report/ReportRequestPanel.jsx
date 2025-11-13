@@ -1,46 +1,50 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Moon, Calendar as CalendarIcon } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarIcon, Sparkles } from "lucide-react";
 import { format } from "date-fns";
+import AccountSelector from "../books/AccountSelector";
 
-export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false, accounts = [] }) {
+export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled, organizationId }) {
   const [title, setTitle] = useState('');
-  const [request, setRequest] = useState('');
-  const [dateRange, setDateRange] = useState({ from: null, to: null });
-  const [selectedAccount, setSelectedAccount] = useState('all');
+  const [description, setDescription] = useState('');
+  const [account, setAccount] = useState('all');
+  const [dateRange, setDateRange] = useState({
+    from: undefined,
+    to: undefined
+  });
 
   const handleGenerate = () => {
-    if (request.trim()) {
-      onGenerateReport({ 
-        title: title || 'Custom Report', 
-        description: request,
-        dateRange,
-        account: selectedAccount
-      });
+    if (!description.trim()) {
+      return;
     }
+
+    onGenerateReport({
+      title: title || 'Untitled Report',
+      description,
+      account,
+      dateRange
+    });
   };
 
-  const exampleRequests = [
-    "Show me revenue by branch for the last 30 days as a bar chart",
-    "Compare sales across all regions this quarter with a line graph",
-    "Display a pie chart of conversions broken down by branch",
-    "Create a table showing daily revenue for each branch and region",
-    "Show me user engagement trends by region over the past month"
+  const examplePrompts = [
+    "Show me total calls by tracking number as a bar chart",
+    "Display daily call trends for the last 30 days as a line chart",
+    "Break down answered vs missed calls by source as a pie chart",
+    "Show me revenue by region in a table with daily breakdown"
   ];
 
   return (
-    <Card className="border-gray-300">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Moon className="w-5 h-5" />
-          Create Bespoke Report
+          <Sparkles className="w-5 h-5" />
+          Describe Your Report
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -48,28 +52,19 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
           <Label htmlFor="report-title">Report Title (optional)</Label>
           <Input
             id="report-title"
-            placeholder="e.g., Q4 Sales by Branch"
+            placeholder="e.g., Monthly Sales Performance"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            disabled={disabled}
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="account-select">Account</Label>
-          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-            <SelectTrigger id="account-select">
-              <SelectValue placeholder="Select account" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Accounts</SelectItem>
-              {accounts.map(account => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <AccountSelector
+          organizationId={organizationId}
+          value={account}
+          onChange={setAccount}
+          showLabel={true}
+        />
 
         <div className="space-y-2">
           <Label>Date Range (optional)</Label>
@@ -80,10 +75,10 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
                 {dateRange.from ? (
                   dateRange.to ? (
                     <>
-                      {format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")}
+                      {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
                     </>
                   ) : (
-                    format(dateRange.from, "MMM d, yyyy")
+                    format(dateRange.from, "LLL dd, y")
                   )
                 ) : (
                   <span>Pick a date range</span>
@@ -92,9 +87,11 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
+                initialFocus
                 mode="range"
+                defaultMonth={dateRange.from}
                 selected={dateRange}
-                onSelect={(range) => setDateRange(range || { from: null, to: null })}
+                onSelect={setDateRange}
                 numberOfMonths={2}
               />
             </PopoverContent>
@@ -102,36 +99,23 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="report-request">What would you like to visualize?</Label>
+          <Label htmlFor="report-description">What would you like to visualize? *</Label>
           <Textarea
-            id="report-request"
-            placeholder="Describe the report you want... Include metrics, time periods, and segmentation (by branch, region, etc.)"
-            value={request}
-            onChange={(e) => setRequest(e.target.value)}
-            rows={6}
-            className="resize-none"
+            id="report-description"
+            placeholder="Describe what you want to see. Examples: 'Show revenue by branch as a bar chart', 'Display daily call trends', 'Compare conversion rates across regions'"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+            disabled={disabled}
           />
-          <p className="text-xs text-gray-500">
-            Tip: Mention "by branch" or "by region" to segment your data
-          </p>
         </div>
 
         <Button 
+          className="w-full" 
           onClick={handleGenerate}
-          disabled={!request.trim() || isGenerating || disabled}
-          className="w-full gap-2"
+          disabled={!description.trim() || isGenerating || disabled}
         >
-          {isGenerating ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Generating Report...
-            </>
-          ) : (
-            <>
-              <Moon className="w-4 h-4" />
-              Generate Report
-            </>
-          )}
+          {isGenerating ? 'Generating...' : 'Generate Report'}
         </Button>
 
         {disabled && (
@@ -140,19 +124,18 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
           </p>
         )}
 
-        <div className="pt-4 border-t">
-          <p className="text-sm font-medium text-gray-700 mb-2">Example requests:</p>
-          <div className="space-y-2">
-            {exampleRequests.map((example, idx) => (
-              <button
-                key={idx}
-                onClick={() => setRequest(example)}
-                className="text-xs text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 p-2 rounded block w-full transition-colors"
-              >
-                "{example}"
-              </button>
-            ))}
-          </div>
+        <div className="border-t pt-4 space-y-2">
+          <p className="text-sm font-medium text-gray-700">Example prompts:</p>
+          {examplePrompts.map((prompt, idx) => (
+            <button
+              key={idx}
+              onClick={() => setDescription(prompt)}
+              className="block w-full text-left text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 p-2 rounded transition-colors"
+              disabled={disabled}
+            >
+              💡 {prompt}
+            </button>
+          ))}
         </div>
       </CardContent>
     </Card>

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -281,7 +282,7 @@ export default function ReportBuilder() {
 
       // Build account context
       const accountContext = request.account && request.account !== 'all' 
-        ? `Filter data for account: ${mockAccounts.find(a => a.id === request.account)?.name || request.account}.`
+        ? `Filter data for account ID: ${request.account}.`
         : '';
 
       // Use LLM to interpret the request and generate configuration
@@ -801,7 +802,7 @@ Generate a complete report configuration that captures their intent.`,
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
                 disabled={!canEdit}
-                accounts={mockAccounts}
+                organizationId={selectedOrgId || currentUser?.organization_id}
               />
               
               <AnnotationManager 
@@ -816,7 +817,7 @@ Generate a complete report configuration that captures their intent.`,
                 onEmailReport={handleEmailReport}
                 onDownloadPDF={handleDownloadPDF}
                 canDelete={canDelete}
-                accounts={mockAccounts}
+                organizationId={selectedOrgId || currentUser?.organization_id}
               />
             </div>
 
