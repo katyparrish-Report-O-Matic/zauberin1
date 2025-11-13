@@ -19,6 +19,7 @@ import DataSourceManager from './pages/DataSourceManager';
 import ReportLibrary from './pages/ReportLibrary';
 import BookEditor from './pages/BookEditor';
 import BookViewer from './pages/BookViewer';
+import HelpGuide from './pages/HelpGuide';
 import Layout from './Layout.jsx';
 
 
@@ -44,6 +45,7 @@ export const PAGES = {
     "ReportLibrary": ReportLibrary,
     "BookEditor": BookEditor,
     "BookViewer": BookViewer,
+    "HelpGuide": HelpGuide,
 }
 
 export const pagesConfig = {
