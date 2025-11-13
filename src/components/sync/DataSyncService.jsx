@@ -1,4 +1,3 @@
-
 import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 import { googleAdsService } from "../integrations/GoogleAdsService";
@@ -294,6 +293,14 @@ class DataSyncService {
       throw new Error('No API credentials found for Call Tracking');
     }
 
+    // Detect if using agency-level or account-level access
+    // Agency-level credentials typically have both access_key and secret_key
+    const isAgencyLevel = dataSource.metadata?.access_level === 'agency' || 
+                          dataSource.auth_type === 'api_key' ||
+                          apiKey.includes(':');
+
+    environmentConfig.log('info', `[DataSync] CTM Access Level: ${isAgencyLevel ? 'Agency (Multi-Account)' : 'Account (Single)'}`);
+
     // Step 2: Fetch call metrics for each account using backend function
     await base44.entities.SyncJob.update(syncJob.id, {
       current_step: 'Fetching call metrics from CTM API',
@@ -308,7 +315,8 @@ class DataSyncService {
         accountId,
         startDate: syncJob.date_range.start_date,
         endDate: syncJob.date_range.end_date,
-        apiKey
+        apiKey,
+        isAgencyLevel
       });
 
       if (!result.data?.success) {

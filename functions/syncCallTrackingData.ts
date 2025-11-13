@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
 /**
  * Backend function to sync Call Tracking Metrics data
- * This runs server-side to avoid CORS issues
+ * Supports both Account-Level and Agency-Level API access
  * Called by DataSyncService - uses service role, no user auth required
  */
 
@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    const { accountId, startDate, endDate, apiKey } = body;
+    const { accountId, startDate, endDate, apiKey, isAgencyLevel } = body;
 
     // Validate required parameters
     if (!accountId || !startDate || !endDate || !apiKey) {
@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[CTM Backend] Syncing call data for account: ${accountId} from ${startDate} to ${endDate}`);
+    console.log(`[CTM Backend] Access Level: ${isAgencyLevel ? 'Agency (Multi-Account)' : 'Account (Single)'}`);
 
     // Parse credentials - support multiple formats
     const parseCredentials = (token) => {
@@ -78,8 +79,13 @@ Deno.serve(async (req) => {
 
     console.log(`[CTM Backend] Fetching calls from CTM API...`);
 
+    // Choose endpoint based on access level
+    const callsEndpoint = isAgencyLevel 
+      ? `/accounts/${accountId}/calls.json` // Agency-level still uses this endpoint
+      : `/accounts/${accountId}/calls.json`;
+
     do {
-      const url = `${baseUrl}/accounts/${accountId}/calls.json?page=${currentPage}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
+      const url = `${baseUrl}${callsEndpoint}?page=${currentPage}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
       
       let response;
       try {
@@ -104,18 +110,29 @@ Deno.serve(async (req) => {
         const errorText = await response.text();
         console.error(`[CTM Backend] API Error ${response.status}:`, errorText);
         
+        // Enhanced error messages
+        let hint = 'Check API connection and parameters';
+        if (response.status === 401) {
+          hint = 'Invalid API credentials. Verify your Access Key and Secret Key in Data Sources settings.';
+        } else if (response.status === 404) {
+          hint = isAgencyLevel 
+            ? `Account ID "${accountId}" not found or not accessible with agency credentials. Verify: 1) Account exists, 2) Account is under your agency, 3) Agency API access is enabled.`
+            : `Account ID "${accountId}" not found. Verify the account ID in Data Sources settings.`;
+        } else if (response.status === 429) {
+          hint = 'Rate limit exceeded (10 req/sec). Wait a moment and try again.';
+        }
+        
         return Response.json({ 
           success: false,
           error: `CTM API Error`,
           status: response.status,
           details: errorText,
-          hint: response.status === 401 
-            ? 'Invalid API credentials. Check your Access Key and Secret Key in Data Sources.' 
-            : response.status === 404
-            ? `Account ID "${accountId}" not found. Verify the account ID in Data Sources.`
-            : response.status === 429
-            ? 'Rate limit exceeded. Wait a moment and try again.'
-            : 'Check API connection and parameters'
+          hint,
+          debugInfo: {
+            endpoint: callsEndpoint,
+            accessLevel: isAgencyLevel ? 'agency' : 'account',
+            accountId
+          }
         }, { status: response.status });
       }
 
@@ -199,6 +216,7 @@ Deno.serve(async (req) => {
       dateRange: { startDate, endDate },
       summary: {
         account_id: accountId,
+        access_level: isAgencyLevel ? 'agency' : 'account',
         total_calls: allCalls.length,
         days_with_data: metrics.length,
         total_pages_fetched: currentPage - 1,
