@@ -36,7 +36,8 @@ import { format } from "date-fns";
 import { usePermissions } from "../components/auth/usePermissions";
 import OrganizationSelector from "../components/org/OrganizationSelector";
 import PermissionGuard from "../components/auth/PermissionGuard";
-import AccountSelector from "../components/books/AccountSelector";
+import MultiAccountSelector from "../components/books/MultiAccountSelector";
+import { accountHierarchyService } from "../components/accounts/AccountHierarchyService";
 
 export default function ReportLibrary() {
   const queryClient = useQueryClient();
@@ -48,8 +49,8 @@ export default function ReportLibrary() {
     title: '',
     description: '',
     cover_color: 'blue',
-    account_id: 'all',
-    account_name: '',
+    account_ids: [],
+    account_names: [],
     dateRange: { from: null, to: null }
   });
 
@@ -63,15 +64,7 @@ export default function ReportLibrary() {
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
       if (!orgId || orgId === 'all') return [];
-      
-      // This will be populated from AccountHierarchy when data sources sync
-      const accounts = await base44.entities.AccountHierarchy.filter({
-        organization_id: orgId,
-        hierarchy_level: 'account',
-        status: 'active'
-      });
-      
-      return accounts;
+      return await accountHierarchyService.getAllAccountsForOrganization(orgId);
     },
     enabled: !!(selectedOrgId || currentUser?.organization_id),
     initialData: []
@@ -107,8 +100,8 @@ export default function ReportLibrary() {
         title: bookData.title,
         description: bookData.description,
         cover_color: bookData.cover_color,
-        account_id: bookData.account_id,
-        account_name: bookData.account_name,
+        account_ids: bookData.account_ids,
+        account_names: bookData.account_names,
         date_range: bookData.dateRange.from ? {
           from: bookData.dateRange.from.toISOString().split('T')[0],
           to: bookData.dateRange.to?.toISOString().split('T')[0]
@@ -127,8 +120,8 @@ export default function ReportLibrary() {
         title: '',
         description: '',
         cover_color: 'blue',
-        account_id: 'all',
-        account_name: '',
+        account_ids: [],
+        account_names: [],
         dateRange: { from: null, to: null }
       });
       
@@ -171,16 +164,20 @@ export default function ReportLibrary() {
       return;
     }
 
-    // Get account name
-    let accountName = 'All Accounts';
-    if (newBook.account_id !== 'all') {
-      const account = allAccounts.find(a => a.external_id === newBook.account_id || a.id === newBook.account_id);
-      accountName = account?.name || newBook.account_id;
+    if (newBook.account_ids.length === 0) {
+      toast.error('Please select at least one account');
+      return;
     }
+
+    // Get account names
+    const accountNames = newBook.account_ids.map(id => {
+      const account = allAccounts.find(a => a.external_id === id);
+      return account?.name || id;
+    });
 
     createBookMutation.mutate({
       ...newBook,
-      account_name: accountName
+      account_names: accountNames
     });
   };
 
@@ -225,6 +222,18 @@ export default function ReportLibrary() {
       teal: 'from-teal-500 to-teal-600'
     };
     return colors[color] || colors.blue;
+  };
+
+  const getAccountsDisplay = (book) => {
+    if (!book.account_names || book.account_names.length === 0) {
+      return 'All Accounts';
+    }
+    
+    if (book.account_names.length === 1) {
+      return book.account_names[0];
+    }
+    
+    return `${book.account_names.length} accounts`;
   };
 
   return (
@@ -284,10 +293,17 @@ export default function ReportLibrary() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="text-sm space-y-1">
-                      {book.account_name && (
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FileText className="w-4 h-4" />
-                          <span>{book.account_name}</span>
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <FileText className="w-4 h-4" />
+                        <span>{getAccountsDisplay(book)}</span>
+                      </div>
+                      {book.account_names && book.account_names.length > 1 && (
+                        <div className="flex flex-wrap gap-1 ml-6">
+                          {book.account_names.map((name, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {name}
+                            </Badge>
+                          ))}
                         </div>
                       )}
                       {book.date_range?.from && (
@@ -359,7 +375,7 @@ export default function ReportLibrary() {
             <DialogHeader>
               <DialogTitle>Create New Report Book</DialogTitle>
               <DialogDescription>
-                A book contains multiple reports organized for a specific client or account
+                A book contains multiple reports organized for specific accounts
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -405,43 +421,46 @@ export default function ReportLibrary() {
                   </Select>
                 </div>
 
-                <AccountSelector
-                  organizationId={selectedOrgId || currentUser?.organization_id}
-                  value={newBook.account_id}
-                  onChange={(value) => setNewBook({ ...newBook, account_id: value })}
-                />
+                <div className="space-y-2">
+                  <Label>Date Range *</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {newBook.dateRange.from ? (
+                          newBook.dateRange.to ? (
+                            <>
+                              {format(newBook.dateRange.from, "MMM d, yyyy")} - {format(newBook.dateRange.to, "MMM d, yyyy")}
+                            </>
+                          ) : (
+                            format(newBook.dateRange.from, "MMM d, yyyy")
+                          )
+                        ) : (
+                          <span>Pick a date range</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="range"
+                        selected={newBook.dateRange}
+                        onSelect={(range) => setNewBook({ ...newBook, dateRange: range || { from: null, to: null }})}
+                        numberOfMonths={2}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Date Range *</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {newBook.dateRange.from ? (
-                        newBook.dateRange.to ? (
-                          <>
-                            {format(newBook.dateRange.from, "MMM d, yyyy")} - {format(newBook.dateRange.to, "MMM d, yyyy")}
-                          </>
-                        ) : (
-                          format(newBook.dateRange.from, "MMM d, yyyy")
-                        )
-                      ) : (
-                        <span>Pick a date range</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="range"
-                      selected={newBook.dateRange}
-                      onSelect={(range) => setNewBook({ ...newBook, dateRange: range || { from: null, to: null }})}
-                      numberOfMonths={2}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <p className="text-xs text-gray-500">
-                  All reports added to this book will use this date range
+              <MultiAccountSelector
+                organizationId={selectedOrgId || currentUser?.organization_id}
+                selectedAccountIds={newBook.account_ids}
+                onChange={(accountIds) => setNewBook({ ...newBook, account_ids: accountIds })}
+              />
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-900">
+                  <strong>Note:</strong> All reports added to this book will use the selected date range and accounts
                 </p>
               </div>
             </div>

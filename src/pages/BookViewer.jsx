@@ -60,7 +60,7 @@ export default function BookViewer() {
     if (currentReport.report_id) {
       const savedReport = savedReports.find(r => r.id === currentReport.report_id);
       
-      // Override saved report's date range and account with book's settings
+      // Override saved report's date range and accounts with book's settings
       const configuration = {
         ...savedReport?.configuration,
         date_range: book.date_range ? {
@@ -69,7 +69,7 @@ export default function BookViewer() {
           period: 'custom',
           granularity: savedReport?.configuration?.date_range?.granularity || 'daily'
         } : savedReport?.configuration?.date_range,
-        account_id: book.account_id !== 'all' ? book.account_id : null
+        account_ids: book.account_ids && book.account_ids.length > 0 ? book.account_ids : null
       };
 
       return {
@@ -82,7 +82,7 @@ export default function BookViewer() {
     if (currentReport.template_id) {
       const template = templates.find(t => t.id === currentReport.template_id);
       
-      // Apply book's date range and account to template
+      // Apply book's date range and accounts to template
       return {
         title: template?.name || 'Template Report',
         configuration: {
@@ -95,7 +95,7 @@ export default function BookViewer() {
             period: 'custom',
             granularity: template?.chart_settings?.date_range?.granularity || 'daily'
           } : template?.chart_settings?.date_range,
-          account_id: book.account_id !== 'all' ? book.account_id : null
+          account_ids: book.account_ids && book.account_ids.length > 0 ? book.account_ids : null
         },
         notes: currentReport.notes
       };
@@ -236,6 +236,13 @@ export default function BookViewer() {
     return colors[color] || colors.blue;
   };
 
+  const getAccountsDisplay = () => {
+    if (!book.account_names || book.account_names.length === 0) {
+      return 'All Accounts';
+    }
+    return book.account_names.join(', ');
+  };
+
   if (bookLoading) {
     return <div className="p-8 text-center">Loading book...</div>;
   }
@@ -273,12 +280,10 @@ export default function BookViewer() {
               </div>
             </div>
             <CardContent className="p-6">
-              <div className="flex items-center gap-4 text-sm text-gray-600">
-                {book.account_name && (
-                  <div>
-                    <span className="font-medium">Account:</span> {book.account_name}
-                  </div>
-                )}
+              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                <div>
+                  <span className="font-medium">Accounts:</span> {getAccountsDisplay()}
+                </div>
                 {book.date_range?.from && (
                   <div className="flex items-center gap-1">
                     <CalendarIcon className="w-4 h-4" />
@@ -295,6 +300,15 @@ export default function BookViewer() {
                   {book.status}
                 </Badge>
               </div>
+              {book.account_names && book.account_names.length > 1 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {book.account_names.map((name, idx) => (
+                    <Badge key={idx} variant="outline">
+                      {name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -351,7 +365,7 @@ export default function BookViewer() {
                 <CardHeader>
                   <CardTitle>{reportData.title}</CardTitle>
                   <CardDescription>
-                    {book.account_name && `Account: ${book.account_name}`}
+                    {getAccountsDisplay()}
                     {book.date_range?.from && (
                       <span className="ml-4">
                         {format(new Date(book.date_range.from), "MMM d, yyyy")}
