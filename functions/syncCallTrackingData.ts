@@ -3,7 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 /**
  * Backend function to sync Call Tracking Metrics data
  * OPTIMIZED VERSION: Parallel processing, smart pagination, early aggregation
- * RETURNS: Account metadata + metrics
+ * RETURNS: Account metadata + aggregated metrics + raw call records
  */
 
 Deno.serve(async (req) => {
@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    const { accountId, startDate, endDate, apiKey, isAgencyLevel } = body;
+    const { accountId, startDate, endDate, apiKey, isAgencyLevel, includeRawCalls = false } = body;
 
     if (!accountId || !startDate || !endDate || !apiKey) {
       return Response.json({ 
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
 
     console.log(`[CTM Sync] ✅ Fetched ${allCalls.length} total calls`);
 
-    // Aggregate by date
+    // ⚡ STEP 3: Aggregate by date for metrics
     const metricsByDate = {};
 
     allCalls.forEach(call => {
@@ -227,10 +227,63 @@ Deno.serve(async (req) => {
 
     console.log(`[CTM Sync] ✅ Aggregated into ${metrics.length} days`);
 
+    // ⚡ STEP 4: Process raw call records (if requested)
+    let callRecords = null;
+    if (includeRawCalls) {
+      console.log(`[CTM Sync] 📞 Processing ${allCalls.length} raw call records...`);
+      
+      callRecords = allCalls.map(call => ({
+        call_id: String(call.id),
+        tracking_number: call.tracking_number,
+        caller_number: call.caller_number,
+        start_time: call.start_time,
+        end_time: call.end_time,
+        duration: call.duration || 0,
+        talk_time: call.talk_time || 0,
+        call_status: call.status || (call.talk_time > 0 ? 'answered' : 'missed'),
+        qualified: call.qualified || false,
+        sale_status: call.sale_status,
+        first_time_caller: call.first_time_caller || false,
+        keypress: call.keypress,
+        
+        // Web attribution fields
+        web_source: call.source,
+        web_medium: call.medium,
+        web_campaign: call.campaign,
+        web_campaign_id: call.campaign_id,
+        web_keyword: call.keyword,
+        web_visit_keywords: call.visit_keywords,
+        web_ad_group_id: call.ad_group_id,
+        web_adgroup_id: call.adgroup_id,
+        web_creative_id: call.creative_id,
+        web_ad_network: call.ad_network,
+        web_ad_match_type: call.ad_match_type,
+        web_ad_slot: call.ad_slot,
+        web_ad_slot_position: call.ad_slot_position,
+        web_ad_targeting_type: call.ad_targeting_type,
+        
+        // Additional fields
+        landing_page: call.landing_page,
+        referrer: call.referrer,
+        city: call.city,
+        state: call.state,
+        country: call.country,
+        recording_url: call.recording_url,
+        transcription: call.transcription,
+        tags: call.tags || [],
+        custom_fields: call.custom_fields || {},
+        
+        sync_date: new Date().toISOString().split('T')[0]
+      }));
+      
+      console.log(`[CTM Sync] ✓ Processed ${callRecords.length} call records`);
+    }
+
     return Response.json({
       success: true,
       account: accountMetadata,
       metrics,
+      callRecords,
       totalCalls: allCalls.length,
       dateRange: { startDate, endDate },
       summary: {
@@ -239,6 +292,7 @@ Deno.serve(async (req) => {
         total_calls: allCalls.length,
         days_with_data: metrics.length,
         pages_fetched: totalPages,
+        call_records_included: includeRawCalls,
         date_range: `${startDate} to ${endDate}`
       }
     });
