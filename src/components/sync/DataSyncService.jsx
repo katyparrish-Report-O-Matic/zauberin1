@@ -3,7 +3,6 @@ import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 import { googleAdsService } from "../integrations/GoogleAdsService";
 import { googleAnalyticsService } from "../integrations/GoogleAnalyticsService";
-import { callTrackingService } from "../integrations/CallTrackingService";
 import { dataTransformationService } from "../data/DataTransformationService";
 
 /**
@@ -268,29 +267,17 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data
+   * Sync call tracking data - using backend function
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
     let recordsCreated = 0;
     let recordsUpdated = 0;
 
-    // Step 1: Sync tracking numbers
+    // Step 1: Update progress
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Syncing tracking numbers',
+      current_step: 'Preparing to fetch call data',
       progress_percentage: 10
-    });
-
-    const hierarchyResult = await callTrackingService.syncTrackingNumbers(
-      dataSource.id,
-      dataSource.organization_id
-    );
-    recordsSynced += hierarchyResult.recordsSynced;
-
-    // Step 2: Fetch call metrics for each account
-    await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Fetching call metrics',
-      progress_percentage: 40
     });
 
     // Get account IDs from data source
@@ -307,16 +294,28 @@ class DataSyncService {
       throw new Error('No API credentials found for Call Tracking');
     }
 
-    // Fetch metrics for each account
+    // Step 2: Fetch call metrics for each account using backend function
+    await base44.entities.SyncJob.update(syncJob.id, {
+      current_step: 'Fetching call metrics from CTM API',
+      progress_percentage: 40
+    });
+
     for (const accountId of accountIds) {
       environmentConfig.log('info', `[DataSync] Fetching call metrics for account ${accountId}`);
 
-      const callMetrics = await callTrackingService.fetchCallMetrics(
+      // Call backend function to avoid CORS
+      const result = await base44.functions.syncCallTrackingData({
         accountId,
-        syncJob.date_range.start_date,
-        syncJob.date_range.end_date,
-        apiKey  // Single credential - service will parse it
-      );
+        startDate: syncJob.date_range.start_date,
+        endDate: syncJob.date_range.end_date,
+        apiKey
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch call data');
+      }
+
+      const callMetrics = result.metrics;
 
       // Transform and store
       const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];
