@@ -7,19 +7,22 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Moon, Calendar as CalendarIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
-export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false }) {
+export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false, accounts = [] }) {
   const [title, setTitle] = useState('');
   const [request, setRequest] = useState('');
   const [dateRange, setDateRange] = useState({ from: null, to: null });
+  const [selectedAccount, setSelectedAccount] = useState('all');
 
   const handleGenerate = () => {
     if (request.trim()) {
       onGenerateReport({ 
         title: title || 'Call Tracking Report', 
         description: request,
-        dateRange
+        dateRange,
+        account: selectedAccount
       });
     }
   };
@@ -49,6 +52,28 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="account-select">Filter by Dealer (optional)</Label>
+          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+            <SelectTrigger id="account-select">
+              <SelectValue placeholder="Select dealer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Dealers</SelectItem>
+              {accounts.map(account => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.name} {account.region && `(${account.region})`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {accounts.length === 0 && (
+            <p className="text-xs text-gray-500">
+              No dealers configured yet. Showing all data.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">

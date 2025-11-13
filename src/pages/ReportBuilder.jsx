@@ -52,6 +52,23 @@ export default function ReportBuilder() {
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
 
+  // Fetch accounts for dropdown
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['accountHierarchy', selectedOrgId || currentUser?.organization_id],
+    queryFn: async () => {
+      const orgId = selectedOrgId || currentUser?.organization_id;
+      if (!orgId || orgId === 'all') return [];
+      
+      const accounts = await base44.entities.AccountHierarchy.filter({
+        organization_id: orgId,
+        hierarchy_level: 'account'
+      });
+      return accounts;
+    },
+    enabled: !!(selectedOrgId || currentUser?.organization_id),
+    initialData: []
+  });
+
   // Fetch API settings for current/selected organization
   const { data: apiSettings } = useQuery({
     queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
@@ -271,18 +288,32 @@ export default function ReportBuilder() {
         dateContext = `Date range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`;
       }
 
+      // Build account context
+      let accountContext = '';
+      if (request.account && request.account !== 'all') {
+        const selectedAccount = accounts.find(a => a.id === request.account);
+        if (selectedAccount) {
+          accountContext = `Filter for dealer: ${selectedAccount.name} (account_id: ${selectedAccount.external_id})`;
+        }
+      }
+
       // Use TableQueryService to generate table config from natural language
       console.log('[ReportBuilder] 📝 Translating natural language to query...');
       const tableConfig = await tableQueryService.generateTableFromRequest(
         request.description,
         orgId,
-        dateContext
+        dateContext,
+        accountContext
       );
 
       console.log('[ReportBuilder] 🔍 Querying real CallRecord data...');
       
       // Execute query to get real data
-      const realData = await tableQueryService.executeTableQuery(tableConfig, orgId);
+      const realData = await tableQueryService.executeTableQuery(
+        tableConfig, 
+        orgId,
+        request.account && request.account !== 'all' ? request.account : null
+      );
 
       console.log(`[ReportBuilder] ✅ Retrieved ${realData.length} real records`);
 
@@ -341,7 +372,8 @@ export default function ReportBuilder() {
       console.log('[ReportBuilder] 🔄 Loading saved report...');
       const realData = await tableQueryService.executeTableQuery(
         report.configuration,
-        report.organization_id
+        report.organization_id,
+        report.account && report.account !== 'all' ? report.account : null
       );
       
       setReportData({
@@ -500,7 +532,8 @@ export default function ReportBuilder() {
       try {
         const realData = await tableQueryService.executeTableQuery(
           configuration,
-          currentReport.organization_id
+          currentReport.organization_id,
+          currentReport.account
         );
         setReportData({
           config: configuration,
@@ -559,6 +592,7 @@ export default function ReportBuilder() {
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
                 disabled={!canEdit}
+                accounts={accounts}
               />
               
               <AnnotationManager 
@@ -642,7 +676,7 @@ export default function ReportBuilder() {
         </div>
       </div>
 
-      {/* Save as Template Dialog */}
+      {/* Dialogs remain the same */}
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
         <DialogContent>
           <DialogHeader>
@@ -694,7 +728,6 @@ export default function ReportBuilder() {
         </DialogContent>
       </Dialog>
 
-      {/* Email Report Dialog */}
       <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
         <DialogContent>
           <DialogHeader>

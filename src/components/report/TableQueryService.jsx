@@ -3,18 +3,17 @@ import { environmentConfig } from "../config/EnvironmentConfig";
 
 /**
  * Table Query Service
- * Handles natural language to SQL-like queries for complex table generation
+ * Translates natural language to database queries for real CallRecord data
  */
 class TableQueryService {
   
   /**
-   * Generate table configuration from natural language
+   * Generate table configuration AND fetch data from natural language
    */
-  async generateTableConfig(naturalLanguageRequest, organizationId, accountId = null) {
+  async generateTableFromRequest(naturalLanguageRequest, organizationId, dateContext = '', accountContext = '') {
     try {
       environmentConfig.log('info', '[TableQuery] Processing NL request:', naturalLanguageRequest);
 
-      // Build context about available data
       const availableMetrics = [
         'total_calls',
         'answered_calls', 
@@ -28,39 +27,33 @@ class TableQueryService {
       ];
 
       const availableDimensions = [
-        'dealer/account_name',
+        'account_name (dealer name)',
         'region',
         'date',
-        'call_status',
-        'tracking_source',
-        'campaign',
-        'keyword'
+        'call_status'
       ];
 
       // Use LLM to interpret the request
       const config = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a business intelligence expert helping create data tables like Looker Studio.
+        prompt: `You are a business intelligence expert creating Looker-style data tables.
 
 User's request: "${naturalLanguageRequest}"
+${dateContext}
+${accountContext}
 
 Available metrics: ${availableMetrics.join(', ')}
 Available dimensions: ${availableDimensions.join(', ')}
 
 IMPORTANT RULES:
-1. Identify what dimensions to GROUP BY (dealer, region, date, etc.)
-2. Identify what metrics to display as columns
-3. Determine aggregation types (sum, avg, count)
-4. Decide if subtotals and grand totals are needed
-5. Determine appropriate column formatting (number, percentage, duration)
-6. Default to showing dealer/account if not specified
+1. Identify dimensions to GROUP BY (account_name=dealer, region, date)
+2. Metrics should be aggregated (sum for counts, avg for rates/durations)
+3. ALWAYS include account_name (dealer) unless user specifically says otherwise
+4. For "by region and dealer" → groupBy: ["region", "account_name"]
+5. For "by dealer" → groupBy: ["account_name"]
+6. Show subtotals when grouping by multiple levels
+7. Format percentages (answer_rate), numbers (calls), durations (seconds)
 
-Examples:
-- "Show calls by dealer" → Group by dealer, show call metrics
-- "Regional breakdown of calls" → Group by region, then dealer
-- "Daily call report for all dealers" → Group by date, then dealer
-- "Compare dealers within each region" → Group by region, then dealer
-
-Generate a complete table configuration.`,
+Generate a complete table configuration that queries REAL data.`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -69,48 +62,34 @@ Generate a complete table configuration.`,
             groupBy: { 
               type: "array",
               items: { type: "string" },
-              description: "Dimensions to group by (e.g., ['region', 'account_name'] or ['account_name'])"
+              description: "Dimensions to group by, e.g., ['region', 'account_name']"
             },
             columns: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  key: { type: "string", description: "Field name" },
+                  key: { type: "string", description: "Field name from CallRecord" },
                   label: { type: "string", description: "Display label" },
                   format: { 
                     type: "string", 
-                    enum: ["number", "percentage", "duration", "currency", "text"],
+                    enum: ["number", "percentage", "duration", "text"],
                     description: "How to format values"
+                  },
+                  aggregation: {
+                    type: "string",
+                    enum: ["sum", "avg", "count"],
+                    description: "How to aggregate this metric"
                   },
                   align: { 
                     type: "string", 
-                    enum: ["left", "right", "center"],
-                    description: "Column alignment"
+                    enum: ["left", "right", "center"]
                   }
                 }
               }
             },
-            aggregations: {
-              type: "object",
-              description: "How to aggregate each column",
-              additionalProperties: {
-                type: "object",
-                properties: {
-                  type: { 
-                    type: "string", 
-                    enum: ["sum", "avg", "count", "min", "max"],
-                    description: "Aggregation type"
-                  }
-                }
-              }
-            },
-            showSubtotals: { type: "boolean", description: "Show subtotals for groups" },
-            showGrandTotal: { type: "boolean", description: "Show grand total row" },
-            filters: {
-              type: "object",
-              description: "Any filters to apply"
-            },
+            showSubtotals: { type: "boolean" },
+            showGrandTotal: { type: "boolean" },
             sortBy: {
               type: "object",
               properties: {
@@ -119,9 +98,13 @@ Generate a complete table configuration.`,
               }
             }
           },
-          required: ["title", "groupBy", "columns", "aggregations"]
+          required: ["title", "groupBy", "columns"]
         }
       });
+
+      // Ensure we have proper defaults
+      config.showSubtotals = config.showSubtotals ?? true;
+      config.showGrandTotal = config.showGrandTotal ?? true;
 
       environmentConfig.log('info', '[TableQuery] Generated config:', config);
 
@@ -134,58 +117,43 @@ Generate a complete table configuration.`,
   }
 
   /**
-   * Execute query and fetch data for the table
+   * Execute query to fetch real CallRecord data
    */
-  async executeQuery(config, organizationId, dateRange, accountId = null) {
+  async executeTableQuery(config, organizationId, accountId = null) {
     try {
-      environmentConfig.log('info', '[TableQuery] Executing query with config:', config);
+      environmentConfig.log('info', '[TableQuery] Executing query for organization:', organizationId);
 
-      const { groupBy, filters = {} } = config;
-
-      // Determine what entity to query
-      const needsCallRecords = groupBy.includes('date') || 
-                               groupBy.includes('call_status') ||
-                               groupBy.includes('tracking_source') ||
-                               filters.call_status ||
-                               filters.tracking_source;
-
-      if (needsCallRecords) {
-        return await this.queryCallRecords(organizationId, dateRange, accountId, filters);
-      } else {
-        return await this.queryAggregatedMetrics(organizationId, dateRange, accountId, config);
-      }
-
-    } catch (error) {
-      environmentConfig.log('error', '[TableQuery] Query error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Query call records for detailed reporting
-   */
-  async queryCallRecords(organizationId, dateRange, accountId = null, filters = {}) {
-    try {
+      // Build filter for CallRecord query
       const queryFilter = {
         organization_id: organizationId
       };
 
+      // Filter by specific account if provided
       if (accountId && accountId !== 'all') {
-        queryFilter.account_id = accountId;
+        queryFilter.id = accountId; // This filters AccountHierarchy by ID
+        // We need to get the external_id to filter CallRecord
+        const accountHierarchy = await base44.entities.AccountHierarchy.filter({ id: accountId });
+        if (accountHierarchy.length > 0) {
+          const externalId = accountHierarchy[0].external_id;
+          queryFilter.account_id = externalId;
+        }
       }
 
-      if (dateRange?.from) {
-        // Filter by date range in query
-        // Note: This is a simplified version, you'd need to handle date filtering properly
+      // Fetch call records
+      environmentConfig.log('info', '[TableQuery] Fetching CallRecords with filter:', queryFilter);
+      const callRecords = await base44.entities.CallRecord.filter(queryFilter, '-start_time', 1000);
+
+      environmentConfig.log('info', `[TableQuery] Fetched ${callRecords.length} call records`);
+
+      if (callRecords.length === 0) {
+        return [];
       }
 
-      const records = await base44.entities.CallRecord.filter(queryFilter, '-start_time', 1000);
-
-      // Transform to table format
-      const tableData = records.map(record => ({
+      // Transform to table format with all metrics
+      const tableData = callRecords.map(record => ({
         date: record.start_time ? record.start_time.split('T')[0] : null,
-        account_name: record.account_name,
-        region: record.region,
+        account_name: record.account_name || 'Unknown',
+        region: record.region || 'Unknown',
         total_calls: 1,
         answered_calls: record.call_status === 'answered' ? 1 : 0,
         voicemail_calls: record.is_voicemail ? 1 : 0,
@@ -194,99 +162,15 @@ Generate a complete table configuration.`,
         after_hours_calls: !record.is_working_hours ? 1 : 0,
         qualified_calls: record.qualified ? 1 : 0,
         call_duration: record.talk_time || 0,
-        call_status: record.call_status,
-        tracking_source: record.web_source
+        call_status: record.call_status || 'unknown'
       }));
 
-      environmentConfig.log('info', `[TableQuery] Fetched ${tableData.length} call records`);
+      environmentConfig.log('info', `[TableQuery] Transformed to ${tableData.length} table rows`);
 
       return tableData;
 
     } catch (error) {
-      environmentConfig.log('error', '[TableQuery] CallRecord query error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Query aggregated metrics (faster for summary reports)
-   */
-  async queryAggregatedMetrics(organizationId, dateRange, accountId, config) {
-    try {
-      // Fetch from TransformedMetric entity
-      const metricNames = config.columns
-        .filter(col => !config.groupBy.includes(col.key))
-        .map(col => col.key);
-
-      const metricsData = {};
-
-      for (const metricName of metricNames) {
-        const metrics = await base44.entities.TransformedMetric.filter({
-          metric_name: metricName
-        }, '-period_start', 500);
-
-        // Filter by organization and date range
-        const filtered = metrics.filter(m => {
-          const matchesOrg = m.segment?.data_source_id; // Has data source means it's synced
-          
-          if (accountId && accountId !== 'all') {
-            const matchesAccount = m.segment?.account_id === accountId;
-            if (!matchesAccount) return false;
-          }
-
-          if (dateRange?.from) {
-            const metricDate = new Date(m.period_start);
-            const fromDate = new Date(dateRange.from);
-            const toDate = dateRange.to ? new Date(dateRange.to) : new Date();
-            
-            if (metricDate < fromDate || metricDate > toDate) return false;
-          }
-
-          return matchesOrg;
-        });
-
-        metricsData[metricName] = filtered;
-      }
-
-      // Combine metrics into table rows
-      const tableData = [];
-      const seenKeys = new Set();
-
-      Object.keys(metricsData).forEach(metricName => {
-        metricsData[metricName].forEach(metric => {
-          const rowKey = `${metric.segment?.account_id}_${metric.segment?.region}_${metric.period_start}`;
-          
-          if (!seenKeys.has(rowKey)) {
-            seenKeys.add(rowKey);
-            
-            const row = {
-              date: metric.period_start ? metric.period_start.split('T')[0] : null,
-              account_name: metric.segment?.account_name || 'Unknown',
-              region: metric.segment?.region || 'Unknown'
-            };
-
-            // Add all metrics for this row
-            Object.keys(metricsData).forEach(mn => {
-              const matchingMetric = metricsData[mn].find(m => {
-                return m.segment?.account_id === metric.segment?.account_id &&
-                       m.segment?.region === metric.segment?.region &&
-                       m.period_start === metric.period_start;
-              });
-              
-              row[mn] = matchingMetric ? matchingMetric.aggregated_value : 0;
-            });
-
-            tableData.push(row);
-          }
-        });
-      });
-
-      environmentConfig.log('info', `[TableQuery] Generated ${tableData.length} aggregated rows`);
-
-      return tableData;
-
-    } catch (error) {
-      environmentConfig.log('error', '[TableQuery] Metrics query error:', error);
+      environmentConfig.log('error', '[TableQuery] Query error:', error);
       throw error;
     }
   }
