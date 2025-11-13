@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -27,7 +28,7 @@ import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
-import { cacheService } from "../components/cache/CacheService";
+import { cacheService }1 from "../components/cache/CacheService";
 import { environmentConfig } from "../components/config/EnvironmentConfig";
 import DataFreshnessIndicator from "../components/report/DataFreshnessIndicator";
 import AnnotationManager from "../components/report/AnnotationManager";
@@ -53,23 +54,6 @@ export default function ReportBuilder() {
   // Check if user can edit - admins and editors can edit
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
-
-  // Fetch accounts for dropdown
-  const { data: accounts = [] } = useQuery({
-    queryKey: ['accountHierarchy', selectedOrgId || currentUser?.organization_id],
-    queryFn: async () => {
-      const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') return [];
-      
-      const accounts = await base44.entities.AccountHierarchy.filter({
-        organization_id: orgId,
-        hierarchy_level: 'account'
-      });
-      return accounts;
-    },
-    enabled: !!(selectedOrgId || currentUser?.organization_id),
-    initialData: []
-  });
 
   // Fetch API settings for current/selected organization
   const { data: apiSettings } = useQuery({
@@ -289,11 +273,6 @@ export default function ReportBuilder() {
         }
       }
 
-      // Build account context
-      const accountContext = request.account && request.account !== 'all' 
-        ? `Filter data for account ID: ${request.account}.`
-        : '';
-
       // Use LLM to interpret the request and generate configuration
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `You are a business intelligence expert helping staff create data visualizations.
@@ -301,7 +280,6 @@ export default function ReportBuilder() {
 User's request: "${request.description}"
 
 ${dateContext}
-${accountContext}
 
 IMPORTANT INSTRUCTIONS:
 1. Identify what metrics they want to see (revenue, users, conversions, engagement, etc.)
@@ -811,7 +789,6 @@ Generate a complete report configuration that captures their intent.`,
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
                 disabled={!canEdit}
-                accounts={accounts}
               />
               
               <AnnotationManager 
@@ -826,7 +803,6 @@ Generate a complete report configuration that captures their intent.`,
                 onEmailReport={handleEmailReport}
                 onDownloadPDF={handleDownloadPDF}
                 canDelete={canDelete}
-                accounts={accounts}
               />
             </div>
 

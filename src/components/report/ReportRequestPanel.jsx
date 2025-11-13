@@ -1,50 +1,43 @@
 import React, { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Loader2, Moon, Calendar as CalendarIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, Moon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import AccountSelector from "../books/AccountSelector";
 
-export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled, organizationId }) {
+export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false }) {
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [account, setAccount] = useState('all');
-  const [dateRange, setDateRange] = useState({
-    from: undefined,
-    to: undefined
-  });
+  const [request, setRequest] = useState('');
+  const [dateRange, setDateRange] = useState({ from: null, to: null });
 
   const handleGenerate = () => {
-    if (!description.trim()) {
-      return;
+    if (request.trim()) {
+      onGenerateReport({ 
+        title: title || 'Custom Report', 
+        description: request,
+        dateRange
+      });
     }
-
-    onGenerateReport({
-      title: title || 'Untitled Report',
-      description,
-      account,
-      dateRange
-    });
   };
 
-  const examplePrompts = [
-    "Show me total calls by tracking number as a bar chart",
-    "Display daily call trends for the last 30 days as a line chart",
-    "Break down answered vs missed calls by source as a pie chart",
-    "Show me revenue by region in a table with daily breakdown"
+  const exampleRequests = [
+    "Show me revenue by branch for the last 30 days as a bar chart",
+    "Compare sales across all regions this quarter with a line graph",
+    "Display a pie chart of conversions broken down by branch",
+    "Create a table showing daily revenue for each branch and region",
+    "Show me user engagement trends by region over the past month"
   ];
 
   return (
-    <Card>
+    <Card className="border-gray-300">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Moon className="w-5 h-5" />
-          Describe Your Report
+          Create Bespoke Report
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -52,19 +45,11 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
           <Label htmlFor="report-title">Report Title (optional)</Label>
           <Input
             id="report-title"
-            placeholder="e.g., Monthly Sales Performance"
+            placeholder="e.g., Q4 Sales by Branch"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            disabled={disabled}
           />
         </div>
-
-        <AccountSelector
-          organizationId={organizationId}
-          value={account}
-          onChange={setAccount}
-          showLabel={true}
-        />
 
         <div className="space-y-2">
           <Label>Date Range (optional)</Label>
@@ -75,10 +60,10 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
                 {dateRange.from ? (
                   dateRange.to ? (
                     <>
-                      {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                      {format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")}
                     </>
                   ) : (
-                    format(dateRange.from, "LLL dd, y")
+                    format(dateRange.from, "MMM d, yyyy")
                   )
                 ) : (
                   <span>Pick a date range</span>
@@ -87,11 +72,9 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
-                initialFocus
                 mode="range"
-                defaultMonth={dateRange.from}
                 selected={dateRange}
-                onSelect={setDateRange}
+                onSelect={(range) => setDateRange(range || { from: null, to: null })}
                 numberOfMonths={2}
               />
             </PopoverContent>
@@ -99,23 +82,36 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="report-description">What would you like to visualize? *</Label>
+          <Label htmlFor="report-request">What would you like to visualize?</Label>
           <Textarea
-            id="report-description"
-            placeholder="Describe what you want to see. Examples: 'Show revenue by branch as a bar chart', 'Display daily call trends', 'Compare conversion rates across regions'"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            disabled={disabled}
+            id="report-request"
+            placeholder="Describe the report you want... Include metrics, time periods, and segmentation (by branch, region, etc.)"
+            value={request}
+            onChange={(e) => setRequest(e.target.value)}
+            rows={6}
+            className="resize-none"
           />
+          <p className="text-xs text-gray-500">
+            Tip: Mention "by branch" or "by region" to segment your data
+          </p>
         </div>
 
         <Button 
-          className="w-full" 
           onClick={handleGenerate}
-          disabled={!description.trim() || isGenerating || disabled}
+          disabled={!request.trim() || isGenerating || disabled}
+          className="w-full gap-2"
         >
-          {isGenerating ? 'Generating...' : 'Generate Report'}
+          {isGenerating ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Generating Report...
+            </>
+          ) : (
+            <>
+              <Moon className="w-4 h-4" />
+              Generate Report
+            </>
+          )}
         </Button>
 
         {disabled && (
@@ -124,18 +120,19 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
           </p>
         )}
 
-        <div className="border-t pt-4 space-y-2">
-          <p className="text-sm font-medium text-gray-700">Example prompts:</p>
-          {examplePrompts.map((prompt, idx) => (
-            <button
-              key={idx}
-              onClick={() => setDescription(prompt)}
-              className="block w-full text-left text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 p-2 rounded transition-colors"
-              disabled={disabled}
-            >
-              🌙 {prompt}
-            </button>
-          ))}
+        <div className="pt-4 border-t">
+          <p className="text-sm font-medium text-gray-700 mb-2">Example requests:</p>
+          <div className="space-y-2">
+            {exampleRequests.map((example, idx) => (
+              <button
+                key={idx}
+                onClick={() => setRequest(example)}
+                className="text-xs text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 p-2 rounded block w-full transition-colors"
+              >
+                "{example}"
+              </button>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
