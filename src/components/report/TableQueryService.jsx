@@ -8,9 +8,9 @@ import { environmentConfig } from "../config/EnvironmentConfig";
 class TableQueryService {
   
   /**
-   * Generate table configuration AND fetch data from natural language
+   * Generate table configuration from natural language
    */
-  async generateTableFromRequest(naturalLanguageRequest, organizationId, dateContext = '', accountContext = '') {
+  async generateTableFromRequest(naturalLanguageRequest, organizationId, dateContext = '') {
     try {
       environmentConfig.log('info', '[TableQuery] Processing NL request:', naturalLanguageRequest);
 
@@ -39,7 +39,6 @@ class TableQueryService {
 
 User's request: "${naturalLanguageRequest}"
 ${dateContext}
-${accountContext}
 
 Available metrics: ${availableMetrics.join(', ')}
 Available dimensions: ${availableDimensions.join(', ')}
@@ -119,27 +118,15 @@ Generate a complete table configuration that queries REAL data.`,
   /**
    * Execute query to fetch real CallRecord data
    */
-  async executeTableQuery(config, organizationId, accountId = null) {
+  async executeTableQuery(config, organizationId) {
     try {
       environmentConfig.log('info', '[TableQuery] Executing query for organization:', organizationId);
 
-      // Build filter for CallRecord query
+      // Fetch call records for this organization
       const queryFilter = {
         organization_id: organizationId
       };
 
-      // Filter by specific account if provided
-      if (accountId && accountId !== 'all') {
-        queryFilter.id = accountId; // This filters AccountHierarchy by ID
-        // We need to get the external_id to filter CallRecord
-        const accountHierarchy = await base44.entities.AccountHierarchy.filter({ id: accountId });
-        if (accountHierarchy.length > 0) {
-          const externalId = accountHierarchy[0].external_id;
-          queryFilter.account_id = externalId;
-        }
-      }
-
-      // Fetch call records
       environmentConfig.log('info', '[TableQuery] Fetching CallRecords with filter:', queryFilter);
       const callRecords = await base44.entities.CallRecord.filter(queryFilter, '-start_time', 1000);
 

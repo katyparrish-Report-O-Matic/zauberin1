@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Download, Save, AlertCircle, AlertTriangle, BookTemplate } from "lucide-react";
+import { Download, Save, AlertCircle, BookTemplate } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -27,7 +27,6 @@ import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
 import { cacheService } from "../components/cache/CacheService";
-import { environmentConfig } from "../components/config/EnvironmentConfig";
 import DataFreshnessIndicator from "../components/report/DataFreshnessIndicator";
 import AnnotationManager from "../components/report/AnnotationManager";
 import ReportVersionManager, { saveReportVersion } from "../components/report/ReportVersionManager";
@@ -52,24 +51,7 @@ export default function ReportBuilder() {
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
 
-  // Fetch accounts for dropdown
-  const { data: accounts = [] } = useQuery({
-    queryKey: ['accountHierarchy', selectedOrgId || currentUser?.organization_id],
-    queryFn: async () => {
-      const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') return [];
-      
-      const accounts = await base44.entities.AccountHierarchy.filter({
-        organization_id: orgId,
-        hierarchy_level: 'account'
-      });
-      return accounts;
-    },
-    enabled: !!(selectedOrgId || currentUser?.organization_id),
-    initialData: []
-  });
-
-  // Fetch API settings for current/selected organization
+  // Fetch API settings
   const { data: apiSettings } = useQuery({
     queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
@@ -82,7 +64,7 @@ export default function ReportBuilder() {
     enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
 
-  // Fetch saved reports filtered by organization (with caching)
+  // Fetch saved reports
   const { data: savedReports = [] } = useQuery({
     queryKey: ['reportRequests', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
@@ -114,8 +96,7 @@ export default function ReportBuilder() {
       );
     },
     initialData: [],
-    staleTime: 5 * 60 * 1000,
-    cacheTime: 30 * 60 * 1000
+    staleTime: 5 * 60 * 1000
   });
 
   // Save report mutation
@@ -200,16 +181,15 @@ export default function ReportBuilder() {
           grid_layout: [],
           refresh_interval: null
         },
-        metric_configs: currentReport.configuration.metrics?.map(metric => ({
-          metric_name: metric,
+        metric_configs: currentReport.configuration.columns?.map(col => ({
+          metric_name: col.key,
           display_type: 'table',
-          grouping: currentReport.configuration.grouping || []
+          grouping: currentReport.configuration.groupBy || []
         })) || [],
-        filter_presets: currentReport.configuration.filters || {},
+        filter_presets: {},
         chart_settings: {
           display_type: 'table',
-          date_range: currentReport.configuration.date_range,
-          grouping: currentReport.configuration.grouping || []
+          grouping: currentReport.configuration.groupBy || []
         },
         is_public: false,
         usage_count: 0,
@@ -281,20 +261,10 @@ export default function ReportBuilder() {
           dateContext = `Start date: ${format(request.dateRange.from, 'yyyy-MM-dd')}`;
         }
       } else {
-        // Default to last 30 days
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(endDate.getDate() - 30);
         dateContext = `Date range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`;
-      }
-
-      // Build account context
-      let accountContext = '';
-      if (request.account && request.account !== 'all') {
-        const selectedAccount = accounts.find(a => a.id === request.account);
-        if (selectedAccount) {
-          accountContext = `Filter for dealer: ${selectedAccount.name} (account_id: ${selectedAccount.external_id})`;
-        }
       }
 
       // Use TableQueryService to generate table config from natural language
@@ -302,18 +272,13 @@ export default function ReportBuilder() {
       const tableConfig = await tableQueryService.generateTableFromRequest(
         request.description,
         orgId,
-        dateContext,
-        accountContext
+        dateContext
       );
 
       console.log('[ReportBuilder] 🔍 Querying real CallRecord data...');
       
       // Execute query to get real data
-      const realData = await tableQueryService.executeTableQuery(
-        tableConfig, 
-        orgId,
-        request.account && request.account !== 'all' ? request.account : null
-      );
+      const realData = await tableQueryService.executeTableQuery(tableConfig, orgId);
 
       console.log(`[ReportBuilder] ✅ Retrieved ${realData.length} real records`);
 
@@ -372,8 +337,7 @@ export default function ReportBuilder() {
       console.log('[ReportBuilder] 🔄 Loading saved report...');
       const realData = await tableQueryService.executeTableQuery(
         report.configuration,
-        report.organization_id,
-        report.account && report.account !== 'all' ? report.account : null
+        report.organization_id
       );
       
       setReportData({
@@ -528,12 +492,10 @@ export default function ReportBuilder() {
         changeSummary: 'Restored previous version'
       });
       
-      // Reload with new config
       try {
         const realData = await tableQueryService.executeTableQuery(
           configuration,
-          currentReport.organization_id,
-          currentReport.account
+          currentReport.organization_id
         );
         setReportData({
           config: configuration,
@@ -586,13 +548,12 @@ export default function ReportBuilder() {
 
           {/* Main Layout */}
           <div className="grid lg:grid-cols-12 gap-6">
-            {/* Left Panel - Request Builder */}
+            {/* Left Panel */}
             <div className="lg:col-span-4 space-y-6">
               <ReportRequestPanel 
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
                 disabled={!canEdit}
-                accounts={accounts}
               />
               
               <AnnotationManager 
@@ -610,7 +571,7 @@ export default function ReportBuilder() {
               />
             </div>
 
-            {/* Right Panel - Report Display */}
+            {/* Right Panel */}
             <div className="lg:col-span-8 space-y-4">
               {currentReport && (
                 <div className="flex justify-between items-center gap-2">
@@ -676,7 +637,7 @@ export default function ReportBuilder() {
         </div>
       </div>
 
-      {/* Dialogs remain the same */}
+      {/* Save as Template Dialog */}
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
         <DialogContent>
           <DialogHeader>
@@ -705,17 +666,6 @@ export default function ReportBuilder() {
                 rows={3}
               />
             </div>
-            {currentReport?.configuration && (
-              <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-1">
-                <p className="font-medium text-gray-700">Template will include:</p>
-                <ul className="list-disc list-inside text-gray-600">
-                  <li>Metrics: {currentReport.configuration.columns?.map(c => c.label).join(', ') || 'Call metrics'}</li>
-                  {currentReport.configuration.grouping?.length > 0 && (
-                    <li>Grouping: {currentReport.configuration.grouping.join(', ')}</li>
-                  )}
-                </ul>
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTemplateDialog(false)}>
@@ -728,6 +678,7 @@ export default function ReportBuilder() {
         </DialogContent>
       </Dialog>
 
+      {/* Email Report Dialog */}
       <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
         <DialogContent>
           <DialogHeader>
@@ -747,15 +698,6 @@ export default function ReportBuilder() {
                 onChange={(e) => setEmailRecipient(e.target.value)}
               />
             </div>
-            {currentReport && (
-              <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-1">
-                <p className="font-medium text-gray-700">Report Details:</p>
-                <ul className="list-disc list-inside text-gray-600">
-                  <li>Title: {currentReport.title}</li>
-                  <li>Records: {reportData?.data?.length || 0}</li>
-                </ul>
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEmailDialog(false)}>
