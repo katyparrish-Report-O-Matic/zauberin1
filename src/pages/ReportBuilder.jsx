@@ -19,10 +19,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { format } from 'date-fns';
 
 import ReportRequestPanel from "../components/report/ReportRequestPanel";
-import ReportCanvas from "../components/report/ReportCanvas";
+import AdvancedTableGenerator from "../components/report/AdvancedTableGenerator";
 import SavedReportsList from "../components/report/SavedReportsList";
 import DataQualityIndicator from "../components/data/DataQualityIndicator";
-import { dataTransformationService } from "../components/data/DataTransformationService";
 import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
@@ -32,13 +31,13 @@ import { environmentConfig } from "../components/config/EnvironmentConfig";
 import DataFreshnessIndicator from "../components/report/DataFreshnessIndicator";
 import AnnotationManager from "../components/report/AnnotationManager";
 import ReportVersionManager, { saveReportVersion } from "../components/report/ReportVersionManager";
+import { tableQueryService } from "../components/report/TableQueryService";
 
 export default function ReportBuilder() {
   const queryClient = useQueryClient();
   const [currentReport, setCurrentReport] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [dataQuality, setDataQuality] = useState(null);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
@@ -50,7 +49,6 @@ export default function ReportBuilder() {
 
   const { currentUser, isAgency, hasPermission } = usePermissions();
 
-  // Check if user can edit - admins and editors can edit
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
 
@@ -73,13 +71,11 @@ export default function ReportBuilder() {
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
       
-      // Generate cache key
       const cacheKey = cacheService.generateKey('report', { 
         organization_id: orgId,
         view: isAgency && selectedOrgId === 'all' ? 'all' : 'filtered'
       });
 
-      // Try cached first
       return await cacheService.cached(
         cacheKey,
         async () => {
@@ -96,7 +92,7 @@ export default function ReportBuilder() {
         {
           type: 'report',
           organizationId: orgId,
-          ttl: 7200 // 2 hours
+          ttl: 7200
         }
       );
     },
@@ -105,12 +101,11 @@ export default function ReportBuilder() {
     cacheTime: 30 * 60 * 1000
   });
 
-  // Save report mutation (with cache invalidation & versioning)
+  // Save report mutation
   const saveReportMutation = useMutation({
     mutationFn: async (report) => {
       const savedReport = await base44.entities.ReportRequest.create(report);
       
-      // Create initial version
       if (savedReport && savedReport.id) {
         await saveReportVersion(
           savedReport.id,
@@ -133,12 +128,11 @@ export default function ReportBuilder() {
     }
   });
 
-  // Update report mutation (with versioning)
+  // Update report mutation
   const updateReportMutation = useMutation({
     mutationFn: async ({ reportId, updates, changeSummary }) => {
       const updated = await base44.entities.ReportRequest.update(reportId, updates);
       
-      // Save new version
       if (updated && updated.configuration) {
         await saveReportVersion(
           reportId,
@@ -167,7 +161,6 @@ export default function ReportBuilder() {
       toast.success('Report deleted');
       setCurrentReport(null);
       setReportData(null);
-      setDataQuality(null);
     },
     onError: (error) => {
       toast.error('Failed to delete report');
@@ -192,18 +185,18 @@ export default function ReportBuilder() {
         },
         metric_configs: currentReport.configuration.metrics?.map(metric => ({
           metric_name: metric,
-          chart_type: currentReport.configuration.chart_type,
-          segment_by: currentReport.configuration.segment_by || []
+          display_type: 'table',
+          grouping: currentReport.configuration.grouping || []
         })) || [],
         filter_presets: currentReport.configuration.filters || {},
         chart_settings: {
-          chart_type: currentReport.configuration.chart_type,
+          display_type: 'table',
           date_range: currentReport.configuration.date_range,
-          segment_by: currentReport.configuration.segment_by || []
+          grouping: currentReport.configuration.grouping || []
         },
         is_public: false,
         usage_count: 0,
-        tags: ['custom', currentReport.configuration.chart_type]
+        tags: ['custom', 'call_tracking']
       });
     },
     onSuccess: () => {
@@ -224,7 +217,6 @@ export default function ReportBuilder() {
       const emailBody = `
         <h2>${report.title}</h2>
         <p>${report.description}</p>
-        <p><strong>Chart Type:</strong> ${report.configuration?.chart_type || 'N/A'}</p>
         <p><strong>Created:</strong> ${format(new Date(report.created_date), "MMMM d, yyyy 'at' h:mm a")}</p>
         <p>View full report in the dashboard.</p>
       `;
@@ -259,294 +251,63 @@ export default function ReportBuilder() {
     }
 
     setIsGenerating(true);
-    setDataQuality(null);
 
     try {
-      // Build date range context for LLM
+      console.log('[ReportBuilder] 🚀 Generating report from real CTM data...');
+
+      // Build date range context
       let dateContext = '';
       if (request.dateRange?.from) {
         if (request.dateRange.to) {
-          dateContext = `The report should cover the period from ${format(request.dateRange.from, 'MMMM d, yyyy')} to ${format(request.dateRange.to, 'MMMM d, yyyy')}.`;
+          dateContext = `Date range: ${format(request.dateRange.from, 'yyyy-MM-dd')} to ${format(request.dateRange.to, 'yyyy-MM-dd')}`;
         } else {
-          dateContext = `The report should start from ${format(request.dateRange.from, 'MMMM d, yyyy')}.`;
+          dateContext = `Start date: ${format(request.dateRange.from, 'yyyy-MM-dd')}`;
         }
+      } else {
+        // Default to last 30 days
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 30);
+        dateContext = `Date range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`;
       }
 
-      // Use LLM to interpret the request and generate configuration
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a business intelligence expert helping staff create data visualizations.
+      // Use TableQueryService to generate table config from natural language
+      console.log('[ReportBuilder] 📝 Translating natural language to query...');
+      const tableConfig = await tableQueryService.generateTableFromRequest(
+        request.description,
+        orgId,
+        dateContext
+      );
 
-User's request: "${request.description}"
+      console.log('[ReportBuilder] 🔍 Querying real CallRecord data...');
+      
+      // Execute query to get real data
+      const realData = await tableQueryService.executeTableQuery(tableConfig, orgId);
 
-${dateContext}
+      console.log(`[ReportBuilder] ✅ Retrieved ${realData.length} real records`);
 
-IMPORTANT INSTRUCTIONS:
-1. Identify what metrics they want to see (revenue, users, conversions, engagement, etc.)
-2. Detect if they want data SEGMENTED by dimensions like:
-   - Branch/Location (e.g., "by branch", "per location", "each store")
-   - Region (e.g., "by region", "regional breakdown", "per territory")
-   - Time period (e.g., "monthly", "weekly", "daily trends")
-   - Category/Product (e.g., "by product", "per category")
-3. Choose the most appropriate visualization:
-   - Line chart: for trends over time
-   - Bar chart: for comparing categories, branches, regions
-   - Pie chart: for showing proportions/distribution
-   - Table: for detailed data with multiple dimensions
-4. If they mention segmentation (branch, region, etc.), make sure to include that as a "segment_by" field
-5. Default to a reasonable time range if not specified (last 30 days)
-
-Generate a complete report configuration that captures their intent.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "A clear title for the report" },
-            description: { type: "string", description: "What the report shows" },
-            chart_type: { 
-              type: "string", 
-              enum: ["line", "bar", "pie", "table"],
-              description: "Most appropriate chart type for the request"
-            },
-            metrics: { 
-              type: "array", 
-              items: { type: "string" },
-              description: "List of metrics to display (e.g., revenue, users, conversions)"
-            },
-            segment_by: {
-              type: "array",
-              items: { type: "string" },
-              description: "Dimensions to segment by: branch, region, category, product, channel, etc."
-            },
-            date_range: { 
-              type: "object",
-              properties: {
-                period: { type: "string", description: "e.g., last_30_days, this_month, last_quarter" },
-                granularity: { type: "string", enum: ["daily", "weekly", "monthly"], description: "Time grouping" }
-              }
-            },
-            filters: { 
-              type: "object",
-              description: "Any specific filters mentioned"
-            }
-          },
-          required: ["title", "chart_type", "metrics"]
-        }
-      });
-
-      // Generate mock data based on configuration
-      const mockData = generateMockData(response);
-
-      // Transform data after generation
-      const result = await transformAndStoreData(response, mockData);
+      if (realData.length === 0) {
+        toast.warning('No data found for the specified criteria');
+      }
 
       setCurrentReport({
         ...request,
         organization_id: orgId,
-        configuration: response,
+        configuration: tableConfig,
         status: 'generated'
       });
-      setReportData(result.data);
-      setDataQuality(result.quality);
+      setReportData({
+        config: tableConfig,
+        data: realData
+      });
       
-      if (result.quality.quality_score < 80) {
-        toast.warning(`Data quality: ${result.quality.quality_score}/100`);
-      } else {
-        toast.success('Report generated successfully');
-      }
+      toast.success(`Report generated with ${realData.length} records`);
     } catch (error) {
       toast.error('Failed to generate report');
-      console.error(error);
+      console.error('[ReportBuilder] ❌ Error:', error);
     }
 
     setIsGenerating(false);
-  };
-
-  const transformAndStoreData = async (config, rawData) => {
-    const timePeriod = config.date_range?.granularity || 'daily';
-    const metricName = config.metrics?.[0] || 'value';
-
-    try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - 30);
-
-      const cached = await dataTransformationService.getCachedData(
-        metricName,
-        timePeriod,
-        startDate,
-        endDate,
-        selectedOrgId || currentUser?.organization_id
-      );
-
-      if (cached && cached.length > 0) {
-        console.log('[ReportBuilder] Using cached transformed data');
-        return {
-          data: rawData,
-          quality: {
-            quality_score: cached[0].data_quality_score || 100,
-            issues: []
-          }
-        };
-      }
-
-      const transformed = await dataTransformationService.transformData(rawData, {
-        metric_name: metricName,
-        time_period: timePeriod,
-        segment_by: config.segment_by,
-        organization_id: selectedOrgId || currentUser?.organization_id
-      });
-
-      return {
-        data: rawData,
-        quality: {
-          quality_score: transformed.quality_score,
-          issues: transformed.quality_issues
-        }
-      };
-    } catch (error) {
-      console.error('[ReportBuilder] Transform error:', error);
-      return {
-        data: rawData,
-        quality: { quality_score: 100, issues: [] }
-      };
-    }
-  };
-
-  const generateMockData = (config) => {
-    if (!environmentConfig.useMockData() && apiSettings?.api_url) {
-      environmentConfig.log('info', '[ReportBuilder] Using real API data');
-    }
-
-    environmentConfig.log('debug', '[ReportBuilder] Generating mock data for', config.chart_type);
-
-    const branches = ['North Branch', 'South Branch', 'East Branch', 'West Branch', 'Central Branch'];
-    const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America'];
-    const hasSegmentation = config.segment_by && config.segment_by.length > 0;
-    
-    if (config.chart_type === 'pie' && hasSegmentation) {
-      const segmentDimension = config.segment_by[0];
-      const categories = segmentDimension === 'branch' ? branches : 
-                        segmentDimension === 'region' ? regions :
-                        ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'];
-      
-      const total = 10000;
-      const values = [];
-      let remaining = total;
-      
-      categories.forEach((cat, idx) => {
-        if (idx === categories.length - 1) {
-          values.push(remaining);
-        } else {
-          const value = Math.floor(remaining * (Math.random() * 0.3 + 0.1));
-          values.push(value);
-          remaining -= value;
-        }
-      });
-      
-      return categories.map((name, idx) => ({
-        name,
-        value: values[idx]
-      }));
-    }
-    
-    if (config.chart_type === 'pie') {
-      return [
-        { name: 'Category A', value: 4000 },
-        { name: 'Category B', value: 3000 },
-        { name: 'Category C', value: 2000 },
-        { name: 'Category D', value: 1000 }
-      ];
-    }
-
-    if (config.chart_type === 'table' && hasSegmentation) {
-      const rows = [];
-      const numDays = 10;
-      
-      if (config.segment_by.includes('branch')) {
-        branches.forEach(branch => {
-          for (let i = 0; i < numDays; i++) {
-            const baseValue = 500 + Math.floor(Math.random() * 300);
-            rows.push({
-              date: `2025-11-${String(i + 1).padStart(2, '0')}`,
-              branch,
-              ...(config.metrics?.reduce((acc, metric) => ({
-                ...acc,
-                [metric]: baseValue + Math.floor(Math.random() * 200)
-              }), {}) || { value: baseValue })
-            });
-          }
-        });
-      } else if (config.segment_by.includes('region')) {
-        regions.forEach(region => {
-          for (let i = 0; i < numDays; i++) {
-            const baseValue = 1000 + Math.floor(Math.random() * 500);
-            rows.push({
-              date: `2025-11-${String(i + 1).padStart(2, '0')}`,
-              region,
-              ...(config.metrics?.reduce((acc, metric) => ({
-                ...acc,
-                [metric]: baseValue + Math.floor(Math.random() * 300)
-              }), {}) || { value: baseValue })
-            });
-          }
-        });
-      }
-      
-      return rows;
-    }
-
-    if (config.chart_type === 'table') {
-      return Array.from({ length: 10 }, (_, i) => ({
-        date: `2025-11-${String(i + 1).padStart(2, '0')}`,
-        ...(config.metrics?.reduce((acc, metric) => ({
-          ...acc,
-          [metric]: 500 + Math.floor(Math.random() * 500)
-        }), {}) || { value: 500 + Math.floor(Math.random() * 500) })
-      }));
-    }
-
-    if (hasSegmentation && (config.chart_type === 'line' || config.chart_type === 'bar')) {
-      const days = 30;
-      const data = [];
-      
-      for (let i = 0; i < days; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - (days - i));
-        const dateStr = date.toISOString().split('T')[0];
-        
-        const row = { date: dateStr };
-        
-        if (config.segment_by.includes('branch')) {
-          branches.forEach(branch => {
-            const baseValue = 100 + Math.floor(Math.random() * 100);
-            row[branch] = baseValue;
-          });
-        } else if (config.segment_by.includes('region')) {
-          regions.forEach(region => {
-            const baseValue = 200 + Math.floor(Math.random() * 150);
-            row[region] = baseValue;
-          });
-        }
-        
-        data.push(row);
-      }
-      
-      return data;
-    }
-
-    const days = 30;
-    return Array.from({ length: days }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (days - i));
-      const baseValue = 500 + Math.floor(Math.random() * 300);
-      
-      return {
-        date: date.toISOString().split('T')[0],
-        ...(config.metrics?.reduce((acc, metric) => ({
-          ...acc,
-          [metric]: baseValue + Math.floor(Math.random() * 200)
-        }), {}) || { value: baseValue })
-      };
-    });
   };
 
   const handleSaveReport = () => {
@@ -575,11 +336,24 @@ Generate a complete report configuration that captures their intent.`,
     if (report.organization_id && selectedOrgId !== report.organization_id) {
       setSelectedOrgId(report.organization_id);
     }
-    const mockData = generateMockData(report.configuration);
-    const result = await transformAndStoreData(report.configuration, mockData);
-    setReportData(result.data);
-    setDataQuality(result.quality);
-    toast.success(`Loaded: ${report.title}`);
+    
+    try {
+      console.log('[ReportBuilder] 🔄 Loading saved report...');
+      const realData = await tableQueryService.executeTableQuery(
+        report.configuration,
+        report.organization_id
+      );
+      
+      setReportData({
+        config: report.configuration,
+        data: realData
+      });
+      
+      toast.success(`Loaded: ${report.title} (${realData.length} records)`);
+    } catch (error) {
+      toast.error('Failed to load report data');
+      console.error('[ReportBuilder] Load error:', error);
+    }
   };
 
   const handleDeleteReport = (id) => {
@@ -640,14 +414,14 @@ Generate a complete report configuration that captures their intent.`,
   };
 
   const handleExport = () => {
-    if (!reportData || reportData.length === 0) {
+    if (!reportData?.data || reportData.data.length === 0) {
       toast.info('No data to export.');
       return;
     }
 
     const csvContent = [
-      Object.keys(reportData[0]).join(','),
-      ...reportData.map(row => Object.values(row).map(value => {
+      Object.keys(reportData.data[0]).join(','),
+      ...reportData.data.map(row => Object.values(row).map(value => {
         if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
           return `"${value.replace(/"/g, '""')}"`;
         }
@@ -673,7 +447,7 @@ Generate a complete report configuration that captures their intent.`,
         orgId,
         currentUser.email,
         'csv',
-        reportData.length
+        reportData.data.length
       );
     }
   };
@@ -711,7 +485,7 @@ Generate a complete report configuration that captures their intent.`,
     saveTemplateMutation.mutate(templateData);
   };
 
-  const handleRestoreVersion = (configuration) => {
+  const handleRestoreVersion = async (configuration) => {
     if (currentReport && currentReport.id) {
       updateReportMutation.mutate({
         reportId: currentReport.id,
@@ -723,11 +497,18 @@ Generate a complete report configuration that captures their intent.`,
       });
       
       // Reload with new config
-      const mockData = generateMockData(configuration);
-      transformAndStoreData(configuration, mockData).then(result => {
-        setReportData(result.data);
-        setDataQuality(result.quality);
-      });
+      try {
+        const realData = await tableQueryService.executeTableQuery(
+          configuration,
+          currentReport.organization_id
+        );
+        setReportData({
+          config: configuration,
+          data: realData
+        });
+      } catch (error) {
+        console.error('[ReportBuilder] Restore error:', error);
+      }
     }
   };
 
@@ -742,7 +523,7 @@ Generate a complete report configuration that captures their intent.`,
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Bespoke Report Builder</h1>
               <p className="text-gray-600 mt-1">
-                Describe what you want to visualize and we'll create a custom report for you
+                Describe what you want to see from your call tracking data
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -762,20 +543,10 @@ Generate a complete report configuration that captures their intent.`,
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                API not configured for this organization. Currently using mock data.{' '}
+                API not fully configured. Some features may be limited.{' '}
                 {canDelete && (
                   <a href="/settings" className="underline font-medium">Configure API settings</a>
                 )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {dataQuality && dataQuality.quality_score < 80 && (
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Data quality score: {dataQuality.quality_score}/100. 
-                {dataQuality.issues.length > 0 && ` Found ${dataQuality.issues.length} issue(s).`}
               </AlertDescription>
             </Alert>
           )}
@@ -823,7 +594,7 @@ Generate a complete report configuration that captures their intent.`,
                     <Button
                       variant="outline"
                       onClick={handleExport}
-                      disabled={!reportData || reportData.length === 0}
+                      disabled={!reportData?.data || reportData.data.length === 0}
                       className="gap-2"
                     >
                       <Download className="w-4 h-4" />
@@ -850,10 +621,22 @@ Generate a complete report configuration that captures their intent.`,
                 </div>
               )}
 
-              <ReportCanvas 
-                config={currentReport?.configuration} 
-                data={reportData}
-              />
+              {reportData ? (
+                <AdvancedTableGenerator 
+                  config={reportData.config}
+                  data={reportData.data}
+                />
+              ) : (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
+                  <div className="text-gray-400 mb-2">
+                    <svg className="w-16 h-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-lg font-medium text-gray-600">No report generated yet</p>
+                    <p className="text-sm text-gray-500 mt-1">Describe what you want to see from your call data</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -873,7 +656,7 @@ Generate a complete report configuration that captures their intent.`,
               <Label htmlFor="template-name">Template Name *</Label>
               <Input
                 id="template-name"
-                placeholder="e.g., Sales by Branch Report"
+                placeholder="e.g., Calls by Region Report"
                 value={templateData.name}
                 onChange={(e) => setTemplateData({ ...templateData, name: e.target.value })}
               />
@@ -892,13 +675,9 @@ Generate a complete report configuration that captures their intent.`,
               <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-1">
                 <p className="font-medium text-gray-700">Template will include:</p>
                 <ul className="list-disc list-inside text-gray-600">
-                  <li>Chart type: {currentReport.configuration.chart_type}</li>
-                  <li>Metrics: {currentReport.configuration.metrics?.join(', ') || 'None'}</li>
-                  {currentReport.configuration.segment_by?.length > 0 && (
-                    <li>Segments: {currentReport.configuration.segment_by.join(', ')}</li>
-                  )}
-                  {currentReport.configuration.date_range && (
-                    <li>Date range: {currentReport.configuration.date_range.period}</li>
+                  <li>Metrics: {currentReport.configuration.columns?.map(c => c.label).join(', ') || 'Call metrics'}</li>
+                  {currentReport.configuration.grouping?.length > 0 && (
+                    <li>Grouping: {currentReport.configuration.grouping.join(', ')}</li>
                   )}
                 </ul>
               </div>
@@ -940,7 +719,7 @@ Generate a complete report configuration that captures their intent.`,
                 <p className="font-medium text-gray-700">Report Details:</p>
                 <ul className="list-disc list-inside text-gray-600">
                   <li>Title: {currentReport.title}</li>
-                  <li>Type: {currentReport.configuration?.chart_type || 'N/A'}</li>
+                  <li>Records: {reportData?.data?.length || 0}</li>
                 </ul>
               </div>
             )}
