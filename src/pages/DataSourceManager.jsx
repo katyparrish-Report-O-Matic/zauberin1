@@ -160,7 +160,7 @@ export default function DataSourceManager() {
         platform_type: data.platform_type,
         auth_type: data.auth_type,
         credentials,
-        account_ids: data.account_ids,
+        account_ids: data.account_ids.map(id => String(id)), // 🔥 CONVERT TO STRINGS!
         property_ids: data.property_ids ? data.property_ids.split(',').map(s => s.trim()) : [],
         sync_config: {
           schedule: data.schedule,
@@ -176,6 +176,7 @@ export default function DataSourceManager() {
       };
 
       console.log('[DataSourceManager] Payload to save:', payload);
+      console.log('[DataSourceManager] account_ids converted to strings:', payload.account_ids);
 
       if (editingSource) {
         console.log('[DataSourceManager] Updating existing source:', editingSource.id);
@@ -186,7 +187,7 @@ export default function DataSourceManager() {
       }
     },
     onSuccess: (result) => {
-      console.log('[DataSourceManager] Save successful:', result);
+      console.log('[DataSourceManager] ✅ Save successful:', result);
       queryClient.invalidateQueries({ queryKey: ['dataSources'] });
       toast.success(editingSource ? 'Data source updated' : 'Data source created');
       setShowDialog(false);
@@ -194,7 +195,7 @@ export default function DataSourceManager() {
       resetForm();
     },
     onError: (error) => {
-      console.error('[DataSourceManager] Save error:', error);
+      console.error('[DataSourceManager] ❌ Save error:', error);
       console.error('[DataSourceManager] Error details:', {
         message: error.message,
         stack: error.stack,

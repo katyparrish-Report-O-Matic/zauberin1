@@ -1,146 +1,140 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
 /**
- * Test CTM API Connection and List ALL Available Accounts (with pagination)
- * Use this to verify credentials and see which account IDs are accessible
+ * Test CTM API connection and fetch available accounts
+ * Agency-level credentials flow:
+ * 1. Use provided credentials to call /api/v1/accounts.json
+ * 2. Return list of all accessible accounts
  */
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     
-    let body;
-    try {
-      body = await req.json();
-    } catch (parseError) {
+    // Verify user authentication
+    const user = await base44.auth.me();
+    if (!user) {
       return Response.json({ 
-        error: 'Invalid JSON in request body',
-        details: parseError.message 
-      }, { status: 400 });
+        success: false,
+        error: 'Unauthorized' 
+      }, { status: 401 });
     }
 
+    // Parse request body
+    const body = await req.json();
     const { apiKey } = body;
 
     if (!apiKey) {
-      return Response.json({ 
-        error: 'Missing required parameter: apiKey',
-        hint: 'Provide apiKey in format "accessKey:secretKey"'
+      return Response.json({
+        success: false,
+        error: 'API key is required'
       }, { status: 400 });
     }
 
-    // Parse credentials
-    const parseCredentials = (token) => {
-      if (token && token.length > 40 && !token.includes(':')) {
-        return token;
-      }
-      
-      if (token && token.includes(':')) {
-        const [access, secret] = token.split(':');
-        const encoder = new TextEncoder();
-        const data = encoder.encode(`${access}:${secret}`);
-        return btoa(String.fromCharCode(...data));
-      }
-      
-      throw new Error('Invalid credentials format');
-    };
+    console.log('[testCtmConnection] Testing CTM agency credentials...');
 
+    // Parse credentials - support both formats:
+    // 1. "accessKey:secretKey" 
+    // 2. Pre-encoded base64 token
     let auth;
-    try {
-      auth = parseCredentials(apiKey);
-    } catch (credError) {
-      return Response.json({ 
-        error: 'Invalid API credentials format',
-        details: credError.message
+    if (apiKey.includes(':')) {
+      const [access, secret] = apiKey.split(':');
+      const encoder = new TextEncoder();
+      const data = encoder.encode(`${access}:${secret}`);
+      auth = btoa(String.fromCharCode(...data));
+    } else if (apiKey.length > 40) {
+      auth = apiKey; // Already encoded
+    } else {
+      return Response.json({
+        success: false,
+        error: 'Invalid API key format. Use "accessKey:secretKey" or encoded token'
       }, { status: 400 });
     }
 
+    // Fetch all accounts with pagination
     const baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
-
-    // Fetch ALL accounts with pagination
-    console.log('[CTM Test] Fetching accounts list with pagination...');
-    
     let allAccounts = [];
     let currentPage = 1;
     let totalPages = 1;
 
+    console.log('[testCtmConnection] Fetching accounts from CTM...');
+
     do {
-      const accountsResponse = await fetch(
-        `${baseUrl}/accounts.json?page=${currentPage}&per_page=100`,
-        {
+      const url = `${baseUrl}/accounts.json?page=${currentPage}&per_page=100`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[testCtmConnection] CTM API Error:', response.status, errorText);
+        
+        let hint = 'Check API credentials and permissions';
+        if (response.status === 401) {
+          hint = 'Invalid API credentials. Verify your Access Key and Secret Key.';
+        } else if (response.status === 403) {
+          hint = 'Access denied. Make sure you have agency-level API access enabled.';
+        }
+        
+        return Response.json({
+          success: false,
+          error: `CTM API Error (${response.status})`,
+          details: errorText,
+          hint
+        }, { status: response.status });
+      }
+
+      const data = await response.json();
+      
+      if (data.accounts && Array.isArray(data.accounts)) {
+        allAccounts = allAccounts.concat(data.accounts);
+        console.log(`[testCtmConnection] Page ${currentPage}: ${data.accounts.length} accounts`);
+      }
+
+      totalPages = data.total_pages || 1;
+      currentPage++;
+
+    } while (currentPage <= totalPages && currentPage <= 100); // Safety: max 100 pages
+
+    console.log(`[testCtmConnection] ✅ Total accounts fetched: ${allAccounts.length}`);
+
+    // Format accounts - CONVERT IDs TO STRINGS
+    const formattedAccounts = allAccounts.map(acc => ({
+      id: String(acc.id), // 🔥 CONVERT TO STRING!
+      name: acc.name,
+      status: acc.status || 'active',
+      created: acc.created
+    }));
+
+    // Test calls endpoint with first account
+    let callsTest = null;
+    if (formattedAccounts.length > 0) {
+      const testAccountId = formattedAccounts[0].id;
+      const testUrl = `${baseUrl}/accounts/${testAccountId}/calls.json?per_page=1`;
+      
+      try {
+        const callsResponse = await fetch(testUrl, {
           method: 'GET',
           headers: {
             'Authorization': `Basic ${auth}`,
             'Content-Type': 'application/json'
           }
-        }
-      );
-
-      if (!accountsResponse.ok) {
-        const errorText = await accountsResponse.text();
-        return Response.json({
-          success: false,
-          error: 'Failed to fetch accounts',
-          status: accountsResponse.status,
-          details: errorText,
-          hint: accountsResponse.status === 401 
-            ? 'Invalid credentials - check Access Key and Secret Key'
-            : 'API connection failed'
-        }, { status: accountsResponse.status });
-      }
-
-      const accountsData = await accountsResponse.json();
-      
-      if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
-        allAccounts = allAccounts.concat(accountsData.accounts);
-      }
-
-      totalPages = accountsData.total_pages || 1;
-      currentPage++;
-
-      console.log(`[CTM Test] Fetched page ${currentPage - 1}/${totalPages}: ${accountsData.accounts?.length || 0} accounts`);
-
-    } while (currentPage <= totalPages && currentPage <= 100); // Safety limit
-
-    console.log(`[CTM Test] Total accounts found: ${allAccounts.length}`);
-
-    // Test calls endpoint with first account
-    let callsTest = null;
-    if (allAccounts.length > 0) {
-      const firstAccountId = allAccounts[0].id;
-      console.log(`[CTM Test] Testing calls endpoint for account ${firstAccountId}...`);
-      
-      try {
-        const callsResponse = await fetch(
-          `${baseUrl}/accounts/${firstAccountId}/calls.json?per_page=1`, 
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Basic ${auth}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-
-        if (callsResponse.ok) {
-          const callsData = await callsResponse.json();
-          callsTest = {
-            success: true,
-            account_id: firstAccountId,
-            total_calls: callsData.total_entries || 0
-          };
-        } else {
-          const errorText = await callsResponse.text();
-          callsTest = {
-            success: false,
-            account_id: firstAccountId,
-            error: errorText,
-            status: callsResponse.status
-          };
-        }
-      } catch (callsError) {
+        });
+        
         callsTest = {
-          success: false,
-          error: callsError.message
+          status: callsResponse.status,
+          success: callsResponse.ok,
+          tested_account: testAccountId
+        };
+      } catch (error) {
+        callsTest = {
+          error: error.message,
+          tested_account: testAccountId
         };
       }
     }
@@ -148,26 +142,19 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       connection: 'established',
-      accounts_found: allAccounts.length,
-      accounts: allAccounts.map(acc => ({
-        id: acc.id,
-        name: acc.name,
-        status: acc.status,
-        created: acc.created
-      })),
+      accounts_found: formattedAccounts.length,
+      accounts: formattedAccounts,
       calls_endpoint_test: callsTest,
-      instructions: allAccounts.length > 0 
-        ? `Select the accounts you want to sync from the ${allAccounts.length} available account(s)`
-        : 'No accounts found - verify your agency has sub-accounts configured'
+      api_version: 'v1',
+      access_level: 'agency'
     });
 
   } catch (error) {
-    console.error('[CTM Test] Error:', error);
+    console.error('[testCtmConnection] Error:', error);
     return Response.json({
       success: false,
       error: 'Internal server error',
-      details: error.message,
-      stack: error.stack
+      details: error.message
     }, { status: 500 });
   }
 });
