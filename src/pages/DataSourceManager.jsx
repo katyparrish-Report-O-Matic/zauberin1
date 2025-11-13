@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -324,12 +325,14 @@ export default function DataSourceManager() {
 
   const handleAccountToggle = (accountId) => {
     console.log('[DataSourceManager] Toggling account:', accountId);
+    console.log('[DataSourceManager] Current account_ids BEFORE toggle:', formData.account_ids);
+    
     setFormData(prev => {
       const newAccountIds = prev.account_ids.includes(accountId)
         ? prev.account_ids.filter(id => id !== accountId)
         : [...prev.account_ids, accountId];
       
-      console.log('[DataSourceManager] New account_ids:', newAccountIds);
+      console.log('[DataSourceManager] New account_ids AFTER toggle:', newAccountIds);
       return {
         ...prev,
         account_ids: newAccountIds
@@ -338,32 +341,48 @@ export default function DataSourceManager() {
   };
 
   const handleSave = () => {
-    console.log('[DataSourceManager] handleSave called');
-    console.log('[DataSourceManager] Current formData:', formData);
+    console.log('========================================');
+    console.log('[DataSourceManager] ✅ SAVE BUTTON CLICKED!');
+    console.log('[DataSourceManager] Current formData:', JSON.stringify(formData, null, 2));
+    console.log('[DataSourceManager] account_ids:', formData.account_ids);
+    console.log('[DataSourceManager] account_ids length:', formData.account_ids.length);
+    console.log('[DataSourceManager] account_ids type:', typeof formData.account_ids);
+    console.log('========================================');
     
     const orgId = selectedOrgId || currentUser?.organization_id;
     
     if (!orgId || orgId === 'all') {
+      console.error('[DataSourceManager] ❌ Validation failed: No organization');
       toast.error('Please select an organization');
       return;
     }
 
     if (!formData.name) {
+      console.error('[DataSourceManager] ❌ Validation failed: No name');
       toast.error('Name is required');
       return;
     }
 
     if (!formData.api_key) {
+      console.error('[DataSourceManager] ❌ Validation failed: No API key');
       toast.error('API credentials are required');
       return;
     }
 
+    if (!Array.isArray(formData.account_ids)) {
+      console.error('[DataSourceManager] ❌ account_ids is not an array!', formData.account_ids);
+      toast.error('Invalid account selection');
+      return;
+    }
+
     if (formData.account_ids.length === 0) {
+      console.error('[DataSourceManager] ❌ Validation failed: No accounts selected');
       toast.error('Please select at least one account to sync');
       return;
     }
 
-    console.log('[DataSourceManager] All validations passed, calling mutation...');
+    console.log('[DataSourceManager] ✅ All validations passed!');
+    console.log('[DataSourceManager] Calling saveSourceMutation...');
     saveSourceMutation.mutate(formData);
   };
 
@@ -738,6 +757,7 @@ export default function DataSourceManager() {
               <Button 
                 variant="outline" 
                 onClick={() => {
+                  console.log('[DataSourceManager] Cancel clicked');
                   setShowDialog(false);
                   resetForm();
                 }}
@@ -762,12 +782,22 @@ export default function DataSourceManager() {
               )}
               
               {currentStep === 2 && (
-                <Button 
-                  onClick={handleSave} 
-                  disabled={saveSourceMutation.isPending || formData.account_ids.length === 0}
-                >
-                  {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update Data Source' : 'Create Data Source'}
-                </Button>
+                <>
+                  <div className="text-xs text-gray-500 mr-auto">
+                    Debug: {formData.account_ids.length} selected, {availableAccounts.length} available
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      console.log('[DataSourceManager] 🔴 CREATE BUTTON CLICKED!');
+                      console.log('[DataSourceManager] isPending:', saveSourceMutation.isPending);
+                      console.log('[DataSourceManager] account_ids length:', formData.account_ids.length);
+                      handleSave();
+                    }}
+                    disabled={saveSourceMutation.isPending || formData.account_ids.length === 0}
+                  >
+                    {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update Data Source' : 'Create Data Source'}
+                  </Button>
+                </>
               )}
             </DialogFooter>
           </DialogContent>
