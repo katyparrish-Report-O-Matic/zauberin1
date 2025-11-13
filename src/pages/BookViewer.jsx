@@ -59,28 +59,147 @@ export default function BookViewer() {
 
     if (currentReport.report_id) {
       const savedReport = savedReports.find(r => r.id === currentReport.report_id);
+      
+      // Override saved report's date range and account with book's settings
+      const configuration = {
+        ...savedReport?.configuration,
+        date_range: book.date_range ? {
+          from: book.date_range.from,
+          to: book.date_range.to,
+          period: 'custom',
+          granularity: savedReport?.configuration?.date_range?.granularity || 'daily'
+        } : savedReport?.configuration?.date_range,
+        account_id: book.account_id !== 'all' ? book.account_id : null
+      };
+
       return {
         title: savedReport?.title || 'Report',
-        configuration: savedReport?.configuration,
+        configuration,
         notes: currentReport.notes
       };
     }
 
     if (currentReport.template_id) {
       const template = templates.find(t => t.id === currentReport.template_id);
+      
+      // Apply book's date range and account to template
       return {
         title: template?.name || 'Template Report',
         configuration: {
           chart_type: template?.chart_settings?.chart_type || 'bar',
           metrics: template?.metric_configs?.map(m => m.metric_name) || [],
           segment_by: template?.chart_settings?.segment_by || [],
-          date_range: template?.chart_settings?.date_range
+          date_range: book.date_range ? {
+            from: book.date_range.from,
+            to: book.date_range.to,
+            period: 'custom',
+            granularity: template?.chart_settings?.date_range?.granularity || 'daily'
+          } : template?.chart_settings?.date_range,
+          account_id: book.account_id !== 'all' ? book.account_id : null
         },
         notes: currentReport.notes
       };
     }
 
     return null;
+  };
+
+  // Generate mock data for the current report using book's date range
+  const generateMockDataForReport = (config) => {
+    if (!config || !book?.date_range?.from) return null;
+
+    const startDate = new Date(book.date_range.from);
+    const endDate = book.date_range.to ? new Date(book.date_range.to) : new Date();
+    
+    // Calculate number of days
+    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    const days = Math.min(daysDiff, 90); // Cap at 90 days for display
+
+    const hasSegmentation = config.segment_by && config.segment_by.length > 0;
+    const branches = ['North Branch', 'South Branch', 'East Branch', 'West Branch'];
+    const regions = ['North America', 'Europe', 'Asia Pacific'];
+
+    if (config.chart_type === 'pie' && hasSegmentation) {
+      const segmentDimension = config.segment_by[0];
+      const categories = segmentDimension === 'branch' ? branches : 
+                        segmentDimension === 'region' ? regions :
+                        ['Category A', 'Category B', 'Category C', 'Category D'];
+      
+      return categories.map(name => ({
+        name,
+        value: Math.floor(Math.random() * 5000) + 1000
+      }));
+    }
+
+    if (config.chart_type === 'pie') {
+      return [
+        { name: 'Category A', value: 4000 },
+        { name: 'Category B', value: 3000 },
+        { name: 'Category C', value: 2000 },
+        { name: 'Category D', value: 1000 }
+      ];
+    }
+
+    if (config.chart_type === 'table' && hasSegmentation) {
+      const data = [];
+      const segments = config.segment_by.includes('branch') ? branches : regions;
+      
+      for (let i = 0; i < Math.min(days, 10); i++) {
+        const date = new Date(startDate);
+        date.setDate(date.getDate() + i);
+        
+        segments.forEach(segment => {
+          data.push({
+            date: date.toISOString().split('T')[0],
+            [config.segment_by[0]]: segment,
+            ...(config.metrics?.reduce((acc, metric) => ({
+              ...acc,
+              [metric]: Math.floor(Math.random() * 500) + 100
+            }), {}) || { value: Math.floor(Math.random() * 500) + 100 })
+          });
+        });
+      }
+      
+      return data;
+    }
+
+    if (hasSegmentation && (config.chart_type === 'line' || config.chart_type === 'bar')) {
+      const data = [];
+      const segments = config.segment_by.includes('branch') ? branches : 
+                      config.segment_by.includes('region') ? regions : ['Group A', 'Group B'];
+      
+      for (let i = 0; i < days; i++) {
+        const date = new Date(startDate);
+        date.setDate(date.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        const row = { date: dateStr };
+        segments.forEach(segment => {
+          row[segment] = Math.floor(Math.random() * 300) + 100;
+        });
+        
+        data.push(row);
+      }
+      
+      return data;
+    }
+
+    // Default time series data
+    const data = [];
+    for (let i = 0; i < days; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      
+      data.push({
+        date: date.toISOString().split('T')[0],
+        ...(config.metrics?.reduce((acc, metric) => ({
+          ...acc,
+          [metric]: Math.floor(Math.random() * 500) + 100
+        }), {}) || { value: Math.floor(Math.random() * 500) + 100 })
+      });
+    }
+    
+    return data;
   };
 
   const handleNext = () => {
@@ -126,6 +245,7 @@ export default function BookViewer() {
   }
 
   const reportData = getReportData();
+  const mockData = reportData ? generateMockDataForReport(reportData.configuration) : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -230,11 +350,20 @@ export default function BookViewer() {
               <Card>
                 <CardHeader>
                   <CardTitle>{reportData.title}</CardTitle>
+                  <CardDescription>
+                    {book.account_name && `Account: ${book.account_name}`}
+                    {book.date_range?.from && (
+                      <span className="ml-4">
+                        {format(new Date(book.date_range.from), "MMM d, yyyy")}
+                        {book.date_range.to && ` - ${format(new Date(book.date_range.to), "MMM d, yyyy")}`}
+                      </span>
+                    )}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ReportCanvas 
                     config={reportData.configuration}
-                    data={null} // Will generate mock data
+                    data={mockData}
                   />
                 </CardContent>
               </Card>

@@ -49,12 +49,33 @@ export default function ReportLibrary() {
     description: '',
     cover_color: 'blue',
     account_id: 'all',
+    account_name: '',
     dateRange: { from: null, to: null }
   });
 
   const { currentUser, isAgency, hasPermission } = usePermissions();
   const canEdit = hasPermission('editor');
   const canDelete = hasPermission('admin');
+
+  // Fetch accounts for the organization
+  const { data: allAccounts } = useQuery({
+    queryKey: ['organizationAccounts', selectedOrgId || currentUser?.organization_id],
+    queryFn: async () => {
+      const orgId = selectedOrgId || currentUser?.organization_id;
+      if (!orgId || orgId === 'all') return [];
+      
+      // This will be populated from AccountHierarchy when data sources sync
+      const accounts = await base44.entities.AccountHierarchy.filter({
+        organization_id: orgId,
+        hierarchy_level: 'account',
+        status: 'active'
+      });
+      
+      return accounts;
+    },
+    enabled: !!(selectedOrgId || currentUser?.organization_id),
+    initialData: []
+  });
 
   // Fetch books
   const { data: books } = useQuery({
@@ -107,6 +128,7 @@ export default function ReportLibrary() {
         description: '',
         cover_color: 'blue',
         account_id: 'all',
+        account_name: '',
         dateRange: { from: null, to: null }
       });
       
@@ -144,7 +166,22 @@ export default function ReportLibrary() {
       return;
     }
 
-    createBookMutation.mutate(newBook);
+    if (!newBook.dateRange.from) {
+      toast.error('Please select a date range for the book');
+      return;
+    }
+
+    // Get account name
+    let accountName = 'All Accounts';
+    if (newBook.account_id !== 'all') {
+      const account = allAccounts.find(a => a.external_id === newBook.account_id || a.id === newBook.account_id);
+      accountName = account?.name || newBook.account_id;
+    }
+
+    createBookMutation.mutate({
+      ...newBook,
+      account_name: accountName
+    });
   };
 
   const handleViewBook = (book) => {
@@ -376,7 +413,7 @@ export default function ReportLibrary() {
               </div>
 
               <div className="space-y-2">
-                <Label>Date Range (optional)</Label>
+                <Label>Date Range *</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start text-left font-normal">
@@ -403,6 +440,9 @@ export default function ReportLibrary() {
                     />
                   </PopoverContent>
                 </Popover>
+                <p className="text-xs text-gray-500">
+                  All reports added to this book will use this date range
+                </p>
               </div>
             </div>
             <DialogFooter>
