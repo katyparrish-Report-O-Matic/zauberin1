@@ -17,6 +17,8 @@ import ReportTemplates from './pages/ReportTemplates';
 import FilesManager from './pages/FilesManager';
 import DataSourceManager from './pages/DataSourceManager';
 import ReportLibrary from './pages/ReportLibrary';
+import BookEditor from './pages/BookEditor';
+import BookViewer from './pages/BookViewer';
 import Layout from './Layout.jsx';
 
 
@@ -40,6 +42,8 @@ export const PAGES = {
     "FilesManager": FilesManager,
     "DataSourceManager": DataSourceManager,
     "ReportLibrary": ReportLibrary,
+    "BookEditor": BookEditor,
+    "BookViewer": BookViewer,
 }
 
 export const pagesConfig = {
