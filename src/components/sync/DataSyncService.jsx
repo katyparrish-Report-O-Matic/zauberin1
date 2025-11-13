@@ -135,7 +135,7 @@ class DataSyncService {
       });
     }
   }
-
+  
   /**
    * Sync Google Ads data
    */
@@ -303,19 +303,19 @@ class DataSyncService {
     for (const accountId of accountIds) {
       environmentConfig.log('info', `[DataSync] Fetching call metrics for account ${accountId}`);
 
-      // Call backend function to avoid CORS
-      const result = await base44.functions.syncCallTrackingData({
+      // Call backend function via base44.functions.invoke
+      const result = await base44.functions.invoke('syncCallTrackingData', {
         accountId,
         startDate: syncJob.date_range.start_date,
         endDate: syncJob.date_range.end_date,
         apiKey
       });
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to fetch call data');
+      if (!result.data?.success) {
+        throw new Error(result.data?.error || 'Failed to fetch call data');
       }
 
-      const callMetrics = result.metrics;
+      const callMetrics = result.data.metrics;
 
       // Transform and store
       const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];

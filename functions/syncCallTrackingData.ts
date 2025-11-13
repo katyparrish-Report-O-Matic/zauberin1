@@ -1,12 +1,30 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+
 /**
  * Backend function to sync Call Tracking Metrics data
  * This runs server-side to avoid CORS issues
  */
 
-export default async function syncCallTrackingData(request) {
-  const { accountId, startDate, endDate, apiKey } = request;
-
+Deno.serve(async (req) => {
   try {
+    // Initialize Base44 client
+    const base44 = createClientFromRequest(req);
+    
+    // Verify user is authenticated
+    const user = await base44.auth.me();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get request body
+    const { accountId, startDate, endDate, apiKey } = await req.json();
+
+    if (!accountId || !startDate || !endDate || !apiKey) {
+      return Response.json({ 
+        error: 'Missing required parameters: accountId, startDate, endDate, apiKey' 
+      }, { status: 400 });
+    }
+
     // Parse credentials - support multiple formats
     const parseCredentials = (token) => {
       // Already encoded Basic Token (length > 40, no colons)
@@ -17,7 +35,9 @@ export default async function syncCallTrackingData(request) {
       // Access Key + Secret Key with colon
       if (token && token.includes(':')) {
         const [access, secret] = token.split(':');
-        return Buffer.from(`${access}:${secret}`).toString('base64');
+        const encoder = new TextEncoder();
+        const data = encoder.encode(`${access}:${secret}`);
+        return btoa(String.fromCharCode(...data));
       }
       
       throw new Error('Invalid credentials format');
@@ -44,7 +64,10 @@ export default async function syncCallTrackingData(request) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`CTM API Error (${response.status}): ${errorText}`);
+        return Response.json({ 
+          success: false,
+          error: `CTM API Error (${response.status}): ${errorText}` 
+        }, { status: response.status });
       }
 
       const data = await response.json();
@@ -102,18 +125,18 @@ export default async function syncCallTrackingData(request) {
         : 0
     }));
 
-    return {
+    return Response.json({
       success: true,
       metrics,
       totalCalls: allCalls.length,
       dateRange: { startDate, endDate }
-    };
+    });
 
   } catch (error) {
     console.error('[CTM Backend] Sync error:', error);
-    return {
+    return Response.json({
       success: false,
       error: error.message
-    };
+    }, { status: 500 });
   }
-}
+});
