@@ -346,6 +346,19 @@ export default function DataSourceManager() {
     });
   };
 
+  const handleSelectAllAccounts = () => {
+    if (formData.account_ids.length === availableAccounts.length) {
+      // Deselect all
+      setFormData(prev => ({ ...prev, account_ids: [] }));
+    } else {
+      // Select all
+      setFormData(prev => ({
+        ...prev,
+        account_ids: availableAccounts.map(acc => acc.id)
+      }));
+    }
+  };
+
   const handleSave = () => {
     console.log('========================================');
     console.log('[DataSourceManager] ✅ SAVE BUTTON CLICKED!');
@@ -743,7 +756,21 @@ export default function DataSourceManager() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Select Accounts to Sync *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Select Accounts to Sync *</Label>
+                    {availableAccounts.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAllAccounts}
+                      >
+                        {formData.account_ids.length === availableAccounts.length 
+                          ? 'Deselect All' 
+                          : 'Select All'}
+                      </Button>
+                    )}
+                  </div>
                   <div className="border border-gray-200 rounded-lg p-4 space-y-3 max-h-80 overflow-y-auto">
                     {availableAccounts.length === 0 ? (
                       <p className="text-sm text-gray-500 text-center py-4">
