@@ -112,8 +112,7 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - ULTRA OPTIMIZED v7
-   * Now syncs with region support + voicemail/working hours metrics
+   * Sync call tracking data - FIXED STORAGE BUG
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
@@ -243,7 +242,7 @@ class DataSyncService {
       }
     }
 
-    // ⚡ STEP 3: Store raw call records (45% → 70%)
+    // ⚡ STEP 3: Store raw call records (45% → 70%) - FIXED VERSION
     await base44.entities.SyncJob.update(syncJob.id, {
       current_step: 'Storing raw call records with attribution data...',
       progress_percentage: 45
@@ -262,45 +261,44 @@ class DataSyncService {
 
     console.log(`[DataSync] 💾 Storing ${allCallRecords.length} call records...`);
 
-    let callRecordsStored = 0;
-    const batchSize = 20;
+    let callRecordsCreated = 0;
+    let callRecordsUpdated = 0;
+    const batchSize = 10;
 
+    // FIXED: Process batches sequentially to ensure all records are stored
     for (let i = 0; i < allCallRecords.length; i += batchSize) {
       const batch = allCallRecords.slice(i, i + batchSize);
       
-      const storePromises = batch.map(async (call) => {
+      for (const call of batch) {
         try {
           // Check if call already exists
           const existing = await base44.entities.CallRecord.filter({
             call_id: call.call_id,
-            data_source_id: dataSource.id
+            organization_id: dataSource.organization_id
           });
 
           if (existing.length === 0) {
             await base44.entities.CallRecord.create(call);
-            return 1;
+            callRecordsCreated++;
+            console.log(`[DataSync] ✓ Created call ${call.call_id}`);
           } else {
             await base44.entities.CallRecord.update(existing[0].id, call);
-            return 0;
+            callRecordsUpdated++;
+            console.log(`[DataSync] ↻ Updated call ${call.call_id}`);
           }
         } catch (error) {
           console.error(`[DataSync] ❌ Failed to store call ${call.call_id}:`, error.message);
-          return 0;
         }
-      });
-
-      const results = await Promise.all(storePromises);
-      const newRecords = results.filter(r => r === 1).length;
-      callRecordsStored += newRecords;
+      }
 
       const progress = 45 + Math.round((i / allCallRecords.length) * 25);
       await base44.entities.SyncJob.update(syncJob.id, {
-        current_step: `Stored ${callRecordsStored}/${allCallRecords.length} call records...`,
+        current_step: `Stored ${callRecordsCreated + callRecordsUpdated}/${allCallRecords.length} call records (${callRecordsCreated} new, ${callRecordsUpdated} updated)...`,
         progress_percentage: progress
       });
     }
 
-    console.log(`[DataSync] ✅ Stored ${callRecordsStored} new call records`);
+    console.log(`[DataSync] ✅ Stored ${callRecordsCreated} new + ${callRecordsUpdated} updated call records`);
 
     // ⚡ STEP 4: Store aggregated metrics (70% → 95%)
     await base44.entities.SyncJob.update(syncJob.id, {
@@ -385,12 +383,13 @@ class DataSyncService {
     }
 
     recordsSynced = totalCalls;
-    recordsCreated = callRecordsStored + totalMetricsCreated;
+    recordsCreated = callRecordsCreated + totalMetricsCreated;
+    recordsUpdated = callRecordsUpdated;
 
-    console.log(`[DataSync] ✅ Complete: ${callRecordsStored} calls + ${totalMetricsCreated} metrics`);
+    console.log(`[DataSync] ✅ Complete: ${callRecordsCreated} calls + ${totalMetricsCreated} metrics`);
 
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: `✅ Sync complete (${callRecordsStored} calls, ${totalMetricsCreated} metrics)`,
+      current_step: `✅ Sync complete (${callRecordsCreated} new calls, ${callRecordsUpdated} updated, ${totalMetricsCreated} metrics)`,
       progress_percentage: 95,
       metrics_synced: metricsToStore
     });
