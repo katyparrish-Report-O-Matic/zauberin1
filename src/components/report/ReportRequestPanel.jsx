@@ -17,7 +17,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
   const handleGenerate = () => {
     if (request.trim()) {
       onGenerateReport({ 
-        title: title || 'Call Tracking Report', 
+        title: title || 'Data Report', 
         description: request,
         dateRange
       });
@@ -25,11 +25,11 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
   };
 
   const exampleRequests = [
-    "Show me all calls grouped by region and dealer for November 2024",
-    "Show call metrics by region with answer rate and qualified calls",
-    "Display calls by dealer with voicemail and working hours breakdown",
-    "Show me total calls, answered, and missed calls by region for last 30 days",
-    "Give me a report of all call metrics grouped by dealer"
+    "Show me all data grouped by region and account for November 2024",
+    "Show metrics by region with key performance indicators",
+    "Display data by account with detailed breakdown",
+    "Show me totals and key metrics by region for last 30 days",
+    "Give me a report of all metrics grouped by account"
   ];
 
   return (
@@ -37,7 +37,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Moon className="w-5 h-5" />
-          Create Call Report
+          Create Report
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -45,7 +45,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
           <Label htmlFor="report-title">Report Title (optional)</Label>
           <Input
             id="report-title"
-            placeholder="e.g., November Call Summary by Region"
+            placeholder="e.g., November Summary by Region"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -82,17 +82,17 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="report-request">What call data do you want to see?</Label>
+          <Label htmlFor="report-request">What data do you want to see?</Label>
           <Textarea
             id="report-request"
-            placeholder="Describe the call report you want... e.g., 'Show me calls by region and dealer' or 'Display call metrics with answer rates'"
+            placeholder="Describe the report you want... e.g., 'Show me data by region and account' or 'Display metrics with key indicators'"
             value={request}
             onChange={(e) => setRequest(e.target.value)}
             rows={6}
             className="resize-none"
           />
           <p className="text-xs text-gray-500">
-            💡 Your report will show REAL data from your CallRecord database
+            💡 Your report will show REAL data from your database
           </p>
         </div>
 
@@ -104,7 +104,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
           {isGenerating ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Querying Call Data...
+              Querying Data...
             </>
           ) : (
             <>

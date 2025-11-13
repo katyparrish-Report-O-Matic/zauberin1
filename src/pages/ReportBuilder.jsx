@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -195,7 +196,7 @@ export default function ReportBuilder() {
         },
         is_public: false,
         usage_count: 0,
-        tags: ['custom', 'call_tracking']
+        tags: ['custom', 'data_report']
       });
     },
     onSuccess: () => {
@@ -252,7 +253,7 @@ export default function ReportBuilder() {
     setIsGenerating(true);
 
     try {
-      console.log('[ReportBuilder] 🚀 Generating report from real CTM data...');
+      console.log('[ReportBuilder] 🚀 Generating report from real data...');
       console.log('[ReportBuilder] 🎯 Selected account:', selectedAccountId);
 
       // Build date range context
@@ -278,7 +279,7 @@ export default function ReportBuilder() {
         dateContext
       );
 
-      console.log('[ReportBuilder] 🔍 Querying real CallRecord data...');
+      console.log('[ReportBuilder] 🔍 Querying real data...');
       
       // Execute query to get real data - pass selected account filter
       const realData = await tableQueryService.executeTableQuery(
@@ -527,7 +528,7 @@ export default function ReportBuilder() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Bespoke Report Builder</h1>
               <p className="text-gray-600 mt-1">
-                Describe what you want to see from your call tracking data
+                Describe what you want to see from your data
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -642,7 +643,7 @@ export default function ReportBuilder() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     <p className="text-lg font-medium text-gray-600">No report generated yet</p>
-                    <p className="text-sm text-gray-500 mt-1">Describe what you want to see from your call data</p>
+                    <p className="text-sm text-gray-500 mt-1">Describe what you want to see from your data</p>
                   </div>
                 </div>
               )}
@@ -665,7 +666,7 @@ export default function ReportBuilder() {
               <Label htmlFor="template-name">Template Name *</Label>
               <Input
                 id="template-name"
-                placeholder="e.g., Calls by Region Report"
+                placeholder="e.g., Data by Region Report"
                 value={templateData.name}
                 onChange={(e) => setTemplateData({ ...templateData, name: e.target.value })}
               />
