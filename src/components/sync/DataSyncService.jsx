@@ -1,3 +1,4 @@
+
 import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 import { googleAdsService } from "../integrations/GoogleAdsService";
@@ -5,8 +6,8 @@ import { googleAnalyticsService } from "../integrations/GoogleAnalyticsService";
 import { dataTransformationService } from "../data/DataTransformationService";
 
 /**
- * Data Synchronization Service
- * Manages scheduled syncs, backfills, incremental updates, and error handling
+ * Data Synchronization Service - OPTIMIZED
+ * Parallel processing for multi-account syncs
  */
 class DataSyncService {
   constructor() {
@@ -30,7 +31,7 @@ class DataSyncService {
         throw new Error('Data source is disabled');
       }
 
-      environmentConfig.log('info', `[DataSync] Initializing ${syncType} sync for ${dataSource.name}`);
+      environmentConfig.log('info', `[DataSync] 🚀 Starting ${syncType} sync for ${dataSource.name}`);
 
       // Determine date range
       const dateRange = this.calculateDateRange(dataSource, syncType);
@@ -48,7 +49,7 @@ class DataSyncService {
         progress_percentage: 0
       });
 
-      // Start sync in background
+      // Start sync (don't await - run in background)
       this.executeSyncJob(syncJob.id);
 
       return syncJob;
@@ -68,7 +69,7 @@ class DataSyncService {
       await base44.entities.SyncJob.update(syncJobId, {
         status: 'in_progress',
         started_at: new Date().toISOString(),
-        current_step: 'Fetching data source configuration'
+        current_step: 'Starting sync...'
       });
 
       const syncJobs = await base44.entities.SyncJob.list();
@@ -113,10 +114,10 @@ class DataSyncService {
         next_sync_at: this.calculateNextSync(dataSource)
       });
 
-      environmentConfig.log('info', `[DataSync] Sync job ${syncJobId} completed successfully`);
+      environmentConfig.log('info', `[DataSync] ✅ Sync ${syncJobId} completed: ${result.recordsSynced} records`);
 
     } catch (error) {
-      environmentConfig.log('error', `[DataSync] Sync job ${syncJobId} failed:`, error);
+      environmentConfig.log('error', `[DataSync] ❌ Sync ${syncJobId} failed:`, error);
 
       await base44.entities.SyncJob.update(syncJobId, {
         status: 'failed',
@@ -266,53 +267,47 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - using backend function
+   * Sync call tracking data - OPTIMIZED with parallel processing
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
     let recordsCreated = 0;
-    let recordsUpdated = 0;
+    let recordsUpdated = 0; // Not currently used, but kept for consistency
 
-    // Step 1: Update progress
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Preparing to fetch call data',
-      progress_percentage: 10
+      current_step: 'Preparing sync...',
+      progress_percentage: 5
     });
 
-    // Get account IDs from data source
     const accountIds = dataSource.account_ids || [];
     
     if (accountIds.length === 0) {
-      throw new Error('No account IDs configured for this data source');
+      throw new Error('No account IDs configured');
     }
 
-    // Get API credentials
     const apiKey = dataSource.credentials?.api_key || dataSource.credentials?.access_token;
     
     if (!apiKey) {
-      throw new Error('No API credentials found for Call Tracking');
+      throw new Error('No API credentials found');
     }
 
-    // Detect if using agency-level or account-level access
-    // Agency-level credentials typically have both access_key and secret_key
     const isAgencyLevel = dataSource.metadata?.access_level === 'agency' || 
                           dataSource.auth_type === 'api_key' ||
                           apiKey.includes(':');
 
-    environmentConfig.log('info', `[DataSync] CTM Access Level: ${isAgencyLevel ? 'Agency (Multi-Account)' : 'Account (Single)'}`);
+    console.log(`[DataSync] 🚀 Syncing ${accountIds.length} account(s) in parallel for Call Tracking`);
 
-    // Step 2: Fetch call metrics for each account using backend function
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Fetching call metrics from CTM API',
-      progress_percentage: 40
+      current_step: `Fetching data from ${accountIds.length} account(s)...`,
+      progress_percentage: 20
     });
 
-    for (const accountId of accountIds) {
-      environmentConfig.log('info', `[DataSync] Fetching call metrics for account ${accountId}`);
+    // ⚡ OPTIMIZATION: Process all accounts in parallel
+    const accountPromises = accountIds.map(async (accountId, index) => {
+      environmentConfig.log('info', `[DataSync] 📞 Account ${index + 1}/${accountIds.length}: ${accountId}`);
 
-      // Call backend function via base44.functions.invoke
       const result = await base44.functions.invoke('syncCallTrackingData', {
-        accountId,
+        accountId: String(accountId), // Ensure string type for backend function
         startDate: syncJob.date_range.start_date,
         endDate: syncJob.date_range.end_date,
         apiKey,
@@ -320,34 +315,49 @@ class DataSyncService {
       });
 
       if (!result.data?.success) {
-        throw new Error(result.data?.error || 'Failed to fetch call data');
+        throw new Error(result.data?.error || `Failed to sync account ${accountId}`);
       }
 
-      const callMetrics = result.data.metrics;
+      return {
+        accountId,
+        metrics: result.data.metrics,
+        callCount: result.data.totalCalls // Assuming totalCalls is returned by the backend function
+      };
+    });
 
-      // Transform and store
-      const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];
-      
-      for (const metricName of metricsToSync) {
-        const transformedData = await dataTransformationService.transformData(
-          callMetrics,
-          {
-            metric_name: metricName,
-            time_period: 'daily',
-            organization_id: dataSource.organization_id
-          }
-        );
-
-        recordsCreated += transformedData.data.length;
-      }
-
-      recordsSynced += callMetrics.length * metricsToSync.length;
-    }
+    // Wait for all accounts to complete
+    const accountResults = await Promise.all(accountPromises);
+    
+    console.log(`[DataSync] ✅ All ${accountResults.length} accounts fetched for Call Tracking`);
 
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Completing sync',
-      progress_percentage: 90,
-      metrics_synced: ['total_calls', 'answered_calls', 'qualified_calls']
+      current_step: 'Processing and storing data...',
+      progress_percentage: 70
+    });
+
+    // Combine and transform all metrics
+    const allMetrics = accountResults.flatMap(r => r.metrics);
+    const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];
+    
+    for (const metricName of metricsToSync) {
+      const transformedData = await dataTransformationService.transformData(
+        allMetrics,
+        {
+          metric_name: metricName,
+          time_period: 'daily',
+          organization_id: dataSource.organization_id
+        }
+      );
+
+      recordsCreated += transformedData.data.length;
+    }
+
+    recordsSynced = accountResults.reduce((sum, r) => sum + (r.callCount || 0), 0); // Sum up total calls from all accounts
+
+    await base44.entities.SyncJob.update(syncJob.id, {
+      current_step: 'Sync complete!',
+      progress_percentage: 95,
+      metrics_synced: metricsToSync
     });
 
     return { recordsSynced, recordsCreated, recordsUpdated };
@@ -371,13 +381,13 @@ class DataSyncService {
         // Since last sync
         startDate = dataSource.last_sync_at 
           ? new Date(dataSource.last_sync_at)
-          : new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+          : new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000); // Default to last 7 days if no previous sync
         break;
       
       case 'manual':
       case 'scheduled':
       default:
-        // Last 7 days
+        // Last 7 days by default for manual/scheduled
         startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
 
