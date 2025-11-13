@@ -1,3 +1,4 @@
+
 import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 import { googleAdsService } from "../integrations/GoogleAdsService";
@@ -286,40 +287,60 @@ class DataSyncService {
     );
     recordsSynced += hierarchyResult.recordsSynced;
 
-    // Step 2: Fetch call metrics
+    // Step 2: Fetch call metrics for each account
     await base44.entities.SyncJob.update(syncJob.id, {
       current_step: 'Fetching call metrics',
       progress_percentage: 40
     });
 
-    const callMetrics = await callTrackingService.fetchCallMetrics(
-      syncJob.date_range.start_date,
-      syncJob.date_range.end_date,
-      dataSource.credentials.api_key
-    );
-
-    // Transform and store
-    const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];
+    // Get account IDs from data source
+    const accountIds = dataSource.account_ids || [];
     
-    for (const metricName of metricsToSync) {
-      const transformedData = await dataTransformationService.transformData(
-        callMetrics,
-        {
-          metric_name: metricName,
-          time_period: 'daily',
-          organization_id: dataSource.organization_id
-        }
-      );
-
-      recordsCreated += transformedData.data.length;
+    if (accountIds.length === 0) {
+      throw new Error('No account IDs configured for this data source');
     }
 
-    recordsSynced += callMetrics.length * metricsToSync.length;
+    // Get API credentials
+    const apiKey = dataSource.credentials?.api_key || dataSource.credentials?.access_token;
+    
+    if (!apiKey) {
+      throw new Error('No API credentials found for Call Tracking');
+    }
+
+    // Fetch metrics for each account
+    for (const accountId of accountIds) {
+      environmentConfig.log('info', `[DataSync] Fetching call metrics for account ${accountId}`);
+
+      const callMetrics = await callTrackingService.fetchCallMetrics(
+        accountId,
+        syncJob.date_range.start_date,
+        syncJob.date_range.end_date,
+        apiKey  // Single credential - service will parse it
+      );
+
+      // Transform and store
+      const metricsToSync = ['total_calls', 'answered_calls', 'qualified_calls'];
+      
+      for (const metricName of metricsToSync) {
+        const transformedData = await dataTransformationService.transformData(
+          callMetrics,
+          {
+            metric_name: metricName,
+            time_period: 'daily',
+            organization_id: dataSource.organization_id
+          }
+        );
+
+        recordsCreated += transformedData.data.length;
+      }
+
+      recordsSynced += callMetrics.length * metricsToSync.length;
+    }
 
     await base44.entities.SyncJob.update(syncJob.id, {
       current_step: 'Completing sync',
       progress_percentage: 90,
-      metrics_synced: metricsToSync
+      metrics_synced: ['total_calls', 'answered_calls', 'qualified_calls']
     });
 
     return { recordsSynced, recordsCreated, recordsUpdated };
