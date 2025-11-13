@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,7 +27,7 @@ import OrganizationSelector from "../components/org/OrganizationSelector";
 import { usePermissions } from "../components/auth/usePermissions";
 import RateLimitIndicator from "../components/api/RateLimitIndicator";
 import { auditService } from "../components/audit/AuditService";
-import { cacheService }1 from "../components/cache/CacheService";
+import { cacheService } from "../components/cache/CacheService";
 import { environmentConfig } from "../components/config/EnvironmentConfig";
 import DataFreshnessIndicator from "../components/report/DataFreshnessIndicator";
 import AnnotationManager from "../components/report/AnnotationManager";
@@ -942,9 +941,6 @@ Generate a complete report configuration that captures their intent.`,
                 <ul className="list-disc list-inside text-gray-600">
                   <li>Title: {currentReport.title}</li>
                   <li>Type: {currentReport.configuration?.chart_type || 'N/A'}</li>
-                  {currentReport.account && (
-                    <li>Account: {currentReport.account}</li>
-                  )}
                 </ul>
               </div>
             )}
