@@ -4,11 +4,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { BookOpen, Plus, ArrowLeft, Save, FileText, Trash2, GripVertical, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { 
+  BookOpen, Save, Plus, Trash2, GripVertical, FileText, 
+  LayoutTemplate, ArrowUp, ArrowDown, Eye 
+} from "lucide-react";
 import { toast } from "sonner";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   Dialog,
@@ -19,25 +21,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import PermissionGuard from "../components/auth/PermissionGuard";
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function BookEditor() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const bookId = searchParams.get('bookId');
-
-  const [bookReports, setBookReports] = useState([]);
+  const [book, setBook] = useState(null);
   const [showAddReportDialog, setShowAddReportDialog] = useState(false);
-  const [selectedReport, setSelectedReport] = useState(null);
+  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [reportNotes, setReportNotes] = useState('');
 
+  // Get book ID from URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const bookId = urlParams.get('bookId');
+
   // Fetch book
-  const { data: book, isLoading: bookLoading } = useQuery({
+  const { data: bookData, isLoading: bookLoading } = useQuery({
     queryKey: ['reportBook', bookId],
     queryFn: async () => {
       const books = await base44.entities.ReportBook.list();
@@ -48,289 +50,266 @@ export default function BookEditor() {
 
   // Fetch saved reports
   const { data: savedReports } = useQuery({
-    queryKey: ['reportRequests', book?.organization_id],
+    queryKey: ['reportRequests', bookData?.organization_id],
     queryFn: async () => {
-      if (!book?.organization_id) return [];
+      if (!bookData?.organization_id) return [];
       return await base44.entities.ReportRequest.filter(
-        { organization_id: book.organization_id },
+        { organization_id: bookData.organization_id },
         '-created_date'
       );
     },
-    enabled: !!book?.organization_id,
+    enabled: !!bookData?.organization_id,
     initialData: []
   });
 
   // Fetch templates
   const { data: templates } = useQuery({
-    queryKey: ['reportTemplates'],
-    queryFn: () => base44.entities.ReportTemplate.list('-created_date'),
+    queryKey: ['reportTemplates', bookData?.organization_id],
+    queryFn: async () => {
+      if (!bookData?.organization_id) return [];
+      const allTemplates = await base44.entities.ReportTemplate.list('-created_date');
+      return allTemplates.filter(t => 
+        t.organization_id === bookData.organization_id || t.is_public
+      );
+    },
+    enabled: !!bookData?.organization_id,
     initialData: []
   });
 
-  // Initialize book reports from book data
   useEffect(() => {
-    if (book?.reports) {
-      setBookReports(book.reports.sort((a, b) => a.order - b.order));
+    if (bookData) {
+      setBook(bookData);
     }
-  }, [book]);
+  }, [bookData]);
 
   // Update book mutation
   const updateBookMutation = useMutation({
-    mutationFn: ({ bookId, updates }) => base44.entities.ReportBook.update(bookId, updates),
+    mutationFn: (updates) => base44.entities.ReportBook.update(bookId, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reportBook'] });
+      queryClient.invalidateQueries({ queryKey: ['reportBook', bookId] });
       queryClient.invalidateQueries({ queryKey: ['reportBooks'] });
       toast.success('Book updated');
     }
   });
 
-  const handleSaveBook = () => {
-    if (!book) return;
-
-    // Renumber reports after any changes
-    const orderedReports = bookReports.map((report, idx) => ({
-      ...report,
-      order: idx
-    }));
-
-    updateBookMutation.mutate({
-      bookId: book.id,
-      updates: {
-        reports: orderedReports
-      }
-    });
-  };
-
-  const handleAddReport = (source, sourceType) => {
-    if (!source) return;
+  const handleAddReport = () => {
+    if (!selectedReportId && !selectedTemplateId) {
+      toast.error('Please select a report or template');
+      return;
+    }
 
     const newReport = {
-      order: bookReports.length,
-      [sourceType === 'saved' ? 'report_id' : 'template_id']: source.id,
+      order: (book.reports?.length || 0) + 1,
+      report_id: selectedReportId || null,
+      template_id: selectedTemplateId || null,
       notes: reportNotes,
-      title: source.title || source.name,
-      config: source.configuration || source
+      custom_config: null
     };
 
-    setBookReports([...bookReports, newReport]);
-    setShowAddReportDialog(false);
-    setSelectedReport(null);
-    setReportNotes('');
+    const updatedReports = [...(book.reports || []), newReport];
+
+    updateBookMutation.mutate({ reports: updatedReports });
     
-    toast.success('Report added to book');
+    setShowAddReportDialog(false);
+    setSelectedReportId(null);
+    setSelectedTemplateId(null);
+    setReportNotes('');
   };
 
   const handleRemoveReport = (index) => {
-    const updated = bookReports.filter((_, idx) => idx !== index);
-    setBookReports(updated);
-    toast.success('Report removed');
+    const updatedReports = book.reports.filter((_, i) => i !== index);
+    // Re-order
+    updatedReports.forEach((r, idx) => r.order = idx + 1);
+    updateBookMutation.mutate({ reports: updatedReports });
   };
 
-  const handleDragEnd = (result) => {
-    if (!result.destination) return;
-
-    const items = Array.from(bookReports);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    setBookReports(items);
+  const handleMoveReport = (index, direction) => {
+    const updatedReports = [...book.reports];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    if (newIndex < 0 || newIndex >= updatedReports.length) return;
+    
+    [updatedReports[index], updatedReports[newIndex]] = [updatedReports[newIndex], updatedReports[index]];
+    
+    // Re-order
+    updatedReports.forEach((r, idx) => r.order = idx + 1);
+    updateBookMutation.mutate({ reports: updatedReports });
   };
 
   const handlePublish = () => {
-    if (!book) return;
+    updateBookMutation.mutate({ status: 'published' });
+    toast.success('Book published! You can now share it with clients.');
+  };
 
-    // Save reports first
-    const orderedReports = bookReports.map((report, idx) => ({
-      ...report,
-      order: idx
-    }));
+  const handlePreview = () => {
+    navigate(createPageUrl('BookViewer') + `?bookId=${bookId}`);
+  };
 
-    updateBookMutation.mutate({
-      bookId: book.id,
-      updates: {
-        reports: orderedReports,
-        status: 'published'
-      }
-    });
-
-    toast.success('Book published!');
+  const getReportName = (report) => {
+    if (report.report_id) {
+      const savedReport = savedReports.find(r => r.id === report.report_id);
+      return savedReport?.title || 'Unknown Report';
+    }
+    if (report.template_id) {
+      const template = templates.find(t => t.id === report.template_id);
+      return template?.name || 'Unknown Template';
+    }
+    return 'Custom Report';
   };
 
   if (bookLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <BookOpen className="w-16 h-16 mx-auto text-gray-400 mb-4 animate-pulse" />
-          <p className="text-gray-600">Loading book...</p>
-        </div>
-      </div>
-    );
+    return <div className="p-8 text-center">Loading book...</div>;
   }
 
   if (!book) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-gray-600">Book not found</p>
-          <Button onClick={() => navigate(createPageUrl('ReportLibrary'))} className="mt-4">
-            Back to Library
-          </Button>
-        </div>
-      </div>
-    );
+    return <div className="p-8 text-center">Book not found</div>;
   }
 
   return (
     <PermissionGuard requiredLevel="editor">
       <div className="min-h-screen bg-gray-50">
         <div className="p-6 md:p-8">
-          <div className="max-w-6xl mx-auto space-y-6">
+          <div className="max-w-5xl mx-auto space-y-6">
             {/* Header */}
             <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => navigate(createPageUrl('ReportLibrary'))}
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                    <BookOpen className="w-8 h-8" />
-                    Edit Book
-                  </h1>
-                  <p className="text-gray-600 mt-1">{book.title}</p>
-                </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+                  <BookOpen className="w-8 h-8" />
+                  {book.title}
+                </h1>
+                <p className="text-gray-600 mt-1">{book.description || 'Edit your report book'}</p>
+                <Badge className={book.status === 'published' ? 'bg-green-600 mt-2' : 'bg-yellow-600 mt-2'}>
+                  {book.status}
+                </Badge>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleSaveBook}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Changes
+                <Button variant="outline" onClick={handlePreview} className="gap-2">
+                  <Eye className="w-4 h-4" />
+                  Preview
                 </Button>
-                <Button onClick={handlePublish} disabled={bookReports.length === 0}>
-                  <FileText className="w-4 h-4 mr-2" />
-                  Publish Book
-                </Button>
+                {book.status === 'draft' && (
+                  <Button onClick={handlePublish} className="gap-2">
+                    <Save className="w-4 h-4" />
+                    Publish Book
+                  </Button>
+                )}
               </div>
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-6">
-              {/* Main Editor */}
-              <div className="lg:col-span-2 space-y-4">
-                <Card>
-                  <CardHeader>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <CardTitle>Book Contents</CardTitle>
-                        <CardDescription>
-                          {bookReports.length} reports • Drag to reorder
-                        </CardDescription>
-                      </div>
-                      <Button onClick={() => setShowAddReportDialog(true)} size="sm" className="gap-2">
-                        <Plus className="w-4 h-4" />
-                        Add Report
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {bookReports.length === 0 ? (
-                      <div className="text-center py-12">
-                        <FileText className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-                        <p className="text-gray-600 mb-2">No reports added yet</p>
-                        <p className="text-sm text-gray-500">Click "Add Report" to get started</p>
-                      </div>
-                    ) : (
-                      <DragDropContext onDragEnd={handleDragEnd}>
-                        <Droppable droppableId="reports">
-                          {(provided) => (
-                            <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                              {bookReports.map((report, index) => (
-                                <Draggable key={`report-${index}`} draggableId={`report-${index}`} index={index}>
-                                  {(provided, snapshot) => (
-                                    <div
-                                      ref={provided.innerRef}
-                                      {...provided.draggableProps}
-                                      className={`flex items-center gap-3 p-4 rounded-lg border ${
-                                        snapshot.isDragging ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'
-                                      }`}
-                                    >
-                                      <div {...provided.dragHandleProps} className="cursor-grab">
-                                        <GripVertical className="w-5 h-5 text-gray-400" />
-                                      </div>
-                                      <div className="flex-1">
-                                        <div className="font-medium">{report.title}</div>
-                                        {report.notes && (
-                                          <p className="text-sm text-gray-500 mt-1">{report.notes}</p>
-                                        )}
-                                        <div className="flex gap-2 mt-2">
-                                          {report.report_id && <Badge variant="outline">Saved Report</Badge>}
-                                          {report.template_id && <Badge variant="outline">Template</Badge>}
-                                        </div>
-                                      </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleRemoveReport(index)}
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </Button>
-                                    </div>
-                                  )}
-                                </Draggable>
-                              ))}
-                              {provided.placeholder}
-                            </div>
+            {/* Reports List */}
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Reports in this Book</CardTitle>
+                    <CardDescription>
+                      Drag to reorder, or use arrows to change sequence
+                    </CardDescription>
+                  </div>
+                  <Button onClick={() => setShowAddReportDialog(true)} className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Report
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {book.reports && book.reports.length > 0 ? (
+                  <div className="space-y-3">
+                    {book.reports.map((report, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                      >
+                        <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
+                        
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {report.report_id && <FileText className="w-4 h-4 text-blue-600" />}
+                            {report.template_id && <LayoutTemplate className="w-4 h-4 text-purple-600" />}
+                            <span className="font-medium">{getReportName(report)}</span>
+                          </div>
+                          {report.notes && (
+                            <p className="text-sm text-gray-600">{report.notes}</p>
                           )}
-                        </Droppable>
-                      </DragDropContext>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                        </div>
 
-              {/* Sidebar - Book Info */}
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Book Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label className="text-xs text-gray-500">Status</Label>
-                      <div className="mt-1">
-                        <Badge className={book.status === 'published' ? 'bg-green-600' : 'bg-yellow-600'}>
-                          {book.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">#{report.order}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleMoveReport(index, 'up')}
+                            disabled={index === 0}
+                          >
+                            <ArrowUp className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleMoveReport(index, 'down')}
+                            disabled={index === book.reports.length - 1}
+                          >
+                            <ArrowDown className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveReport(index)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    {book.account_name && (
-                      <div>
-                        <Label className="text-xs text-gray-500">Account</Label>
-                        <p className="mt-1 font-medium">{book.account_name}</p>
-                      </div>
-                    )}
-                    {book.description && (
-                      <div>
-                        <Label className="text-xs text-gray-500">Description</Label>
-                        <p className="mt-1 text-sm">{book.description}</p>
-                      </div>
-                    )}
-                    <div>
-                      <Label className="text-xs text-gray-500">Reports</Label>
-                      <p className="mt-1 font-medium">{bookReports.length}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <FileText className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600 mb-2">No reports added yet</p>
+                    <p className="text-sm text-gray-500">Click "Add Report" to start building your book</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Book Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Book Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Title</Label>
+                    <Input
+                      value={book.title}
+                      onChange={(e) => setBook({ ...book, title: e.target.value })}
+                      onBlur={() => updateBookMutation.mutate({ title: book.title })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Status</Label>
+                    <Input value={book.status} disabled className="capitalize" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Textarea
+                    value={book.description || ''}
+                    onChange={(e) => setBook({ ...book, description: e.target.value })}
+                    onBlur={() => updateBookMutation.mutate({ description: book.description })}
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
         {/* Add Report Dialog */}
         <Dialog open={showAddReportDialog} onOpenChange={setShowAddReportDialog}>
-          <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Report to Book</DialogTitle>
               <DialogDescription>
@@ -338,96 +317,110 @@ export default function BookEditor() {
               </DialogDescription>
             </DialogHeader>
             
-            <Tabs defaultValue="saved" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="saved">Saved Reports ({savedReports.length})</TabsTrigger>
-                <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>
+            <Tabs defaultValue="saved">
+              <TabsList className="w-full">
+                <TabsTrigger value="saved" className="flex-1">Saved Reports</TabsTrigger>
+                <TabsTrigger value="templates" className="flex-1">Templates</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="saved" className="mt-4">
-                <ScrollArea className="h-[400px] pr-4">
-                  <div className="space-y-2">
-                    {savedReports.map(report => (
-                      <Card 
-                        key={report.id}
-                        className={`cursor-pointer hover:shadow-md transition-shadow ${
-                          selectedReport?.id === report.id ? 'border-blue-500 border-2' : ''
-                        }`}
-                        onClick={() => setSelectedReport(report)}
-                      >
-                        <CardHeader className="p-4">
-                          <CardTitle className="text-base">{report.title}</CardTitle>
-                          {report.description && (
-                            <CardDescription className="text-sm">{report.description}</CardDescription>
+              <TabsContent value="saved" className="space-y-3 mt-4">
+                {savedReports.length > 0 ? (
+                  savedReports.map(report => (
+                    <div
+                      key={report.id}
+                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                        selectedReportId === report.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => {
+                        setSelectedReportId(report.id);
+                        setSelectedTemplateId(null);
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-medium">{report.title}</h4>
+                          <p className="text-sm text-gray-600 mt-1">{report.description}</p>
+                          {report.configuration && (
+                            <div className="flex gap-2 mt-2">
+                              <Badge variant="outline" className="text-xs">
+                                {report.configuration.chart_type}
+                              </Badge>
+                              {report.configuration.metrics?.slice(0, 2).map(m => (
+                                <Badge key={m} variant="outline" className="text-xs">{m}</Badge>
+                              ))}
+                            </div>
                           )}
-                        </CardHeader>
-                      </Card>
-                    ))}
-                    {savedReports.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
-                        No saved reports available
+                        </div>
+                        {selectedReportId === report.id && (
+                          <Badge className="bg-blue-600">Selected</Badge>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </ScrollArea>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No saved reports available</p>
+                )}
               </TabsContent>
               
-              <TabsContent value="templates" className="mt-4">
-                <ScrollArea className="h-[400px] pr-4">
-                  <div className="space-y-2">
-                    {templates.map(template => (
-                      <Card 
-                        key={template.id}
-                        className={`cursor-pointer hover:shadow-md transition-shadow ${
-                          selectedReport?.id === template.id ? 'border-blue-500 border-2' : ''
-                        }`}
-                        onClick={() => setSelectedReport(template)}
-                      >
-                        <CardHeader className="p-4">
-                          <CardTitle className="text-base">{template.name}</CardTitle>
-                          {template.description && (
-                            <CardDescription className="text-sm">{template.description}</CardDescription>
+              <TabsContent value="templates" className="space-y-3 mt-4">
+                {templates.length > 0 ? (
+                  templates.map(template => (
+                    <div
+                      key={template.id}
+                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                        selectedTemplateId === template.id
+                          ? 'border-purple-500 bg-purple-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => {
+                        setSelectedTemplateId(template.id);
+                        setSelectedReportId(null);
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-medium">{template.name}</h4>
+                          <p className="text-sm text-gray-600 mt-1">{template.description}</p>
+                          {template.chart_settings && (
+                            <div className="flex gap-2 mt-2">
+                              <Badge variant="outline" className="text-xs">
+                                {template.chart_settings.chart_type}
+                              </Badge>
+                              {template.is_public && (
+                                <Badge variant="secondary" className="text-xs">Public</Badge>
+                              )}
+                            </div>
                           )}
-                        </CardHeader>
-                      </Card>
-                    ))}
-                    {templates.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
-                        No templates available
+                        </div>
+                        {selectedTemplateId === template.id && (
+                          <Badge className="bg-purple-600">Selected</Badge>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </ScrollArea>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No templates available</p>
+                )}
               </TabsContent>
             </Tabs>
 
-            {selectedReport && (
-              <div className="space-y-2 pt-4 border-t">
-                <Label htmlFor="report-notes">Notes (optional)</Label>
-                <Textarea
-                  id="report-notes"
-                  placeholder="Add any notes or context for this report..."
-                  value={reportNotes}
-                  onChange={(e) => setReportNotes(e.target.value)}
-                  rows={2}
-                />
-              </div>
-            )}
+            <div className="space-y-2 pt-4 border-t">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                placeholder="Add notes about this section..."
+                value={reportNotes}
+                onChange={(e) => setReportNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setShowAddReportDialog(false);
-                setSelectedReport(null);
-                setReportNotes('');
-              }}>
+              <Button variant="outline" onClick={() => setShowAddReportDialog(false)}>
                 Cancel
               </Button>
-              <Button 
-                onClick={() => handleAddReport(selectedReport, savedReports.includes(selectedReport) ? 'saved' : 'template')}
-                disabled={!selectedReport}
-              >
-                Add to Book
-              </Button>
+              <Button onClick={handleAddReport}>Add to Book</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
