@@ -1,368 +1,327 @@
 import { environmentConfig } from "../config/EnvironmentConfig";
 
 /**
- * Call Tracking Metrics Integration Service
- * Implements real CTM API calls for fetching tracking numbers, call logs, and metrics
+ * Call Tracking Metrics API Service
+ * Handles all interactions with the CallTrackingMetrics API
  */
 class CallTrackingService {
   constructor() {
     this.baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
-    this.rateLimit = 10; // 10 requests per second
-    this.requestQueue = [];
   }
 
   /**
-   * Make authenticated API request to CTM
+   * Make authenticated request to CTM API
    */
   async makeRequest(endpoint, accessKey, secretKey, params = {}) {
     try {
-      // Build query string
-      const queryString = Object.keys(params).length > 0
-        ? '?' + new URLSearchParams(params).toString()
-        : '';
+      const auth = btoa(`${accessKey}:${secretKey}`);
+      const queryString = new URLSearchParams(params).toString();
+      const url = `${this.baseUrl}${endpoint}${queryString ? '?' + queryString : ''}`;
 
-      const url = `${this.baseUrl}${endpoint}${queryString}`;
-
-      // Create Basic Auth header
-      const credentials = btoa(`${accessKey}:${secretKey}`);
-
-      environmentConfig.log('info', `[CallTracking] Fetching: ${url}`);
+      environmentConfig.log('info', `[CTM] Fetching: ${endpoint}`);
 
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Authorization': `Basic ${credentials}`,
+          'Authorization': `Basic ${auth}`,
           'Content-Type': 'application/json'
         }
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`CTM API Error (${response.status}): ${errorText}`);
+        const error = await response.text();
+        throw new Error(`CTM API Error (${response.status}): ${error}`);
       }
 
-      const data = await response.json();
-      return data;
+      return await response.json();
 
     } catch (error) {
-      environmentConfig.log('error', '[CallTracking] API request failed:', error);
+      environmentConfig.log('error', '[CTM] Request failed:', error);
       throw error;
     }
   }
 
   /**
-   * Fetch call metrics from CTM for a date range
-   * Returns aggregated call data grouped by date
+   * Fetch call data for date range
+   * Returns aggregated metrics by day
    */
-  async fetchCallMetrics(startDate, endDate, accessKey, secretKey, accountId) {
+  async fetchCallMetrics(accountId, startDate, endDate, accessKey, secretKey) {
     try {
-      environmentConfig.log('info', `[CallTracking] Fetching call metrics for account ${accountId}`);
-
-      // Fetch calls with date filters
-      // CTM uses 'start_date' and 'end_date' query parameters
-      const calls = await this.fetchAllCalls(accountId, {
-        start_date: startDate,
-        end_date: endDate
-      }, accessKey, secretKey);
+      const allCalls = await this.fetchAllCalls(accountId, startDate, endDate, accessKey, secretKey);
 
       // Aggregate by date
       const metricsByDate = {};
 
-      calls.forEach(call => {
-        // Extract date from call start time (ISO format: "2024-01-15T10:30:00Z")
-        const callDate = call.start_time ? call.start_time.split('T')[0] : startDate;
-
-        if (!metricsByDate[callDate]) {
-          metricsByDate[callDate] = {
-            date: callDate,
+      allCalls.forEach(call => {
+        const date = call.start_time.split('T')[0]; // Extract date part
+        
+        if (!metricsByDate[date]) {
+          metricsByDate[date] = {
+            date,
             total_calls: 0,
             answered_calls: 0,
             missed_calls: 0,
             qualified_calls: 0,
             total_duration: 0,
-            average_duration: 0
+            call_ids: []
           };
         }
 
-        // Increment counters
-        metricsByDate[callDate].total_calls++;
-
-        // Status can be: "answered", "missed", "voicemail", "abandoned"
-        if (call.status === 'answered') {
-          metricsByDate[callDate].answered_calls++;
-        } else if (call.status === 'missed') {
-          metricsByDate[callDate].missed_calls++;
+        metricsByDate[date].total_calls++;
+        metricsByDate[date].call_ids.push(call.id);
+        
+        // Check if call was answered (talk_time > 0)
+        if (call.talk_time && call.talk_time > 0) {
+          metricsByDate[date].answered_calls++;
+          metricsByDate[date].total_duration += call.talk_time;
+        } else {
+          metricsByDate[date].missed_calls++;
         }
 
-        // Check if qualified (based on duration, tags, or custom field)
-        const duration = call.talk_time || call.duration || 0;
-        if (duration >= 30) { // Qualified if 30+ seconds
-          metricsByDate[callDate].qualified_calls++;
-        }
-
-        metricsByDate[callDate].total_duration += duration;
-      });
-
-      // Calculate averages
-      Object.values(metricsByDate).forEach(metrics => {
-        if (metrics.total_calls > 0) {
-          metrics.average_duration = Math.round(metrics.total_duration / metrics.total_calls);
+        // Check if call was qualified (you may need to adjust this logic based on your criteria)
+        if (call.sale_status === 'qualified' || call.qualified === true) {
+          metricsByDate[date].qualified_calls++;
         }
       });
 
-      environmentConfig.log('info', `[CallTracking] Aggregated ${calls.length} calls into ${Object.keys(metricsByDate).length} days`);
-
-      return Object.values(metricsByDate);
+      // Convert to array and calculate averages
+      return Object.values(metricsByDate).map(day => ({
+        ...day,
+        average_duration: day.answered_calls > 0 
+          ? Math.round(day.total_duration / day.answered_calls) 
+          : 0,
+        answer_rate: day.total_calls > 0 
+          ? Math.round((day.answered_calls / day.total_calls) * 100) 
+          : 0
+      }));
 
     } catch (error) {
-      environmentConfig.log('error', '[CallTracking] Fetch call metrics error:', error);
+      environmentConfig.log('error', '[CTM] Fetch call metrics error:', error);
       throw error;
     }
   }
 
   /**
-   * Fetch all calls for an account (handles pagination)
-   * Endpoint: GET /api/v1/accounts/{account_id}/calls
+   * Fetch all calls for an account with pagination
+   * Based on: GET /accounts/{account_id}/calls.json
    */
-  async fetchAllCalls(accountId, filters = {}, accessKey, secretKey) {
+  async fetchAllCalls(accountId, startDate, endDate, accessKey, secretKey, filters = {}) {
     try {
       let allCalls = [];
-      let page = 1;
-      let hasMore = true;
+      let currentPage = 1;
+      let totalPages = 1;
 
-      while (hasMore) {
+      // Build query parameters
+      const params = {
+        page: currentPage,
+        per_page: 100, // Max per page
+        ...filters
+      };
+
+      // Add date filters if provided
+      if (startDate) {
+        params.start_date = startDate;
+      }
+      if (endDate) {
+        params.end_date = endDate;
+      }
+
+      // Fetch all pages
+      do {
+        params.page = currentPage;
+        
         const response = await this.makeRequest(
-          `/accounts/${accountId}/calls`,
+          `/accounts/${accountId}/calls.json`,
           accessKey,
           secretKey,
-          {
-            ...filters,
-            page: page,
-            per_page: 100 // Max per page
-          }
+          params
         );
 
-        // CTM returns paginated data with structure:
-        // { calls: [...], page: 1, total_pages: 5, total_entries: 450 }
-        const calls = response.calls || [];
-        allCalls = allCalls.concat(calls);
-
-        environmentConfig.log('info', `[CallTracking] Fetched page ${page}/${response.total_pages || 1} (${calls.length} calls)`);
-
-        // Check if there are more pages
-        hasMore = response.next_page !== null && page < (response.total_pages || 1);
-        page++;
-
-        // Safety limit: don't fetch more than 50 pages (5000 calls)
-        if (page > 50) {
-          environmentConfig.log('warn', '[CallTracking] Reached page limit, stopping pagination');
-          break;
+        if (response.calls && Array.isArray(response.calls)) {
+          allCalls = allCalls.concat(response.calls);
         }
-      }
+
+        totalPages = response.total_pages || 1;
+        currentPage++;
+
+        environmentConfig.log('info', `[CTM] Fetched page ${currentPage - 1} of ${totalPages}`);
+
+      } while (currentPage <= totalPages);
+
+      environmentConfig.log('info', `[CTM] Total calls fetched: ${allCalls.length}`);
 
       return allCalls;
 
     } catch (error) {
-      environmentConfig.log('error', '[CallTracking] Fetch all calls error:', error);
+      environmentConfig.log('error', '[CTM] Fetch all calls error:', error);
       throw error;
     }
   }
 
   /**
-   * Fetch detailed call logs
-   * Returns individual call records with full details
+   * Fetch call logs with detailed information
+   * GET /accounts/{account_id}/calls.json
    */
-  async fetchCallLogs(startDate, endDate, accessKey, secretKey, accountId, filters = {}) {
+  async fetchCallLogs(accountId, startDate, endDate, accessKey, secretKey, page = 1, perPage = 50) {
     try {
-      environmentConfig.log('info', `[CallTracking] Fetching call logs for account ${accountId}`);
+      const params = {
+        page,
+        per_page: perPage
+      };
 
-      const calls = await this.fetchAllCalls(accountId, {
-        start_date: startDate,
-        end_date: endDate,
-        ...filters
-      }, accessKey, secretKey);
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
 
-      // Transform to standard format
-      return calls.map(call => ({
+      const response = await this.makeRequest(
+        `/accounts/${accountId}/calls.json`,
+        accessKey,
+        secretKey,
+        params
+      );
+
+      // Transform call data to standard format
+      const calls = (response.calls || []).map(call => ({
         id: call.id,
         tracking_number: call.tracking_number,
-        tracking_number_id: call.tracking_number_id,
-        caller_number: call.caller,
-        dialed_number: call.dialed,
+        caller_number: call.caller_number,
         start_time: call.start_time,
-        duration: call.duration || 0,
-        talk_time: call.talk_time || 0,
+        duration: call.duration,
+        talk_time: call.talk_time,
         status: call.status,
-        call_type: call.call_type, // inbound/outbound
+        qualified: call.sale_status === 'qualified',
         source: call.source,
-        source_url: call.referrer,
-        campaign: call.utm_campaign,
-        medium: call.utm_medium,
-        keyword: call.keyword,
+        medium: call.medium,
+        campaign: call.campaign,
+        keywords: call.keywords,
+        landing_page: call.landing_page,
+        referrer: call.referrer,
         recording_url: call.recording,
-        voicemail_url: call.voicemail,
-        tags: call.tag_list || [],
-        custom_fields: call.custom_data || {},
-        notes: call.notes,
-        lead_status: call.lead_status,
-        sale_value: call.sale_value,
-        formatted_caller: call.formatted_tracking_number,
-        formatted_tracking: call.formatted_tracking_number
+        transcription: call.transcription
       }));
 
+      return {
+        calls,
+        pagination: {
+          page: response.page,
+          per_page: response.per_page,
+          total_entries: response.total_entries,
+          total_pages: response.total_pages,
+          next_page: response.next_page,
+          previous_page: response.previous_page
+        }
+      };
+
     } catch (error) {
-      environmentConfig.log('error', '[CallTracking] Fetch call logs error:', error);
+      environmentConfig.log('error', '[CTM] Fetch call logs error:', error);
       throw error;
     }
   }
 
   /**
-   * Fetch tracking numbers for an account
-   * Endpoint: GET /api/v1/accounts/{account_id}/numbers
+   * Fetch call attribution data
+   * Returns marketing attribution details for calls
+   */
+  async fetchCallAttribution(accountId, callId, accessKey, secretKey) {
+    try {
+      const response = await this.makeRequest(
+        `/accounts/${accountId}/calls/${callId}.json`,
+        accessKey,
+        secretKey
+      );
+
+      return {
+        call_id: response.id,
+        source: response.source,
+        medium: response.medium,
+        campaign: response.campaign,
+        keywords: response.keywords,
+        landing_page: response.landing_page,
+        referrer: response.referrer,
+        gclid: response.gclid,
+        utm_source: response.utm_source,
+        utm_medium: response.utm_medium,
+        utm_campaign: response.utm_campaign,
+        utm_content: response.utm_content,
+        utm_term: response.utm_term
+      };
+
+    } catch (error) {
+      environmentConfig.log('error', '[CTM] Fetch call attribution error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch tracking numbers for account
+   * GET /accounts/{account_id}/numbers.json
    */
   async fetchTrackingNumbers(accountId, accessKey, secretKey) {
     try {
-      environmentConfig.log('info', `[CallTracking] Fetching tracking numbers for account ${accountId}`);
+      let allNumbers = [];
+      let currentPage = 1;
+      let totalPages = 1;
 
-      const response = await this.makeRequest(
-        `/accounts/${accountId}/numbers`,
-        accessKey,
-        secretKey
-      );
+      do {
+        const response = await this.makeRequest(
+          `/accounts/${accountId}/numbers.json`,
+          accessKey,
+          secretKey,
+          { page: currentPage, per_page: 100 }
+        );
 
-      // CTM returns: { numbers: [...], page: 1, total_pages: 1, ... }
-      const numbers = response.numbers || [];
+        if (response.numbers && Array.isArray(response.numbers)) {
+          allNumbers = allNumbers.concat(response.numbers);
+        }
 
-      return numbers.map(number => ({
+        totalPages = response.total_pages || 1;
+        currentPage++;
+
+      } while (currentPage <= totalPages);
+
+      return allNumbers.map(number => ({
         id: number.id,
-        tracking_number: number.number,
+        number: number.number,
         name: number.name,
-        formatted_number: number.formatted_number,
+        type: number.tracking_type,
         status: number.status,
-        pool_type: number.pool_type, // static/dynamic
-        source: number.source,
-        receiving_numbers: number.receiving_numbers || [],
-        call_flow_id: number.call_flow_id,
         created: number.created,
-        updated: number.updated
+        pool_id: number.number_pool_id
       }));
 
     } catch (error) {
-      environmentConfig.log('error', '[CallTracking] Fetch tracking numbers error:', error);
+      environmentConfig.log('error', '[CTM] Fetch tracking numbers error:', error);
       throw error;
     }
   }
 
   /**
-   * Sync tracking numbers hierarchy (for DataSync service)
+   * Sync tracking number hierarchy for an account
+   * Creates/updates tracking number records in the database
    */
   async syncTrackingNumbers(dataSourceId, organizationId) {
     try {
-      // This would be called by DataSyncService during sync jobs
-      // For now, return summary - actual implementation depends on your data storage needs
-
-      environmentConfig.log('info', `[CallTracking] Syncing tracking numbers for data source ${dataSourceId}`);
-
-      // In production, you would:
-      // 1. Fetch tracking numbers from CTM
-      // 2. Store/update them in your TrackingNumber entity
-      // 3. Return sync results
-
+      // This would be implemented when we have a TrackingNumber entity
+      environmentConfig.log('info', '[CTM] Tracking number sync not yet implemented');
+      
       return {
         recordsSynced: 0,
-        recordsCreated: 0,
-        recordsUpdated: 0
+        message: 'Tracking number sync coming soon'
       };
 
     } catch (error) {
-      environmentConfig.log('error', '[CallTracking] Sync tracking numbers error:', error);
+      environmentConfig.log('error', '[CTM] Sync tracking numbers error:', error);
       throw error;
     }
   }
 
   /**
-   * Get call attribution data (source/campaign/keyword)
+   * Get account information
+   * GET /accounts/{account_id}.json
    */
-  async fetchCallAttribution(callId, accountId, accessKey, secretKey) {
-    try {
-      environmentConfig.log('info', `[CallTracking] Fetching attribution for call ${callId}`);
-
-      // Fetch single call details
-      // Endpoint: GET /api/v1/accounts/{account_id}/calls/{call_id}
-      const response = await this.makeRequest(
-        `/accounts/${accountId}/calls/${callId}`,
-        accessKey,
-        secretKey
-      );
-
-      const call = response;
-
-      return {
-        call_id: call.id,
-        source: call.source,
-        source_url: call.referrer,
-        landing_page: call.landing_page,
-        utm_source: call.utm_source,
-        utm_medium: call.utm_medium,
-        utm_campaign: call.utm_campaign,
-        utm_term: call.utm_term,
-        utm_content: call.utm_content,
-        keyword: call.keyword,
-        gclid: call.gclid,
-        msclkid: call.msclkid,
-        fbclid: call.fbclid
-      };
-
-    } catch (error) {
-      environmentConfig.log('error', '[CallTracking] Fetch call attribution error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Test connection to CTM API
-   */
-  async testConnection(accountId, accessKey, secretKey) {
-    try {
-      environmentConfig.log('info', '[CallTracking] Testing connection...');
-
-      // Try to fetch account info
-      const response = await this.makeRequest(
-        `/accounts/${accountId}`,
-        accessKey,
-        secretKey
-      );
-
-      if (response && response.id) {
-        return {
-          success: true,
-          account_name: response.name,
-          account_id: response.id,
-          status: response.status
-        };
-      }
-
-      return {
-        success: false,
-        error: 'Unable to verify account'
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Fetch account summary stats
-   * Endpoint: GET /api/v1/accounts/{account_id}
-   */
-  async fetchAccountSummary(accountId, accessKey, secretKey) {
+  async fetchAccountInfo(accountId, accessKey, secretKey) {
     try {
       const response = await this.makeRequest(
-        `/accounts/${accountId}`,
+        `/accounts/${accountId}.json`,
         accessKey,
         secretKey
       );
@@ -372,13 +331,78 @@ class CallTrackingService {
         name: response.name,
         status: response.status,
         created: response.created,
-        updated: response.updated,
-        total_numbers: response.total_numbers || 0,
-        total_calls: response.total_calls || 0
+        updated: response.updated
       };
 
     } catch (error) {
-      environmentConfig.log('error', '[CallTracking] Fetch account summary error:', error);
+      environmentConfig.log('error', '[CTM] Fetch account info error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Test connection to CTM API
+   * Verifies credentials and returns account info
+   */
+  async testConnection(accountId, accessKey, secretKey) {
+    try {
+      const account = await this.fetchAccountInfo(accountId, accessKey, secretKey);
+      
+      return {
+        success: true,
+        account_name: account.name,
+        account_status: account.status,
+        message: 'Connection successful'
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  /**
+   * Fetch account summary statistics
+   * Returns high-level metrics for the account
+   */
+  async fetchAccountSummary(accountId, accessKey, secretKey, days = 30) {
+    try {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+
+      const calls = await this.fetchAllCalls(
+        accountId,
+        startDate.toISOString().split('T')[0],
+        endDate.toISOString().split('T')[0],
+        accessKey,
+        secretKey
+      );
+
+      const totalCalls = calls.length;
+      const answeredCalls = calls.filter(c => c.talk_time && c.talk_time > 0).length;
+      const missedCalls = totalCalls - answeredCalls;
+      const qualifiedCalls = calls.filter(c => c.sale_status === 'qualified').length;
+
+      const totalDuration = calls.reduce((sum, call) => 
+        sum + (call.talk_time || 0), 0
+      );
+
+      return {
+        period_days: days,
+        total_calls: totalCalls,
+        answered_calls: answeredCalls,
+        missed_calls: missedCalls,
+        qualified_calls: qualifiedCalls,
+        answer_rate: totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0,
+        qualification_rate: answeredCalls > 0 ? Math.round((qualifiedCalls / answeredCalls) * 100) : 0,
+        average_duration: answeredCalls > 0 ? Math.round(totalDuration / answeredCalls) : 0,
+        total_talk_time: totalDuration
+      };
+
+    } catch (error) {
+      environmentConfig.log('error', '[CTM] Fetch account summary error:', error);
       throw error;
     }
   }
