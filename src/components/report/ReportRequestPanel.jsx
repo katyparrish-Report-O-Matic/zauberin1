@@ -8,8 +8,16 @@ import { Loader2, Moon, Calendar as CalendarIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import AccountSelector from "../books/AccountSelector";
 
-export default function ReportRequestPanel({ onGenerateReport, isGenerating, disabled = false }) {
+export default function ReportRequestPanel({ 
+  onGenerateReport, 
+  isGenerating, 
+  disabled = false,
+  organizationId,
+  selectedAccountId,
+  onAccountChange
+}) {
   const [title, setTitle] = useState('');
   const [request, setRequest] = useState('');
   const [dateRange, setDateRange] = useState({ from: null, to: null });
@@ -50,6 +58,13 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
+
+        <AccountSelector
+          organizationId={organizationId}
+          value={selectedAccountId}
+          onChange={onAccountChange}
+          showLabel={true}
+        />
 
         <div className="space-y-2">
           <Label>Date Range (optional)</Label>

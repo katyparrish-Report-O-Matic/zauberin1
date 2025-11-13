@@ -538,11 +538,6 @@ export default function ReportBuilder() {
                   onChange={setSelectedOrgId}
                 />
               )}
-              <AccountFilter
-                organizationId={selectedOrgId || currentUser?.organization_id}
-                value={selectedAccountId}
-                onChange={setSelectedAccountId}
-              />
               <DataFreshnessIndicator organizationId={selectedOrgId || currentUser?.organization_id} />
               <RateLimitIndicator />
               <DataQualityIndicator />
@@ -569,6 +564,9 @@ export default function ReportBuilder() {
                 onGenerateReport={generateReport}
                 isGenerating={isGenerating}
                 disabled={!canEdit}
+                organizationId={selectedOrgId || currentUser?.organization_id}
+                selectedAccountId={selectedAccountId}
+                onAccountChange={setSelectedAccountId}
               />
               
               <AnnotationManager 
