@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon, Pencil, Trash2, AlertCircle } from "lucide-react";
+import { Database, Plus, CheckCircle, XCircle, RefreshCw, Settings as SettingsIcon, Pencil, Trash2, AlertCircle, Loader2, CheckCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -44,13 +44,20 @@ export default function DataSourceManager() {
   const [editingSource, setEditingSource] = useState(null);
   const [deletingSource, setDeletingSource] = useState(null);
   const [selectedSource, setSelectedSource] = useState(null);
+  
+  // Multi-step form state
+  const [currentStep, setCurrentStep] = useState(1);
+  const [availableAccounts, setAvailableAccounts] = useState([]);
+  const [isTesting, setIsTesting] = useState(false);
+  const [connectionTested, setConnectionTested] = useState(false);
+  
   const [formData, setFormData] = useState({
     name: '',
     platform_type: 'call_tracking',
     auth_type: 'api_key',
     api_url: 'https://api.calltrackingmetrics.com/api/v1',
     api_key: '',
-    account_ids: '',
+    account_ids: [],
     property_ids: '',
     schedule: 'hourly',
     backfill_days: 90
@@ -99,14 +106,36 @@ export default function DataSourceManager() {
     initialData: []
   });
 
+  // Test connection and fetch accounts
+  const testConnectionMutation = useMutation({
+    mutationFn: async (credentials) => {
+      const result = await base44.functions.invoke('testCtmConnection', {
+        apiKey: credentials.api_key
+      });
+      
+      if (!result.data.success) {
+        throw new Error(result.data.error || 'Connection test failed');
+      }
+      
+      return result.data;
+    },
+    onSuccess: (data) => {
+      setAvailableAccounts(data.accounts || []);
+      setConnectionTested(true);
+      setCurrentStep(2);
+      toast.success(`Connection successful! Found ${data.accounts_found} account(s)`);
+    },
+    onError: (error) => {
+      toast.error(`Connection failed: ${error.message}`);
+      setConnectionTested(false);
+      setAvailableAccounts([]);
+    }
+  });
+
   // Create/Update data source mutation
   const saveSourceMutation = useMutation({
     mutationFn: async (data) => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-
-      // Debug logging
-      console.log('[DataSourceManager] Saving with orgId:', orgId);
-      console.log('[DataSourceManager] Form data:', data);
 
       const credentials = {};
       if (data.auth_type === 'api_key') {
@@ -115,17 +144,14 @@ export default function DataSourceManager() {
         credentials.access_token = data.api_key;
       }
 
-      const accountIds = data.account_ids ? data.account_ids.split(',').map(s => s.trim()) : [];
-      const propertyIds = data.property_ids ? data.property_ids.split(',').map(s => s.trim()) : [];
-
       const payload = {
         organization_id: orgId,
         name: data.name,
         platform_type: data.platform_type,
         auth_type: data.auth_type,
         credentials,
-        account_ids: accountIds,
-        property_ids: propertyIds,
+        account_ids: data.account_ids,
+        property_ids: data.property_ids ? data.property_ids.split(',').map(s => s.trim()) : [],
         sync_config: {
           schedule: data.schedule,
           backfill_days: parseInt(data.backfill_days),
@@ -134,11 +160,10 @@ export default function DataSourceManager() {
         enabled: data.enabled !== undefined ? data.enabled : true,
         last_sync_status: data.last_sync_status || 'pending',
         metadata: {
-          api_url: data.api_url || null
+          api_url: data.api_url || null,
+          access_level: 'agency'
         }
       };
-
-      console.log('[DataSourceManager] Payload:', payload);
 
       if (editingSource) {
         return await base44.entities.DataSource.update(editingSource.id, payload);
@@ -205,11 +230,14 @@ export default function DataSourceManager() {
       auth_type: 'api_key',
       api_url: 'https://api.calltrackingmetrics.com/api/v1',
       api_key: '',
-      account_ids: '',
+      account_ids: [],
       property_ids: '',
       schedule: 'hourly',
       backfill_days: 90
     });
+    setCurrentStep(1);
+    setAvailableAccounts([]);
+    setConnectionTested(false);
   };
 
   const handleCreate = () => {
@@ -226,13 +254,16 @@ export default function DataSourceManager() {
       auth_type: source.auth_type,
       api_url: source.metadata?.api_url || 'https://api.calltrackingmetrics.com/api/v1',
       api_key: source.credentials?.api_key || source.credentials?.access_token || '',
-      account_ids: source.account_ids?.join(', ') || '',
+      account_ids: source.account_ids || [],
       property_ids: source.property_ids?.join(', ') || '',
       schedule: source.sync_config?.schedule || 'hourly',
       backfill_days: source.sync_config?.backfill_days || 90,
       enabled: source.enabled,
       last_sync_status: source.last_sync_status
     });
+    // When editing, skip to step 2 if we have accounts
+    setCurrentStep(source.account_ids?.length > 0 ? 2 : 1);
+    setConnectionTested(source.account_ids?.length > 0);
     setShowDialog(true);
   };
 
@@ -246,14 +277,39 @@ export default function DataSourceManager() {
     }
   };
 
+  const handleTestConnection = () => {
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    
+    if (!orgId || orgId === 'all') {
+      toast.error('Please select an organization');
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      toast.error('Please enter a name for this data source');
+      return;
+    }
+
+    if (!formData.api_key.trim()) {
+      toast.error('Please enter your API credentials (Access Key:Secret Key)');
+      return;
+    }
+
+    testConnectionMutation.mutate(formData);
+  };
+
+  const handleAccountToggle = (accountId) => {
+    setFormData(prev => ({
+      ...prev,
+      account_ids: prev.account_ids.includes(accountId)
+        ? prev.account_ids.filter(id => id !== accountId)
+        : [...prev.account_ids, accountId]
+    }));
+  };
+
   const handleSave = () => {
     const orgId = selectedOrgId || currentUser?.organization_id;
     
-    console.log('[DataSourceManager] handleSave called');
-    console.log('[DataSourceManager] Organization ID:', orgId);
-    console.log('[DataSourceManager] Form data:', formData);
-    
-    // Check organization
     if (!orgId || orgId === 'all') {
       toast.error('Please select an organization');
       return;
@@ -264,22 +320,16 @@ export default function DataSourceManager() {
       return;
     }
 
-    if (formData.platform_type === 'call_tracking') {
-      if (!formData.api_url) {
-        toast.error('API URL is required for Call Tracking');
-        return;
-      }
-      if (!formData.api_key) {
-        toast.error('API Key/Token is required');
-        return;
-      }
-      if (!formData.account_ids) {
-        toast.error('Account ID is required for Call Tracking');
-        return;
-      }
+    if (!formData.api_key) {
+      toast.error('API credentials are required');
+      return;
     }
 
-    console.log('[DataSourceManager] Validation passed, calling mutation');
+    if (formData.account_ids.length === 0) {
+      toast.error('Please select at least one account to sync');
+      return;
+    }
+
     saveSourceMutation.mutate(formData);
   };
 
@@ -308,43 +358,6 @@ export default function DataSourceManager() {
     return labels[type] || type;
   };
 
-  // Get platform-specific defaults
-  const getPlatformDefaults = (platformType) => {
-    switch (platformType) {
-      case 'call_tracking':
-        return {
-          api_url: 'https://api.calltrackingmetrics.com/api/v1',
-          auth_type: 'api_key',
-          schedule: 'hourly'
-        };
-      case 'google_ads':
-        return {
-          auth_type: 'oauth2',
-          schedule: 'daily'
-        };
-      case 'google_analytics_4':
-        return {
-          auth_type: 'oauth2',
-          schedule: 'daily'
-        };
-      default:
-        return {
-          auth_type: 'api_key',
-          schedule: 'daily'
-        };
-    }
-  };
-
-  const handlePlatformChange = (platformType) => {
-    const defaults = getPlatformDefaults(platformType);
-    setFormData({
-      ...formData,
-      platform_type: platformType,
-      ...defaults
-    });
-  };
-
-  // Check if user has organization
   const hasOrganization = currentUser?.organization_id && currentUser.organization_id !== 'none';
 
   return (
@@ -376,7 +389,6 @@ export default function DataSourceManager() {
               </div>
             </div>
 
-            {/* No Organization Warning */}
             {!hasOrganization && (
               <Alert>
                 <AlertCircle className="h-4 w-4" />
@@ -414,6 +426,12 @@ export default function DataSourceManager() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
+                    {source.account_ids?.length > 0 && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Accounts:</span>
+                        <p className="font-medium">{source.account_ids.length} connected</p>
+                      </div>
+                    )}
                     {source.last_sync_at && (
                       <div className="text-sm">
                         <span className="text-gray-600">Last sync:</span>
@@ -536,227 +554,187 @@ export default function DataSourceManager() {
         </div>
 
         {/* Create/Edit Data Source Dialog */}
-        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <Dialog open={showDialog} onOpenChange={(open) => {
+          setShowDialog(open);
+          if (!open) resetForm();
+        }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingSource ? 'Edit Data Source' : 'Add Data Source'}</DialogTitle>
+              <DialogTitle>
+                {editingSource ? 'Edit Data Source' : 'Add Data Source'}
+                {currentStep === 2 && ' - Select Accounts'}
+              </DialogTitle>
               <DialogDescription>
-                {editingSource ? 'Update your data source configuration' : 'Connect Call Tracking Metrics or other data platforms'}
+                {currentStep === 1 && 'Enter your API credentials to connect'}
+                {currentStep === 2 && 'Choose which accounts to sync data from'}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Client Name - Call Tracking"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="platform">Platform Type *</Label>
-                <Select
-                  value={formData.platform_type}
-                  onValueChange={handlePlatformChange}
-                  disabled={!!editingSource}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="call_tracking">Call Tracking Metrics</SelectItem>
-                    <SelectItem value="google_ads">Google Ads</SelectItem>
-                    <SelectItem value="google_analytics_4">Google Analytics 4</SelectItem>
-                    <SelectItem value="facebook_ads">Facebook Ads</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Call Tracking Specific Fields */}
-              {formData.platform_type === 'call_tracking' && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="api_url">API Base URL *</Label>
-                    <Input
-                      id="api_url"
-                      placeholder="https://api.calltrackingmetrics.com/api/v1"
-                      value={formData.api_url}
-                      onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
-                    />
-                    <p className="text-xs text-gray-500">
-                      Default: https://api.calltrackingmetrics.com/api/v1
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="auth_type">Authentication Method *</Label>
-                    <Select
-                      value={formData.auth_type}
-                      onValueChange={(value) => setFormData({ ...formData, auth_type: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="api_key">API Key</SelectItem>
-                        <SelectItem value="bearer_token">Bearer Token</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="api_key">
-                      {formData.auth_type === 'bearer_token' ? 'Access Token *' : 'API Key *'}
-                    </Label>
-                    <Input
-                      id="api_key"
-                      type="password"
-                      placeholder="Paste your API key or token here"
-                      value={formData.api_key}
-                      onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                    />
-                    <p className="text-xs text-gray-500">
-                      Find this in your Call Tracking Metrics account settings
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="account_ids">Account ID *</Label>
-                    <Input
-                      id="account_ids"
-                      placeholder="e.g., 12345"
-                      value={formData.account_ids}
-                      onChange={(e) => setFormData({ ...formData, account_ids: e.target.value })}
-                    />
-                    <p className="text-xs text-gray-500">
-                      Your Call Tracking Metrics account ID (found in account settings)
-                    </p>
-                  </div>
-                </>
-              )}
-
-              {/* Google Ads Fields */}
-              {formData.platform_type === 'google_ads' && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="auth_type">Authentication</Label>
-                    <Select
-                      value={formData.auth_type}
-                      onValueChange={(value) => setFormData({ ...formData, auth_type: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="oauth2">OAuth 2.0</SelectItem>
-                        <SelectItem value="api_key">API Key</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {formData.auth_type === 'api_key' && (
-                    <div className="space-y-2">
-                      <Label htmlFor="api_key">API Key</Label>
-                      <Input
-                        id="api_key"
-                        type="password"
-                        value={formData.api_key}
-                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="account_ids">Account IDs (comma-separated)</Label>
-                    <Input
-                      id="account_ids"
-                      placeholder="e.g., 123-456-7890, 098-765-4321"
-                      value={formData.account_ids}
-                      onChange={(e) => setFormData({ ...formData, account_ids: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* GA4 Fields */}
-              {formData.platform_type === 'google_analytics_4' && (
+            {/* Step 1: Credentials */}
+            {currentStep === 1 && (
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="property_ids">Property IDs (comma-separated)</Label>
+                  <Label htmlFor="name">Name *</Label>
                   <Input
-                    id="property_ids"
-                    placeholder="e.g., 123456789, 987654321"
-                    value={formData.property_ids}
-                    onChange={(e) => setFormData({ ...formData, property_ids: e.target.value })}
+                    id="name"
+                    placeholder="e.g., Adtrak Call Tracking"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
-              )}
-
-              {/* Common Sync Settings */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="schedule">Sync Schedule</Label>
-                  <Select
-                    value={formData.schedule}
-                    onValueChange={(value) => setFormData({ ...formData, schedule: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="hourly">Hourly (Recommended for calls)</SelectItem>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="manual">Manual Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="backfill_days">Historical Days</Label>
+                  <Label htmlFor="api_key">API Credentials (Access Key:Secret Key) *</Label>
                   <Input
-                    id="backfill_days"
-                    type="number"
-                    value={formData.backfill_days}
-                    onChange={(e) => setFormData({ ...formData, backfill_days: e.target.value })}
+                    id="api_key"
+                    type="password"
+                    placeholder="access_key_here:secret_key_here"
+                    value={formData.api_key}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
                   />
-                  <p className="text-xs text-gray-500">How many days back to sync</p>
-                </div>
-              </div>
-
-              {/* Platform-specific help text */}
-              {formData.platform_type === 'call_tracking' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-900 font-semibold mb-2">📞 Call Tracking Setup</p>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• API credentials found in CTM Settings → API Access</li>
-                    <li>• Account ID found in CTM Settings → Account Info</li>
-                    <li>• Initial sync will fetch calls from last {formData.backfill_days} days</li>
-                    <li>• Hourly sync recommended for real-time call tracking</li>
-                  </ul>
-                </div>
-              )}
-
-              {formData.platform_type !== 'call_tracking' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800">
-                    <strong>Note:</strong> After creating the data source, you'll need to complete OAuth authentication 
-                    if using OAuth 2.0. The initial sync will fetch the last {formData.backfill_days} days of data.
+                  <p className="text-xs text-gray-500">
+                    Format: access_key:secret_key (found in CTM Agency Settings → API Access)
                   </p>
                 </div>
-              )}
-            </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule">Sync Schedule</Label>
+                    <Select
+                      value={formData.schedule}
+                      onValueChange={(value) => setFormData({ ...formData, schedule: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hourly">Hourly</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="manual">Manual Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="backfill_days">Historical Days</Label>
+                    <Input
+                      id="backfill_days"
+                      type="number"
+                      value={formData.backfill_days}
+                      onChange={(e) => setFormData({ ...formData, backfill_days: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-900 font-semibold mb-2">🔑 Agency-Level Access</p>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Get credentials from CTM → Agency Settings → API Access</li>
+                    <li>• Format: access_key:secret_key (with colon separator)</li>
+                    <li>• We'll test connection and show available accounts</li>
+                    <li>• You can then select which accounts to sync</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Account Selection */}
+            {currentStep === 2 && (
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                  <CheckCheck className="w-5 h-5 text-green-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-green-900 font-semibold">Connection Successful</p>
+                    <p className="text-sm text-green-800">Found {availableAccounts.length} account(s)</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Select Accounts to Sync *</Label>
+                  <div className="border border-gray-200 rounded-lg p-4 space-y-3 max-h-80 overflow-y-auto">
+                    {availableAccounts.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        No accounts found. Make sure your agency has sub-accounts configured.
+                      </p>
+                    ) : (
+                      availableAccounts.map(account => (
+                        <div
+                          key={account.id}
+                          className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                        >
+                          <Checkbox
+                            id={`account-${account.id}`}
+                            checked={formData.account_ids.includes(account.id)}
+                            onCheckedChange={() => handleAccountToggle(account.id)}
+                          />
+                          <div className="flex-1">
+                            <label
+                              htmlFor={`account-${account.id}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            >
+                              {account.name}
+                            </label>
+                            <p className="text-xs text-gray-500 mt-1">
+                              ID: {account.id} • Status: {account.status}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {formData.account_ids.length} account(s) selected
+                  </p>
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCurrentStep(1);
+                    setConnectionTested(false);
+                  }}
+                  className="w-full"
+                >
+                  ← Back to Credentials
+                </Button>
+              </div>
+            )}
+
             <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setShowDialog(false);
-                setEditingSource(null);
-                resetForm();
-              }}>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowDialog(false);
+                  resetForm();
+                }}
+              >
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={saveSourceMutation.isPending}>
-                {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update' : 'Create Data Source'}
-              </Button>
+              
+              {currentStep === 1 && (
+                <Button 
+                  onClick={handleTestConnection} 
+                  disabled={testConnectionMutation.isPending || !formData.api_key || !formData.name}
+                >
+                  {testConnectionMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Testing Connection...
+                    </>
+                  ) : (
+                    'Test Connection & Fetch Accounts'
+                  )}
+                </Button>
+              )}
+              
+              {currentStep === 2 && (
+                <Button 
+                  onClick={handleSave} 
+                  disabled={saveSourceMutation.isPending || formData.account_ids.length === 0}
+                >
+                  {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update Data Source' : 'Create Data Source'}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
