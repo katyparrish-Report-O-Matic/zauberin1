@@ -273,7 +273,7 @@ class DataSyncService {
 
   /**
    * Sync call tracking data - ULTRA OPTIMIZED v4
-   * Fixed: Sequential storage with proper error handling
+   * Fixed: Sequential storage with proper error handling + Account Hierarchy creation
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
@@ -292,7 +292,44 @@ class DataSyncService {
       throw new Error('No API credentials found for Call Tracking sync');
     }
 
-    console.log(`[DataSync] 🚀 Processing ${accountIds.length} account(s) in parallel`);
+    console.log(`[DataSync] 🚀 Processing ${accountIds.length} account(s)`);
+
+    // ⚡ STEP 0: Create AccountHierarchy records (0% → 5%)
+    await base44.entities.SyncJob.update(syncJob.id, {
+      current_step: `Creating account hierarchy for ${accountIds.length} accounts...`,
+      progress_percentage: 5
+    });
+
+    for (const accountId of accountIds) {
+      try {
+        // Check if account hierarchy exists
+        const existing = await base44.entities.AccountHierarchy.filter({
+          data_source_id: dataSource.id,
+          external_id: String(accountId)
+        });
+
+        if (existing.length === 0) {
+          // Create new account hierarchy record
+          await base44.entities.AccountHierarchy.create({
+            organization_id: dataSource.organization_id,
+            data_source_id: dataSource.id,
+            platform_type: dataSource.platform_type,
+            hierarchy_level: 'account',
+            external_id: String(accountId),
+            name: `Account ${accountId}`,
+            status: 'active',
+            metadata: {
+              synced_at: new Date().toISOString()
+            }
+          });
+          console.log(`[DataSync] ✓ Created AccountHierarchy for ${accountId}`);
+        } else {
+          console.log(`[DataSync] ✓ AccountHierarchy exists for ${accountId}`);
+        }
+      } catch (error) {
+        console.error(`[DataSync] ⚠️ Failed to create AccountHierarchy for ${accountId}:`, error.message);
+      }
+    }
 
     // ⚡ STEP 1: Fetch all accounts in parallel (10% → 50%)
     await base44.entities.SyncJob.update(syncJob.id, {
