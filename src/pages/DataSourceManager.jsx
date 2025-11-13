@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -46,7 +47,7 @@ export default function DataSourceManager() {
     name: '',
     platform_type: 'call_tracking',
     auth_type: 'api_key',
-    api_url: '',
+    api_url: 'https://api.calltrackingmetrics.com/api/v1',
     api_key: '',
     account_ids: '',
     property_ids: '',
@@ -95,6 +96,10 @@ export default function DataSourceManager() {
     mutationFn: async (data) => {
       const orgId = selectedOrgId || currentUser?.organization_id;
 
+      // Debug logging
+      console.log('[DataSourceManager] Saving with orgId:', orgId);
+      console.log('[DataSourceManager] Form data:', data);
+
       const credentials = {};
       if (data.auth_type === 'api_key') {
         credentials.api_key = data.api_key;
@@ -125,6 +130,8 @@ export default function DataSourceManager() {
         }
       };
 
+      console.log('[DataSourceManager] Payload:', payload);
+
       if (editingSource) {
         return await base44.entities.DataSource.update(editingSource.id, payload);
       } else {
@@ -139,6 +146,7 @@ export default function DataSourceManager() {
       resetForm();
     },
     onError: (error) => {
+      console.error('[DataSourceManager] Save error:', error);
       toast.error(`Failed to save data source: ${error.message}`);
     }
   });
@@ -187,7 +195,7 @@ export default function DataSourceManager() {
       name: '',
       platform_type: 'call_tracking',
       auth_type: 'api_key',
-      api_url: '',
+      api_url: 'https://api.calltrackingmetrics.com/api/v1',
       api_key: '',
       account_ids: '',
       property_ids: '',
@@ -208,7 +216,7 @@ export default function DataSourceManager() {
       name: source.name,
       platform_type: source.platform_type,
       auth_type: source.auth_type,
-      api_url: source.metadata?.api_url || '',
+      api_url: source.metadata?.api_url || 'https://api.calltrackingmetrics.com/api/v1',
       api_key: source.credentials?.api_key || source.credentials?.access_token || '',
       account_ids: source.account_ids?.join(', ') || '',
       property_ids: source.property_ids?.join(', ') || '',
@@ -231,6 +239,18 @@ export default function DataSourceManager() {
   };
 
   const handleSave = () => {
+    const orgId = selectedOrgId || currentUser?.organization_id;
+    
+    console.log('[DataSourceManager] handleSave called');
+    console.log('[DataSourceManager] Organization ID:', orgId);
+    console.log('[DataSourceManager] Form data:', formData);
+    
+    // Check organization
+    if (!orgId || orgId === 'all') {
+      toast.error('Please select an organization');
+      return;
+    }
+
     if (!formData.name) {
       toast.error('Name is required');
       return;
@@ -251,6 +271,7 @@ export default function DataSourceManager() {
       }
     }
 
+    console.log('[DataSourceManager] Validation passed, calling mutation');
     saveSourceMutation.mutate(formData);
   };
 
@@ -343,6 +364,15 @@ export default function DataSourceManager() {
                 </Button>
               </div>
             </div>
+
+            {/* Debug Info */}
+            {currentUser && (
+              <div className="bg-gray-100 p-3 rounded text-xs font-mono">
+                <p>Current User Org: {currentUser.organization_id || 'none'}</p>
+                <p>Selected Org: {selectedOrgId || 'none'}</p>
+                <p>Is Agency: {isAgency ? 'yes' : 'no'}</p>
+              </div>
+            )}
 
             {/* Data Sources Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
