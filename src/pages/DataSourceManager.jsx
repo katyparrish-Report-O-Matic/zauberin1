@@ -93,7 +93,7 @@ export default function DataSourceManager() {
   });
 
   // Fetch sync jobs for selected source - WITH AUTO REFRESH
-  const { data: syncJobs } = useQuery({
+  const { data: syncJobs = [] } = useQuery({ // Changed to provide default empty array
     queryKey: ['syncJobs', selectedSource?.id],
     queryFn: async () => {
       if (!selectedSource) return [];
@@ -107,7 +107,7 @@ export default function DataSourceManager() {
     initialData: [],
     refetchInterval: (data) => {
       // Auto-refresh every 2 seconds if any job is in progress
-      const hasActiveJobs = data?.some(job => job.status === 'in_progress');
+      const hasActiveJobs = Array.isArray(data) && data.some(job => job.status === 'in_progress'); // Added Array.isArray(data) check
       return hasActiveJobs ? 2000 : false;
     }
   });
@@ -569,7 +569,7 @@ export default function DataSourceManager() {
                       <CardTitle>{selectedSource.name} - Sync History</CardTitle>
                       <CardDescription>
                         Recent synchronization jobs
-                        {syncJobs.some(j => j.status === 'in_progress') && (
+                        {Array.isArray(syncJobs) && syncJobs.some(j => j.status === 'in_progress') && ( // Added Array.isArray(syncJobs) check
                           <span className="ml-2 text-blue-600 font-medium">
                             • Live updates every 2s
                           </span>
@@ -604,7 +604,7 @@ export default function DataSourceManager() {
                           <div className="text-right">
                             <p className="text-sm font-medium">
                               {job.records_synced || 0} records
-                              {job.status === 'in_progress' && ` (${job.progress_percentage || 0}%)`}
+                              {job.status === 'in_progress' && ` (${job.progress_percentage}%)`}
                             </p>
                             {job.completed_at && (
                               <p className="text-xs text-gray-500">
