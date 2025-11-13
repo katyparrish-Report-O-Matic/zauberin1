@@ -29,19 +29,25 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PermissionGuard from "../components/auth/PermissionGuard";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function OrganizationManager() {
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditOrgDialog, setShowEditOrgDialog] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showUsersDialog, setShowUsersDialog] = useState(false);
   const [showEditUserDialog, setShowEditUserDialog] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [removingUser, setRemovingUser] = useState(null);
+  const [deletingOrg, setDeletingOrg] = useState(null);
   const [newOrg, setNewOrg] = useState({
+    name: '',
+    slug: '',
+    is_agency: false
+  });
+  const [editOrgData, setEditOrgData] = useState({
     name: '',
     slug: '',
     is_agency: false
@@ -74,6 +80,31 @@ export default function OrganizationManager() {
       toast.success('Organization created');
       setShowCreateDialog(false);
       setNewOrg({ name: '', slug: '', is_agency: false });
+    }
+  });
+
+  const updateOrgMutation = useMutation({
+    mutationFn: ({ orgId, updates }) => base44.entities.Organization.update(orgId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      toast.success('Organization updated');
+      setShowEditOrgDialog(false);
+      setSelectedOrg(null);
+    },
+    onError: (error) => {
+      toast.error('Failed to update organization: ' + error.message);
+    }
+  });
+
+  const deleteOrgMutation = useMutation({
+    mutationFn: (orgId) => base44.entities.Organization.delete(orgId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      toast.success('Organization deleted');
+      setDeletingOrg(null);
+    },
+    onError: (error) => {
+      toast.error('Failed to delete organization: ' + error.message);
     }
   });
 
@@ -142,6 +173,11 @@ export default function OrganizationManager() {
     setNewOrg({ ...newOrg, name, slug });
   };
 
+  const handleEditSlugGeneration = (name) => {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    setEditOrgData({ ...editOrgData, name, slug });
+  };
+
   const getUsersForOrg = (orgId) => {
     return allUsers.filter(u => u.organization_id === orgId);
   };
@@ -162,6 +198,36 @@ export default function OrganizationManager() {
   const handleManageUsers = (org) => {
     setSelectedOrg(org);
     setShowUsersDialog(true);
+  };
+
+  const handleEditOrg = (org) => {
+    setSelectedOrg(org);
+    setEditOrgData({
+      name: org.name,
+      slug: org.slug,
+      is_agency: org.is_agency
+    });
+    setShowEditOrgDialog(true);
+  };
+
+  const handleUpdateOrg = () => {
+    if (!selectedOrg || !editOrgData.name || !editOrgData.slug) {
+      toast.error('Name and slug are required');
+      return;
+    }
+    updateOrgMutation.mutate({
+      orgId: selectedOrg.id,
+      updates: editOrgData
+    });
+  };
+
+  const handleDeleteOrg = (org) => {
+    setDeletingOrg(org);
+  };
+
+  const confirmDeleteOrg = () => {
+    if (!deletingOrg) return;
+    deleteOrgMutation.mutate(deletingOrg.id);
   };
 
   const handleEditUser = (user) => {
@@ -292,7 +358,22 @@ export default function OrganizationManager() {
                           onClick={() => handleManageUsers(org)}
                         >
                           <Settings className="w-3 h-3" />
-                          Manage Users
+                          Users
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditOrg(org)}
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteOrg(org)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
 
@@ -338,7 +419,7 @@ export default function OrganizationManager() {
                 <Label htmlFor="org-name">Organization Name</Label>
                 <Input
                   id="org-name"
-                  placeholder="e.g., Acme Corporation"
+                  placeholder="e.g., Adtrak"
                   value={newOrg.name}
                   onChange={(e) => handleSlugGeneration(e.target.value)}
                 />
@@ -347,7 +428,7 @@ export default function OrganizationManager() {
                 <Label htmlFor="org-slug">Slug</Label>
                 <Input
                   id="org-slug"
-                  placeholder="e.g., acme-corp"
+                  placeholder="e.g., adtrak"
                   value={newOrg.slug}
                   onChange={(e) => setNewOrg({ ...newOrg, slug: e.target.value })}
                 />
@@ -371,6 +452,59 @@ export default function OrganizationManager() {
                 Cancel
               </Button>
               <Button onClick={handleCreateOrg}>Create</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Organization Dialog */}
+        <Dialog open={showEditOrgDialog} onOpenChange={setShowEditOrgDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Organization</DialogTitle>
+              <DialogDescription>
+                Update organization details
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-org-name">Organization Name</Label>
+                <Input
+                  id="edit-org-name"
+                  placeholder="e.g., Adtrak"
+                  value={editOrgData.name}
+                  onChange={(e) => handleEditSlugGeneration(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-org-slug">Slug</Label>
+                <Input
+                  id="edit-org-slug"
+                  placeholder="e.g., adtrak"
+                  value={editOrgData.slug}
+                  onChange={(e) => setEditOrgData({ ...editOrgData, slug: e.target.value })}
+                />
+                <p className="text-xs text-gray-500">URL-friendly identifier</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Agency Organization</Label>
+                  <p className="text-xs text-gray-500">
+                    Agency orgs can access all client data
+                  </p>
+                </div>
+                <Switch
+                  checked={editOrgData.is_agency}
+                  onCheckedChange={(checked) => setEditOrgData({ ...editOrgData, is_agency: checked })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditOrgDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateOrg} disabled={updateOrgMutation.isPending}>
+                {updateOrgMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -529,6 +663,27 @@ export default function OrganizationManager() {
                 className="bg-red-600 hover:bg-red-700"
               >
                 Remove User
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Organization Confirmation Dialog */}
+        <AlertDialog open={!!deletingOrg} onOpenChange={() => setDeletingOrg(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Organization</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete {deletingOrg?.name}? This will remove all associated data and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteOrg}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Organization
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
