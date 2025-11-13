@@ -3,6 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 /**
  * Backend function to sync Call Tracking Metrics data
  * OPTIMIZED VERSION: Parallel processing, smart pagination, early aggregation
+ * RETURNS: Account metadata + metrics
  */
 
 Deno.serve(async (req) => {
@@ -55,9 +56,43 @@ Deno.serve(async (req) => {
     }
     
     const baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
+    
+    // ⚡ STEP 1: Fetch account metadata
+    console.log(`[CTM Sync] 📋 Fetching account metadata for ${accountId}...`);
+    const accountUrl = `${baseUrl}/accounts/${accountId}.json`;
+    
+    let accountMetadata = { id: accountId, name: `Account ${accountId}`, status: 'active' };
+    
+    try {
+      const accountResponse = await fetch(accountUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (accountResponse.ok) {
+        const accountData = await accountResponse.json();
+        accountMetadata = {
+          id: String(accountData.id || accountId),
+          name: accountData.name || `Account ${accountId}`,
+          status: accountData.status || 'active',
+          timezone: accountData.timezone,
+          country: accountData.country
+        };
+        console.log(`[CTM Sync] ✓ Found account: ${accountMetadata.name}`);
+      } else {
+        console.warn(`[CTM Sync] ⚠️ Could not fetch account metadata (${accountResponse.status}), using defaults`);
+      }
+    } catch (metadataError) {
+      console.warn(`[CTM Sync] ⚠️ Account metadata fetch failed, using defaults:`, metadataError.message);
+    }
+    
+    // ⚡ STEP 2: Fetch calls data
     const callsEndpoint = `/accounts/${accountId}/calls.json`;
     
-    // ⚡ OPTIMIZATION 1: Fetch first page to get total count
+    // Fetch first page to get total count
     const firstPageUrl = `${baseUrl}${callsEndpoint}?page=1&per_page=100&start_date=${startDate}&end_date=${endDate}`;
     
     let firstResponse;
@@ -105,7 +140,7 @@ Deno.serve(async (req) => {
     // Initialize with first page
     const allCalls = firstPage.calls || [];
     
-    // ⚡ OPTIMIZATION 2: Parallel fetch remaining pages (max 5 concurrent)
+    // Parallel fetch remaining pages (max 5 concurrent)
     if (totalPages > 1) {
       const remainingPages = [];
       for (let page = 2; page <= Math.min(totalPages, 100); page++) {
@@ -143,7 +178,7 @@ Deno.serve(async (req) => {
 
     console.log(`[CTM Sync] ✅ Fetched ${allCalls.length} total calls`);
 
-    // ⚡ OPTIMIZATION 3: Stream-based aggregation (aggregate as we go)
+    // Aggregate by date
     const metricsByDate = {};
 
     allCalls.forEach(call => {
@@ -194,11 +229,13 @@ Deno.serve(async (req) => {
 
     return Response.json({
       success: true,
+      account: accountMetadata,
       metrics,
       totalCalls: allCalls.length,
       dateRange: { startDate, endDate },
       summary: {
         account_id: accountId,
+        account_name: accountMetadata.name,
         total_calls: allCalls.length,
         days_with_data: metrics.length,
         pages_fetched: totalPages,
