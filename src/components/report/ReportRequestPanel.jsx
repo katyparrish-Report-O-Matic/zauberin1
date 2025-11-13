@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, Sparkles } from "lucide-react";
+import { Calendar as CalendarIcon, Moon } from "lucide-react";
 import { format } from "date-fns";
 import AccountSelector from "../books/AccountSelector";
 
@@ -43,7 +43,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5" />
+          <Moon className="w-5 h-5" />
           Describe Your Report
         </CardTitle>
       </CardHeader>
@@ -133,7 +133,7 @@ export default function ReportRequestPanel({ onGenerateReport, isGenerating, dis
               className="block w-full text-left text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 p-2 rounded transition-colors"
               disabled={disabled}
             >
-              💡 {prompt}
+              🌙 {prompt}
             </button>
           ))}
         </div>
