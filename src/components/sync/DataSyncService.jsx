@@ -290,34 +290,62 @@ class DataSyncService {
       }))
     );
 
-    console.log(`[DataSync] 💾 Storing ${allCallRecords.length} call records...`);
+    console.log(`[DataSync] 💾 Attempting to store ${allCallRecords.length} call records...`);
 
     if (allCallRecords.length === 0) {
       console.warn('[DataSync] ⚠️ No call records to store!');
       return { recordsSynced: 0, recordsCreated: 0, recordsUpdated: 0 };
     }
 
+    // Log a sample record for debugging
+    console.log(`[DataSync] 📋 Sample record to be created:`, JSON.stringify(allCallRecords[0], null, 2));
+
     await base44.entities.SyncJob.update(syncJob.id, {
       current_step: `Bulk creating ${allCallRecords.length} call records...`,
       progress_percentage: 60
     });
 
-    try {
-      const createdRecords = await base44.entities.CallRecord.bulkCreate(allCallRecords);
-      recordsCreated = createdRecords.length;
-      recordsSynced = totalCalls;
+    // CRITICAL: Actually call bulkCreate and validate the result
+    console.log(`[DataSync] 🔄 Calling bulkCreate for ${allCallRecords.length} records...`);
+    
+    const createdRecords = await base44.entities.CallRecord.bulkCreate(allCallRecords);
+    
+    console.log(`[DataSync] 📊 bulkCreate returned:`, {
+      inputCount: allCallRecords.length,
+      outputCount: createdRecords?.length || 0,
+      isArray: Array.isArray(createdRecords),
+      type: typeof createdRecords
+    });
 
-      console.log(`[DataSync] ✅ Successfully stored ${recordsCreated} call records`);
-
-      await base44.entities.SyncJob.update(syncJob.id, {
-        current_step: `✅ Sync complete - ${recordsCreated} call records stored`,
-        progress_percentage: 90
-      });
-
-    } catch (error) {
-      console.error(`[DataSync] ❌ Failed to store call records:`, error);
-      throw new Error(`Failed to store call records: ${error.message}`);
+    // VALIDATION: Ensure records were actually created
+    if (!createdRecords || !Array.isArray(createdRecords) || createdRecords.length === 0) {
+      throw new Error(
+        `bulkCreate failed: Expected ${allCallRecords.length} records but got ${createdRecords?.length || 0}. ` +
+        `Result type: ${typeof createdRecords}, isArray: ${Array.isArray(createdRecords)}`
+      );
     }
+
+    recordsCreated = createdRecords.length;
+    recordsSynced = totalCalls;
+
+    console.log(`[DataSync] ✅ Successfully stored ${recordsCreated} call records`);
+
+    // VERIFY: Double-check by querying the database
+    const verifyCount = await base44.entities.CallRecord.filter({
+      data_source_id: dataSource.id,
+      sync_date: allCallRecords[0].sync_date
+    });
+
+    console.log(`[DataSync] 🔍 Verification: Found ${verifyCount.length} records in database for this sync`);
+
+    if (verifyCount.length === 0) {
+      throw new Error(`Verification failed: Records not found in database after bulkCreate!`);
+    }
+
+    await base44.entities.SyncJob.update(syncJob.id, {
+      current_step: `✅ Sync complete - ${recordsCreated} call records stored and verified`,
+      progress_percentage: 90
+    });
 
     return { recordsSynced, recordsCreated, recordsUpdated };
   }
