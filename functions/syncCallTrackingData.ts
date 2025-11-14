@@ -249,7 +249,14 @@ Deno.serve(async (req) => {
     if (includeRawCalls) {
       console.log(`[CTM Sync] 📞 Processing ${allCalls.length} raw call records...`);
       
-      callRecords = allCalls.map(call => {
+      // FILTER OUT calls without start_time (required field)
+      const validCalls = allCalls.filter(call => call.start_time);
+      
+      if (validCalls.length < allCalls.length) {
+        console.warn(`[CTM Sync] ⚠️ Filtered out ${allCalls.length - validCalls.length} calls without start_time`);
+      }
+      
+      callRecords = validCalls.map(call => {
         const isVoicemail = call.status === 'voicemail' || call.voicemail === true;
         const isAnswered = call.talk_time && call.talk_time > 0;
         const isWorkingHours = call.during_business_hours === true;
