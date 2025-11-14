@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -526,7 +525,7 @@ export default function ReportBuilder() {
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Bespoke Report Builder</h1>
+              <h1 className="text-3xl font-bold text-gray-900">Report Builder</h1>
               <p className="text-gray-600 mt-1">
                 Describe what you want to see from your data
               </p>
