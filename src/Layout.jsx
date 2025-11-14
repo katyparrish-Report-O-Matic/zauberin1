@@ -1,8 +1,9 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, Clock, Building2, Shield, Webhook, FlaskConical, FileText, Activity, Database, Key, Zap, HardDrive, FileBarChart, BookOpen, HelpCircle } from "lucide-react";
+import { Settings, Clock, Building2, Shield, Webhook, FlaskConical, FileText, Activity, Database, Key, Zap, HardDrive, FileBarChart, BookOpen, HelpCircle, RefreshCw } from "lucide-react";
 import JobScheduler from "./components/jobs/JobScheduler";
+import DefaultJobInitializer from "./components/jobs/DefaultJobInitializer";
 import { usePermissions } from "./components/auth/usePermissions";
 import { Badge } from "@/components/ui/badge";
 import EnvironmentIndicator from "./components/config/EnvironmentIndicator";
@@ -20,6 +21,7 @@ export default function Layout({ children }) {
     { name: "Templates", path: createPageUrl("ReportTemplates"), icon: FlaskConical },
     { name: "Help", path: createPageUrl("HelpGuide"), icon: HelpCircle },
     { name: "Data Sources", path: createPageUrl("DataSourceManager"), icon: Database, requiredLevel: "admin" },
+    { name: "Transformation", path: createPageUrl("TransformationManager"), icon: RefreshCw, requiredLevel: "editor" },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
     { name: "Monitoring", path: createPageUrl("MonitoringDashboard"), icon: Activity, requiredLevel: "admin" },
     { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" },
@@ -62,6 +64,7 @@ export default function Layout({ children }) {
       `}</style>
       
       <JobScheduler />
+      <DefaultJobInitializer />
       <MonitoringInitializer />
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6">

@@ -20,6 +20,7 @@ import ReportLibrary from './pages/ReportLibrary';
 import BookEditor from './pages/BookEditor';
 import BookViewer from './pages/BookViewer';
 import HelpGuide from './pages/HelpGuide';
+import TransformationManager from './pages/TransformationManager';
 import Layout from './Layout.jsx';
 
 
@@ -46,6 +47,7 @@ export const PAGES = {
     "BookEditor": BookEditor,
     "BookViewer": BookViewer,
     "HelpGuide": HelpGuide,
+    "TransformationManager": TransformationManager,
 }
 
 export const pagesConfig = {
