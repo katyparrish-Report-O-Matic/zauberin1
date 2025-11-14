@@ -116,12 +116,13 @@ Generate a complete table configuration that queries REAL data.`,
   }
 
   /**
-   * Execute query to fetch real CallRecord data
+   * Execute query to fetch real CallRecord data and aggregate by groupBy dimensions
    */
   async executeTableQuery(config, organizationId, accountId = 'all') {
     try {
       environmentConfig.log('info', '[TableQuery] Executing query for organization:', organizationId);
       environmentConfig.log('info', '[TableQuery] Account filter:', accountId);
+      environmentConfig.log('info', '[TableQuery] GroupBy dimensions:', config.groupBy);
 
       // Build query filter
       const queryFilter = {
@@ -142,11 +143,16 @@ Generate a complete table configuration that queries REAL data.`,
         return [];
       }
 
-      // Transform to table format with all metrics
-      const tableData = callRecords.map(record => ({
-        date: record.start_time ? record.start_time.split('T')[0] : null,
+      // Transform each call record to include calculated metrics
+      const transformedRecords = callRecords.map(record => ({
+        // Dimensions
+        date: record.start_time ? record.start_time.split('T')[0] : 'Unknown',
         account_name: record.account_name || 'Unknown',
+        account_id: record.account_id || 'Unknown',
         region: record.region || 'Unknown',
+        call_status: record.call_status || 'unknown',
+        
+        // Metrics (raw values for aggregation)
         total_calls: 1,
         answered_calls: record.call_status === 'answered' ? 1 : 0,
         voicemail_calls: record.is_voicemail ? 1 : 0,
@@ -155,17 +161,106 @@ Generate a complete table configuration that queries REAL data.`,
         after_hours_calls: !record.is_working_hours ? 1 : 0,
         qualified_calls: record.qualified ? 1 : 0,
         call_duration: record.talk_time || 0,
-        call_status: record.call_status || 'unknown'
+        
+        // Keep original record for debugging
+        _original: record
       }));
 
-      environmentConfig.log('info', `[TableQuery] Transformed to ${tableData.length} table rows`);
+      // Group and aggregate data based on groupBy dimensions
+      const groupBy = config.groupBy || ['account_name'];
+      const aggregatedData = this.aggregateData(transformedRecords, groupBy);
 
-      return tableData;
+      environmentConfig.log('info', `[TableQuery] Aggregated into ${aggregatedData.length} groups`);
+
+      return aggregatedData;
 
     } catch (error) {
       environmentConfig.log('error', '[TableQuery] Query error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Aggregate data by specified dimensions
+   */
+  aggregateData(records, groupByDimensions) {
+    const groups = {};
+
+    // Group records
+    records.forEach(record => {
+      // Create group key from dimensions
+      const groupKey = groupByDimensions
+        .map(dim => record[dim] || 'Unknown')
+        .join('|||');
+
+      if (!groups[groupKey]) {
+        // Initialize group with dimension values
+        groups[groupKey] = {
+          _groupKey: groupKey
+        };
+        
+        // Add dimension values
+        groupByDimensions.forEach(dim => {
+          groups[groupKey][dim] = record[dim] || 'Unknown';
+        });
+
+        // Initialize metric accumulators
+        groups[groupKey].total_calls = 0;
+        groups[groupKey].answered_calls = 0;
+        groups[groupKey].voicemail_calls = 0;
+        groups[groupKey].missed_calls = 0;
+        groups[groupKey].working_hours_calls = 0;
+        groups[groupKey].after_hours_calls = 0;
+        groups[groupKey].qualified_calls = 0;
+        groups[groupKey].total_duration = 0;
+        groups[groupKey]._recordCount = 0;
+      }
+
+      // Aggregate metrics
+      const group = groups[groupKey];
+      group.total_calls += record.total_calls;
+      group.answered_calls += record.answered_calls;
+      group.voicemail_calls += record.voicemail_calls;
+      group.missed_calls += record.missed_calls;
+      group.working_hours_calls += record.working_hours_calls;
+      group.after_hours_calls += record.after_hours_calls;
+      group.qualified_calls += record.qualified_calls;
+      group.total_duration += record.call_duration;
+      group._recordCount++;
+    });
+
+    // Calculate derived metrics
+    const aggregated = Object.values(groups).map(group => {
+      // Calculate average_duration
+      const average_duration = group.answered_calls > 0 
+        ? Math.round(group.total_duration / group.answered_calls)
+        : 0;
+
+      // Calculate answer_rate (percentage)
+      const answer_rate = group.total_calls > 0
+        ? Math.round((group.answered_calls / group.total_calls) * 100)
+        : 0;
+
+      return {
+        ...group,
+        average_duration,
+        answer_rate,
+        // Remove temporary fields
+        total_duration: undefined,
+        _recordCount: undefined,
+        _groupKey: undefined
+      };
+    });
+
+    // Sort by first dimension, then by total_calls descending
+    const firstDimension = groupByDimensions[0];
+    aggregated.sort((a, b) => {
+      const dimCompare = String(a[firstDimension]).localeCompare(String(b[firstDimension]));
+      if (dimCompare !== 0) return dimCompare;
+      return b.total_calls - a.total_calls;
+    });
+
+    return aggregated;
   }
 }
 
