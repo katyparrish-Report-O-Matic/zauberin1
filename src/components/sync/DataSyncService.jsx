@@ -112,7 +112,7 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - SIMPLIFIED - Store calls directly without existence check
+   * Sync call tracking data - Store CallRecords + Create TransformedMetrics with proper segments
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
@@ -305,10 +305,9 @@ class DataSyncService {
           progress_percentage: 50
         });
 
-        // Use bulkCreate to insert all at once
-        await base44.entities.CallRecord.bulkCreate(allCallRecords);
+        const createdRecords = await base44.entities.CallRecord.bulkCreate(allCallRecords);
         
-        recordsCreated = allCallRecords.length;
+        recordsCreated = createdRecords.length;
         console.log(`[DataSync] ✅ Successfully created ${recordsCreated} call records`);
 
         await base44.entities.SyncJob.update(syncJob.id, {
@@ -321,9 +320,9 @@ class DataSyncService {
       }
     }
 
-    // ⚡ STEP 4: Store aggregated metrics (70% → 95%)
+    // ⚡ STEP 4: Store aggregated metrics WITH proper segment data (70% → 95%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Storing aggregated metrics...',
+      current_step: 'Storing aggregated metrics with account/region data...',
       progress_percentage: 70
     });
 
@@ -367,9 +366,10 @@ class DataSyncService {
           segment: {
             platform: 'call_tracking',
             data_source_id: dataSource.id,
+            organization_id: dataSource.organization_id,
             account_id: dayMetrics.accountId,
             account_name: dayMetrics.accountName,
-            region: dayMetrics.region
+            region: dayMetrics.region || 'Unknown'
           },
           derived_metrics: {
             growth_rate: 0,
