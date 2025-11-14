@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Loader2, RefreshCw, Calendar, CheckCircle, XCircle, Clock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { dailyTransformerService } from "../components/transform/DailyTransformerService";
 import { usePermissions } from "../components/auth/usePermissions";
 import PermissionGuard from "../components/auth/PermissionGuard";
 import OrganizationSelector from "../components/org/OrganizationSelector";
@@ -45,51 +44,97 @@ export default function TransformationManager() {
       const executions = await base44.entities.JobExecution.list('-started_at', 20);
       return executions.filter(e => e.job_name?.includes('transformation') || e.job_name?.includes('transform'));
     },
-    refetchInterval: 30000
+    refetchInterval: 10000
   });
 
-  // Transform single date mutation
+  // Transform single date mutation - USING BACKEND FUNCTION
   const transformSingleMutation = useMutation({
     mutationFn: async ({ dataSourceId, date }) => {
-      return await dailyTransformerService.transformCallRecords(orgId, dataSourceId, date);
+      const response = await base44.functions.invoke('runTransformation', {
+        organizationId: orgId,
+        dataSourceId,
+        targetDate: date,
+        mode: 'single'
+      });
+      
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Transformation failed');
+      }
+      
+      return response.data;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['jobExecutions'] });
       queryClient.invalidateQueries({ queryKey: ['transformedMetrics'] });
-      toast.success(`Transformation complete: ${result.metricsCreated} metrics created`);
+      
+      if (result.metricsCreated === 0) {
+        toast.info(result.message || 'No data to transform for this date');
+      } else {
+        toast.success(`✅ ${result.metricsCreated} metrics created for ${result.accountsProcessed} accounts`);
+      }
     },
     onError: (error) => {
-      toast.error(`Transformation failed: ${error.message}`);
+      toast.error(`❌ Transformation failed: ${error.message}`);
+      console.error('[Transform Error]', error);
     }
   });
 
-  // Transform date range mutation
+  // Transform date range mutation - USING BACKEND FUNCTION
   const transformRangeMutation = useMutation({
     mutationFn: async ({ dataSourceId, startDate, endDate }) => {
-      return await dailyTransformerService.transformDateRange(orgId, dataSourceId, startDate, endDate);
+      const response = await base44.functions.invoke('runTransformation', {
+        organizationId: orgId,
+        dataSourceId,
+        startDate,
+        endDate,
+        mode: 'range'
+      });
+      
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Range transformation failed');
+      }
+      
+      return response.data;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['jobExecutions'] });
       queryClient.invalidateQueries({ queryKey: ['transformedMetrics'] });
-      toast.success(`Range transformation complete: ${result.totalMetricsCreated} metrics created across ${result.daysSuccessful} days`);
+      toast.success(`✅ ${result.totalMetricsCreated} metrics created across ${result.daysSuccessful}/${result.daysProcessed} days`);
     },
     onError: (error) => {
-      toast.error(`Range transformation failed: ${error.message}`);
+      toast.error(`❌ Range transformation failed: ${error.message}`);
+      console.error('[Transform Error]', error);
     }
   });
 
-  // Transform all organization mutation
+  // Transform all organization mutation - USING BACKEND FUNCTION
   const transformOrgMutation = useMutation({
     mutationFn: async ({ date }) => {
-      return await dailyTransformerService.transformOrganization(orgId, date);
+      const response = await base44.functions.invoke('runTransformation', {
+        organizationId: orgId,
+        targetDate: date,
+        mode: 'organization'
+      });
+      
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Organization transformation failed');
+      }
+      
+      return response.data;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['jobExecutions'] });
       queryClient.invalidateQueries({ queryKey: ['transformedMetrics'] });
-      toast.success(`Organization transformation complete: ${result.totalMetricsCreated} metrics created from ${result.dataSourcesSuccessful} sources`);
+      
+      if (result.totalMetricsCreated === 0) {
+        toast.info(result.message || 'No data to transform');
+      } else {
+        toast.success(`✅ ${result.totalMetricsCreated} metrics created from ${result.dataSourcesSuccessful} sources`);
+      }
     },
     onError: (error) => {
-      toast.error(`Organization transformation failed: ${error.message}`);
+      toast.error(`❌ Organization transformation failed: ${error.message}`);
+      console.error('[Transform Error]', error);
     }
   });
 
@@ -98,6 +143,7 @@ export default function TransformationManager() {
     yesterday.setDate(yesterday.getDate() - 1);
     const dateStr = yesterday.toISOString().split('T')[0];
     
+    console.log('[Transform] Triggering yesterday transformation:', dateStr);
     transformSingleMutation.mutate({ dataSourceId, date: dateStr });
   };
 
@@ -106,6 +152,7 @@ export default function TransformationManager() {
       toast.error('Please select a date');
       return;
     }
+    console.log('[Transform] Triggering date transformation:', targetDate);
     transformSingleMutation.mutate({ dataSourceId, date: targetDate });
   };
 
@@ -118,14 +165,21 @@ export default function TransformationManager() {
       toast.error('Start date must be before end date');
       return;
     }
+    console.log('[Transform] Triggering range transformation:', startDate, 'to', endDate);
     transformRangeMutation.mutate({ dataSourceId, startDate, endDate });
   };
 
   const handleTransformAllYesterday = () => {
+    if (!orgId || orgId === 'all') {
+      toast.error('Please select an organization');
+      return;
+    }
+    
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const dateStr = yesterday.toISOString().split('T')[0];
     
+    console.log('[Transform] Triggering organization transformation:', dateStr);
     transformOrgMutation.mutate({ date: dateStr });
   };
 
@@ -184,6 +238,7 @@ export default function TransformationManager() {
                   onClick={handleTransformAllYesterday}
                   disabled={isTransforming || !orgId || orgId === 'all'}
                   className="gap-2"
+                  size="lg"
                 >
                   {transformOrgMutation.isPending ? (
                     <>
@@ -199,7 +254,10 @@ export default function TransformationManager() {
                 </Button>
               </div>
               {(!orgId || orgId === 'all') && (
-                <p className="text-sm text-red-600">Please select an organization first</p>
+                <p className="text-sm text-red-600">⚠️ Please select an organization first</p>
+              )}
+              {isTransforming && (
+                <p className="text-sm text-blue-600">🔄 Transformation in progress... This may take 30-60 seconds.</p>
               )}
             </CardContent>
           </Card>
