@@ -2,8 +2,8 @@ import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 
 /**
- * Data Sync Service
- * Manages background data synchronization jobs
+ * Data Sync Service - SIMPLIFIED
+ * Stores CallRecords only. Reports aggregate on-demand.
  */
 class DataSyncService {
   /**
@@ -112,7 +112,8 @@ class DataSyncService {
   }
 
   /**
-   * Sync call tracking data - Store CallRecords + Create TransformedMetrics with proper segments
+   * SIMPLIFIED: Sync call tracking data - Store CallRecords ONLY
+   * Reports will aggregate on-demand from CallRecords
    */
   async syncCallTracking(syncJob, dataSource) {
     let recordsSynced = 0;
@@ -131,15 +132,15 @@ class DataSyncService {
       throw new Error('No API credentials found for Call Tracking sync');
     }
 
-    console.log(`[DataSync] 🚀 Processing ${accountIds.length} account(s) - syncing metrics + raw calls`);
+    console.log(`[DataSync] 🚀 Syncing ${accountIds.length} account(s) - storing raw call records only`);
 
-    // ⚡ STEP 1: Fetch all accounts in parallel (0% → 40%)
+    // STEP 1: Fetch all accounts in parallel (0% → 50%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: `Fetching ${accountIds.length} account(s) with full call data...`,
-      progress_percentage: 5
+      current_step: `Fetching ${accountIds.length} account(s) with call data...`,
+      progress_percentage: 10
     });
 
-    // Get account hierarchy records to get region info
+    // Get account hierarchy records for region info
     const accountHierarchies = await base44.entities.AccountHierarchy.filter({
       data_source_id: dataSource.id
     });
@@ -169,8 +170,8 @@ class DataSyncService {
         throw new Error(result.data?.error || `Account ${accountId} failed`);
       }
 
-      const progressIncrement = 35 / accountIds.length;
-      const currentProgress = 5 + ((index + 1) * progressIncrement);
+      const progressIncrement = 30 / accountIds.length;
+      const currentProgress = 10 + ((index + 1) * progressIncrement);
 
       await base44.entities.SyncJob.update(syncJob.id, {
         current_step: `Fetched ${index + 1}/${accountIds.length}: ${result.data.account.name} (${result.data.totalCalls} calls)`,
@@ -181,7 +182,6 @@ class DataSyncService {
         accountId: String(accountId),
         accountName: result.data.account.name,
         accountMetadata: result.data.account,
-        metrics: result.data.metrics,
         callRecords: result.data.callRecords || [],
         callCount: result.data.totalCalls
       };
@@ -192,9 +192,9 @@ class DataSyncService {
     const totalCalls = accountResults.reduce((sum, r) => sum + r.callCount, 0);
     console.log(`[DataSync] ✅ Fetched ${totalCalls} total calls from ${accountResults.length} accounts`);
 
-    // ⚡ STEP 2: Create/Update AccountHierarchy (40% → 45%)
+    // STEP 2: Update AccountHierarchy (40% → 50%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: `Creating account hierarchy for ${accountResults.length} accounts...`,
+      current_step: `Updating account hierarchy...`,
       progress_percentage: 40
     });
 
@@ -222,30 +222,24 @@ class DataSyncService {
             },
             last_updated: new Date().toISOString()
           });
-          console.log(`[DataSync] ✓ Created AccountHierarchy: ${accountResult.accountName} (Region: ${accountResult.accountMetadata.region || 'None'})`);
+          console.log(`[DataSync] ✓ Created AccountHierarchy: ${accountResult.accountName}`);
         } else {
           await base44.entities.AccountHierarchy.update(existing[0].id, {
             name: accountResult.accountName,
             region: accountResult.accountMetadata.region || existing[0].region,
             status: accountResult.accountMetadata.status || 'active',
-            metadata: {
-              synced_at: new Date().toISOString(),
-              timezone: accountResult.accountMetadata.timezone,
-              country: accountResult.accountMetadata.country
-            },
             last_updated: new Date().toISOString()
           });
-          console.log(`[DataSync] ✓ Updated AccountHierarchy: ${accountResult.accountName}`);
         }
       } catch (error) {
-        console.error(`[DataSync] ⚠️ Failed AccountHierarchy for ${accountResult.accountId}:`, error.message);
+        console.error(`[DataSync] ⚠️ AccountHierarchy update failed for ${accountResult.accountId}:`, error.message);
       }
     }
 
-    // ⚡ STEP 3: Store raw call records using bulkCreate (45% → 70%)
+    // STEP 3: Store CallRecords ONLY (50% → 100%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Preparing call records for bulk storage...',
-      progress_percentage: 45
+      current_step: 'Preparing call records for storage...',
+      progress_percentage: 50
     });
 
     const allCallRecords = accountResults.flatMap(r => 
@@ -296,114 +290,34 @@ class DataSyncService {
       }))
     );
 
-    console.log(`[DataSync] 💾 Storing ${allCallRecords.length} call records using bulkCreate...`);
+    console.log(`[DataSync] 💾 Storing ${allCallRecords.length} call records...`);
 
-    if (allCallRecords.length > 0) {
-      try {
-        await base44.entities.SyncJob.update(syncJob.id, {
-          current_step: `Bulk creating ${allCallRecords.length} call records...`,
-          progress_percentage: 50
-        });
-
-        const createdRecords = await base44.entities.CallRecord.bulkCreate(allCallRecords);
-        
-        recordsCreated = createdRecords.length;
-        console.log(`[DataSync] ✅ Successfully created ${recordsCreated} call records`);
-
-        await base44.entities.SyncJob.update(syncJob.id, {
-          current_step: `Stored ${recordsCreated} call records`,
-          progress_percentage: 70
-        });
-      } catch (error) {
-        console.error(`[DataSync] ❌ Bulk create failed:`, error);
-        throw new Error(`Failed to store call records: ${error.message}`);
-      }
+    if (allCallRecords.length === 0) {
+      console.warn('[DataSync] ⚠️ No call records to store!');
+      return { recordsSynced: 0, recordsCreated: 0, recordsUpdated: 0 };
     }
 
-    // ⚡ STEP 4: Store aggregated metrics WITH proper segment data (70% → 95%)
     await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: 'Storing aggregated metrics with account/region data...',
-      progress_percentage: 70
+      current_step: `Bulk creating ${allCallRecords.length} call records...`,
+      progress_percentage: 60
     });
 
-    const allMetrics = accountResults.flatMap(r => 
-      r.metrics.map(m => ({
-        ...m,
-        accountId: r.accountId,
-        accountName: r.accountName,
-        region: r.accountMetadata.region
-      }))
-    );
+    try {
+      const createdRecords = await base44.entities.CallRecord.bulkCreate(allCallRecords);
+      recordsCreated = createdRecords.length;
+      recordsSynced = totalCalls;
 
-    console.log(`[DataSync] 💾 Processing ${allMetrics.length} days of aggregated data`);
+      console.log(`[DataSync] ✅ Successfully stored ${recordsCreated} call records`);
 
-    const metricsToStore = [
-      'total_calls',
-      'answered_calls',
-      'missed_calls',
-      'voicemail_calls',
-      'qualified_calls',
-      'working_hours_calls',
-      'after_hours_calls',
-      'average_duration',
-      'answer_rate'
-    ];
-
-    let totalMetricsCreated = 0;
-
-    for (let metricIndex = 0; metricIndex < metricsToStore.length; metricIndex++) {
-      const metricName = metricsToStore[metricIndex];
-
-      const metricRecords = allMetrics
-        .filter(m => m[metricName] !== undefined && m[metricName] !== null)
-        .map(dayMetrics => ({
-          metric_name: metricName,
-          time_period: 'daily',
-          period_start: dayMetrics.date + 'T00:00:00.000Z',
-          period_end: dayMetrics.date + 'T23:59:59.999Z',
-          raw_value: dayMetrics[metricName],
-          aggregated_value: dayMetrics[metricName],
-          segment: {
-            platform: 'call_tracking',
-            data_source_id: dataSource.id,
-            organization_id: dataSource.organization_id,
-            account_id: dayMetrics.accountId,
-            account_name: dayMetrics.accountName,
-            region: dayMetrics.region || 'Unknown'
-          },
-          derived_metrics: {
-            growth_rate: 0,
-            moving_average: dayMetrics[metricName],
-            percent_of_total: 0
-          },
-          data_quality_score: 100
-        }));
-
-      if (metricRecords.length > 0) {
-        try {
-          await base44.entities.TransformedMetric.bulkCreate(metricRecords);
-          totalMetricsCreated += metricRecords.length;
-        } catch (error) {
-          console.error(`[DataSync] ⚠️ Failed to store ${metricName}:`, error.message);
-        }
-      }
-
-      const progressIncrement = 25 / metricsToStore.length;
       await base44.entities.SyncJob.update(syncJob.id, {
-        current_step: `Stored ${metricIndex + 1}/${metricsToStore.length} metric types (${totalMetricsCreated} records)`,
-        progress_percentage: Math.round(70 + ((metricIndex + 1) * progressIncrement))
+        current_step: `✅ Sync complete - ${recordsCreated} call records stored`,
+        progress_percentage: 90
       });
+
+    } catch (error) {
+      console.error(`[DataSync] ❌ Failed to store call records:`, error);
+      throw new Error(`Failed to store call records: ${error.message}`);
     }
-
-    recordsSynced = totalCalls;
-
-    console.log(`[DataSync] ✅ Complete: ${recordsCreated} calls + ${totalMetricsCreated} metrics`);
-
-    await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: `✅ Sync complete (${recordsCreated} calls, ${totalMetricsCreated} metrics)`,
-      progress_percentage: 95,
-      metrics_synced: metricsToStore
-    });
 
     return { recordsSynced, recordsCreated, recordsUpdated };
   }
