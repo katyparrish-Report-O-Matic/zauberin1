@@ -3,7 +3,8 @@ import { environmentConfig } from "../config/EnvironmentConfig";
 
 /**
  * Table Query Service
- * Translates natural language to database queries for real CallRecord data
+ * Translates natural language to database queries for TransformedMetric data
+ * Uses pre-aggregated metrics, NOT raw CallRecords
  */
 class TableQueryService {
   
@@ -30,7 +31,7 @@ class TableQueryService {
         'account_name',
         'region',
         'date',
-        'call_status'
+        'data_source'
       ];
 
       // Use LLM to interpret the request
@@ -45,14 +46,14 @@ Available dimensions: ${availableDimensions.join(', ')}
 
 IMPORTANT RULES:
 1. Identify dimensions to GROUP BY (account_name, region, date)
-2. Metrics should be aggregated (sum for counts, avg for rates/durations)
+2. Metrics are already aggregated daily - we'll sum across time periods
 3. ALWAYS include account_name unless user specifically says otherwise
 4. For "by region and account" → groupBy: ["region", "account_name"]
 5. For "by account" → groupBy: ["account_name"]
 6. Show subtotals when grouping by multiple levels
 7. Format percentages (answer_rate), numbers (calls), durations (seconds)
 
-Generate a complete table configuration that queries REAL data.`,
+Generate a complete table configuration that queries pre-aggregated metrics.`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -68,7 +69,7 @@ Generate a complete table configuration that queries REAL data.`,
               items: {
                 type: "object",
                 properties: {
-                  key: { type: "string", description: "Field name from CallRecord" },
+                  key: { type: "string", description: "Metric name" },
                   label: { type: "string", description: "Display label" },
                   format: { 
                     type: "string", 
@@ -116,7 +117,8 @@ Generate a complete table configuration that queries REAL data.`,
   }
 
   /**
-   * Execute query to fetch real CallRecord data and aggregate by groupBy dimensions
+   * Execute query to fetch TransformedMetric data and aggregate by groupBy dimensions
+   * Uses pre-aggregated daily metrics, NOT raw CallRecords
    */
   async executeTableQuery(config, organizationId, accountId = 'all') {
     try {
@@ -124,51 +126,50 @@ Generate a complete table configuration that queries REAL data.`,
       environmentConfig.log('info', '[TableQuery] Account filter:', accountId);
       environmentConfig.log('info', '[TableQuery] GroupBy dimensions:', config.groupBy);
 
-      // Build query filter
-      const queryFilter = {
-        organization_id: organizationId
-      };
+      // Fetch ALL TransformedMetric records for this organization
+      // These are already aggregated by day
+      const allMetrics = await base44.entities.TransformedMetric.filter(
+        {}, 
+        '-period_start', 
+        10000
+      );
 
-      // Add account filter if specific account is selected
-      if (accountId && accountId !== 'all') {
-        queryFilter.account_id = accountId;
-      }
+      environmentConfig.log('info', `[TableQuery] Fetched ${allMetrics.length} metric records`);
 
-      environmentConfig.log('info', '[TableQuery] Fetching CallRecords with filter:', queryFilter);
-      const callRecords = await base44.entities.CallRecord.filter(queryFilter, '-start_time', 1000);
+      // Filter by organization and optionally by account
+      const filteredMetrics = allMetrics.filter(metric => {
+        // Check if metric has segment data
+        if (!metric.segment) return false;
+        
+        // Filter by account if specified
+        if (accountId && accountId !== 'all') {
+          if (metric.segment.account_id !== accountId) return false;
+        }
+        
+        return true;
+      });
 
-      environmentConfig.log('info', `[TableQuery] Fetched ${callRecords.length} call records`);
+      environmentConfig.log('info', `[TableQuery] Filtered to ${filteredMetrics.length} metrics for query`);
 
-      if (callRecords.length === 0) {
+      if (filteredMetrics.length === 0) {
         return [];
       }
 
-      // Transform each call record to include calculated metrics
-      const transformedRecords = callRecords.map(record => ({
-        // Dimensions
-        date: record.start_time ? record.start_time.split('T')[0] : 'Unknown',
-        account_name: record.account_name || 'Unknown',
-        account_id: record.account_id || 'Unknown',
-        region: record.region || 'Unknown',
-        call_status: record.call_status || 'unknown',
-        
-        // Metrics (raw values for aggregation)
-        total_calls: 1,
-        answered_calls: record.call_status === 'answered' ? 1 : 0,
-        voicemail_calls: record.is_voicemail ? 1 : 0,
-        missed_calls: record.call_status === 'missed' ? 1 : 0,
-        working_hours_calls: record.is_working_hours ? 1 : 0,
-        after_hours_calls: !record.is_working_hours ? 1 : 0,
-        qualified_calls: record.qualified ? 1 : 0,
-        call_duration: record.talk_time || 0,
-        
-        // Keep original record for debugging
-        _original: record
-      }));
+      // Group metrics by metric_name to organize data
+      const metricsByName = {};
+      filteredMetrics.forEach(metric => {
+        const name = metric.metric_name;
+        if (!metricsByName[name]) {
+          metricsByName[name] = [];
+        }
+        metricsByName[name].push(metric);
+      });
 
-      // Group and aggregate data based on groupBy dimensions
+      environmentConfig.log('info', '[TableQuery] Metrics available:', Object.keys(metricsByName));
+
+      // Build unified records by grouping dimensions
       const groupBy = config.groupBy || ['account_name'];
-      const aggregatedData = this.aggregateData(transformedRecords, groupBy);
+      const aggregatedData = this.aggregateMetrics(metricsByName, groupBy);
 
       environmentConfig.log('info', `[TableQuery] Aggregated into ${aggregatedData.length} groups`);
 
@@ -181,75 +182,95 @@ Generate a complete table configuration that queries REAL data.`,
   }
 
   /**
-   * Aggregate data by specified dimensions
+   * Aggregate pre-calculated metrics by specified dimensions
    */
-  aggregateData(records, groupByDimensions) {
+  aggregateMetrics(metricsByName, groupByDimensions) {
     const groups = {};
 
-    // Group records
-    records.forEach(record => {
-      // Create group key from dimensions
-      const groupKey = groupByDimensions
-        .map(dim => record[dim] || 'Unknown')
-        .join('|||');
+    // Process each metric type
+    Object.entries(metricsByName).forEach(([metricName, metrics]) => {
+      metrics.forEach(metric => {
+        if (!metric.segment) return;
 
-      if (!groups[groupKey]) {
-        // Initialize group with dimension values
-        groups[groupKey] = {
-          _groupKey: groupKey
-        };
-        
-        // Add dimension values
-        groupByDimensions.forEach(dim => {
-          groups[groupKey][dim] = record[dim] || 'Unknown';
-        });
+        // Create group key from dimensions
+        const groupKey = groupByDimensions
+          .map(dim => {
+            if (dim === 'date') {
+              return metric.period_start ? metric.period_start.split('T')[0] : 'Unknown';
+            }
+            return metric.segment[dim] || 'Unknown';
+          })
+          .join('|||');
 
-        // Initialize metric accumulators
-        groups[groupKey].total_calls = 0;
-        groups[groupKey].answered_calls = 0;
-        groups[groupKey].voicemail_calls = 0;
-        groups[groupKey].missed_calls = 0;
-        groups[groupKey].working_hours_calls = 0;
-        groups[groupKey].after_hours_calls = 0;
-        groups[groupKey].qualified_calls = 0;
-        groups[groupKey].total_duration = 0;
-        groups[groupKey]._recordCount = 0;
-      }
+        if (!groups[groupKey]) {
+          // Initialize group with dimension values
+          groups[groupKey] = {
+            _groupKey: groupKey
+          };
+          
+          // Add dimension values
+          groupByDimensions.forEach(dim => {
+            if (dim === 'date') {
+              groups[groupKey][dim] = metric.period_start ? metric.period_start.split('T')[0] : 'Unknown';
+            } else {
+              groups[groupKey][dim] = metric.segment[dim] || 'Unknown';
+            }
+          });
 
-      // Aggregate metrics
-      const group = groups[groupKey];
-      group.total_calls += record.total_calls;
-      group.answered_calls += record.answered_calls;
-      group.voicemail_calls += record.voicemail_calls;
-      group.missed_calls += record.missed_calls;
-      group.working_hours_calls += record.working_hours_calls;
-      group.after_hours_calls += record.after_hours_calls;
-      group.qualified_calls += record.qualified_calls;
-      group.total_duration += record.call_duration;
-      group._recordCount++;
+          // Initialize all metrics to 0
+          groups[groupKey].total_calls = 0;
+          groups[groupKey].answered_calls = 0;
+          groups[groupKey].voicemail_calls = 0;
+          groups[groupKey].missed_calls = 0;
+          groups[groupKey].working_hours_calls = 0;
+          groups[groupKey].after_hours_calls = 0;
+          groups[groupKey].qualified_calls = 0;
+          groups[groupKey].average_duration = 0;
+          groups[groupKey].answer_rate = 0;
+          groups[groupKey]._durationSum = 0;
+          groups[groupKey]._durationCount = 0;
+          groups[groupKey]._rateSum = 0;
+          groups[groupKey]._rateCount = 0;
+        }
+
+        // Aggregate the metric value
+        const group = groups[groupKey];
+        const value = metric.aggregated_value || 0;
+
+        // For average/rate metrics, track sum and count for proper averaging
+        if (metricName === 'average_duration') {
+          group._durationSum += value;
+          group._durationCount++;
+        } else if (metricName === 'answer_rate') {
+          group._rateSum += value;
+          group._rateCount++;
+        } else {
+          // For count metrics, sum them
+          group[metricName] = (group[metricName] || 0) + value;
+        }
+      });
     });
 
-    // Calculate derived metrics
+    // Calculate final averages and clean up
     const aggregated = Object.values(groups).map(group => {
       // Calculate average_duration
-      const average_duration = group.answered_calls > 0 
-        ? Math.round(group.total_duration / group.answered_calls)
-        : 0;
+      if (group._durationCount > 0) {
+        group.average_duration = Math.round(group._durationSum / group._durationCount);
+      }
 
-      // Calculate answer_rate (percentage)
-      const answer_rate = group.total_calls > 0
-        ? Math.round((group.answered_calls / group.total_calls) * 100)
-        : 0;
+      // Calculate answer_rate
+      if (group._rateCount > 0) {
+        group.answer_rate = Math.round(group._rateSum / group._rateCount);
+      }
 
-      return {
-        ...group,
-        average_duration,
-        answer_rate,
-        // Remove temporary fields
-        total_duration: undefined,
-        _recordCount: undefined,
-        _groupKey: undefined
-      };
+      // Remove temporary fields
+      delete group._durationSum;
+      delete group._durationCount;
+      delete group._rateSum;
+      delete group._rateCount;
+      delete group._groupKey;
+
+      return group;
     });
 
     // Sort by first dimension, then by total_calls descending
@@ -257,7 +278,7 @@ Generate a complete table configuration that queries REAL data.`,
     aggregated.sort((a, b) => {
       const dimCompare = String(a[firstDimension]).localeCompare(String(b[firstDimension]));
       if (dimCompare !== 0) return dimCompare;
-      return b.total_calls - a.total_calls;
+      return (b.total_calls || 0) - (a.total_calls || 0);
     });
 
     return aggregated;
