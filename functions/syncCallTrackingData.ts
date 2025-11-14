@@ -2,8 +2,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
 /**
  * Backend function to sync Call Tracking Metrics data
- * STEP 1: Fetch and return raw call data only (no aggregation)
- * Transformation happens separately in DailyTransformerService
+ * OPTIMIZED VERSION: Parallel processing, smart pagination, early aggregation
+ * RETURNS: Account metadata + aggregated metrics + raw call records
  */
 
 Deno.serve(async (req) => {
@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    const { accountId, startDate, endDate, apiKey, isAgencyLevel, accountRegion = null } = body;
+    const { accountId, startDate, endDate, apiKey, isAgencyLevel, includeRawCalls = false, accountRegion = null } = body;
 
     if (!accountId || !startDate || !endDate || !apiKey) {
       return Response.json({ 
@@ -179,73 +179,142 @@ Deno.serve(async (req) => {
 
     console.log(`[CTM Sync] ✅ Fetched ${allCalls.length} total calls`);
 
-    // ⚡ STEP 3: Process raw call records (map CTM fields to CallRecord schema)
-    console.log(`[CTM Sync] 📞 Processing ${allCalls.length} raw call records...`);
-    
-    // FILTER OUT calls without start_time (required field)
-    const validCalls = allCalls.filter(call => call.start_time);
-    
-    if (validCalls.length < allCalls.length) {
-      console.warn(`[CTM Sync] ⚠️ Filtered out ${allCalls.length - validCalls.length} calls without start_time`);
-    }
-    
-    const callRecords = validCalls.map(call => {
+    // ⚡ STEP 3: Aggregate by date for metrics
+    const metricsByDate = {};
+
+    allCalls.forEach(call => {
+      const date = call.start_time ? call.start_time.split('T')[0] : null;
+      
+      if (!date) return;
+      
+      if (!metricsByDate[date]) {
+        metricsByDate[date] = {
+          date,
+          total_calls: 0,
+          answered_calls: 0,
+          missed_calls: 0,
+          voicemail_calls: 0,
+          qualified_calls: 0,
+          working_hours_calls: 0,
+          after_hours_calls: 0,
+          total_duration: 0
+        };
+      }
+
+      metricsByDate[date].total_calls++;
+      
+      // Determine call status
       const isVoicemail = call.status === 'voicemail' || call.voicemail === true;
       const isAnswered = call.talk_time && call.talk_time > 0;
       const isWorkingHours = call.during_business_hours === true;
       
-      return {
-        call_id: String(call.id),
-        tracking_number: call.tracking_number,
-        caller_number: call.caller_number,
-        start_time: call.start_time,
-        end_time: call.end_time,
-        duration: call.duration || 0,
-        talk_time: call.talk_time || 0,
-        call_status: isVoicemail ? 'voicemail' : (isAnswered ? 'answered' : 'missed'),
-        is_voicemail: isVoicemail,
-        is_working_hours: isWorkingHours,
-        qualified: call.qualified || false,
-        sale_status: call.sale_status,
-        first_time_caller: call.first_time_caller || false,
-        keypress: call.keypress,
-        
-        // Web attribution fields - Using ACTUAL CTM API field names
-        web_source: call.tracking_source,
-        web_medium: call.tracking_medium,
-        web_campaign: call.utm_campaign,
-        web_campaign_id: call.utm_campaign_id,
-        web_keyword: call.keyword,
-        web_visit_keywords: call.keywords,
-        web_ad_group_id: call.gclid_ad_group_id,
-        web_adgroup_id: call.gclid_adgroup_id,
-        web_creative_id: call.gclid_creative_id,
-        web_ad_network: call.gclid_network,
-        web_ad_match_type: call.gclid_match_type,
-        web_ad_slot: call.gclid_slot,
-        web_ad_slot_position: call.gclid_slot_position,
-        web_ad_targeting_type: call.gclid_targeting_type,
-        
-        // Additional fields
-        landing_page: call.landing_page_url,
-        referrer: call.referrer,
-        city: call.city,
-        state: call.state,
-        country: call.country,
-        recording_url: call.recording,
-        transcription: call.transcription,
-        tags: call.tags || [],
-        custom_fields: call.custom_source_data || {},
-        
-        sync_date: new Date().toISOString().split('T')[0]
-      };
+      if (isVoicemail) {
+        metricsByDate[date].voicemail_calls++;
+      } else if (isAnswered) {
+        metricsByDate[date].answered_calls++;
+        metricsByDate[date].total_duration += call.talk_time;
+      } else {
+        metricsByDate[date].missed_calls++;
+      }
+
+      if (isWorkingHours) {
+        metricsByDate[date].working_hours_calls++;
+      } else {
+        metricsByDate[date].after_hours_calls++;
+      }
+
+      if (call.sale_status === 'qualified' || call.qualified === true) {
+        metricsByDate[date].qualified_calls++;
+      }
     });
-    
-    console.log(`[CTM Sync] ✓ Processed ${callRecords.length} call records`);
+
+    // Calculate derived metrics
+    const metrics = Object.values(metricsByDate).map(day => ({
+      ...day,
+      average_duration: day.answered_calls > 0 
+        ? Math.round(day.total_duration / day.answered_calls) 
+        : 0,
+      answer_rate: day.total_calls > 0 
+        ? Math.round((day.answered_calls / day.total_calls) * 100) 
+        : 0
+    }));
+
+    // Sort by date
+    metrics.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    console.log(`[CTM Sync] ✅ Aggregated into ${metrics.length} days`);
+
+    // ⚡ STEP 4: Process raw call records (if requested)
+    let callRecords = null;
+    if (includeRawCalls) {
+      console.log(`[CTM Sync] 📞 Processing ${allCalls.length} raw call records...`);
+      
+      // FILTER OUT calls without start_time (required field)
+      const validCalls = allCalls.filter(call => call.start_time);
+      
+      if (validCalls.length < allCalls.length) {
+        console.warn(`[CTM Sync] ⚠️ Filtered out ${allCalls.length - validCalls.length} calls without start_time`);
+      }
+      
+      callRecords = validCalls.map(call => {
+        const isVoicemail = call.status === 'voicemail' || call.voicemail === true;
+        const isAnswered = call.talk_time && call.talk_time > 0;
+        const isWorkingHours = call.during_business_hours === true;
+        
+        return {
+          call_id: String(call.id),
+          tracking_number: call.tracking_number,
+          caller_number: call.caller_number,
+          start_time: call.start_time,
+          end_time: call.end_time,
+          duration: call.duration || 0,
+          talk_time: call.talk_time || 0,
+          call_status: isVoicemail ? 'voicemail' : (isAnswered ? 'answered' : 'missed'),
+          is_voicemail: isVoicemail,
+          is_working_hours: isWorkingHours,
+          qualified: call.qualified || false,
+          sale_status: call.sale_status,
+          first_time_caller: call.first_time_caller || false,
+          keypress: call.keypress,
+          
+          // Web attribution fields - CORRECTED MAPPING
+          web_source: call.tracking_source,
+          web_medium: call.tracking_medium,
+          web_campaign: call.utm_campaign,
+          web_campaign_id: call.utm_campaign_id,
+          web_keyword: call.keyword,
+          web_visit_keywords: call.keywords,
+          web_ad_group_id: call.gclid_ad_group_id,
+          web_adgroup_id: call.gclid_adgroup_id,
+          web_creative_id: call.gclid_creative_id,
+          web_ad_network: call.gclid_network,
+          web_ad_match_type: call.gclid_match_type,
+          web_ad_slot: call.gclid_slot,
+          web_ad_slot_position: call.gclid_slot_position,
+          web_ad_targeting_type: call.gclid_targeting_type,
+          
+          // Additional fields
+          landing_page: call.landing_page_url,
+          referrer: call.referrer,
+          city: call.city,
+          state: call.state,
+          country: call.country,
+          recording_url: call.recording,
+          transcription: call.transcription,
+          tags: call.tags || [],
+          custom_fields: call.custom_source_data || {},
+          
+          sync_date: new Date().toISOString().split('T')[0]
+        };
+      });
+      
+      console.log(`[CTM Sync] ✓ Processed ${callRecords.length} call records`);
+    }
 
     return Response.json({
       success: true,
       account: accountMetadata,
+      metrics,
       callRecords,
       totalCalls: allCalls.length,
       dateRange: { startDate, endDate },
@@ -254,8 +323,9 @@ Deno.serve(async (req) => {
         account_name: accountMetadata.name,
         region: accountMetadata.region,
         total_calls: allCalls.length,
-        call_records_processed: callRecords.length,
+        days_with_data: metrics.length,
         pages_fetched: totalPages,
+        call_records_included: includeRawCalls,
         date_range: `${startDate} to ${endDate}`
       }
     });
