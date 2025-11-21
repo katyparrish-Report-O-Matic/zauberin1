@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     const metricsByDate = {};
 
     allCalls.forEach(call => {
-      const date = call.start_time ? call.start_time.split('T')[0] : null;
+      const date = call.called_at ? call.called_at.split(' ')[0] : null;
       
       if (!date) return;
       
@@ -204,9 +204,9 @@ Deno.serve(async (req) => {
       metricsByDate[date].total_calls++;
       
       // Determine call status
-      const isVoicemail = call.status === 'voicemail' || call.voicemail === true;
+      const isVoicemail = call.call_status === 'voicemail' || call.status === 'voicemail';
       const isAnswered = call.talk_time && call.talk_time > 0;
-      const isWorkingHours = call.during_business_hours === true;
+      const isWorkingHours = call.custom_fields?.working_hours === 'Working Hours';
       
       if (isVoicemail) {
         metricsByDate[date].voicemail_calls++;
@@ -249,60 +249,64 @@ Deno.serve(async (req) => {
     if (includeRawCalls) {
       console.log(`[CTM Sync] 📞 Processing ${allCalls.length} raw call records...`);
       
-      // FILTER OUT calls without start_time (required field)
-      const validCalls = allCalls.filter(call => call.start_time);
+      // FILTER OUT calls without called_at (required field)
+      const validCalls = allCalls.filter(call => call.called_at);
       
       if (validCalls.length < allCalls.length) {
-        console.warn(`[CTM Sync] ⚠️ Filtered out ${allCalls.length - validCalls.length} calls without start_time`);
+        console.warn(`[CTM Sync] ⚠️ Filtered out ${allCalls.length - validCalls.length} calls without called_at`);
       }
       
       callRecords = validCalls.map(call => {
-        const isVoicemail = call.status === 'voicemail' || call.voicemail === true;
+        const isVoicemail = call.call_status === 'voicemail' || call.status === 'voicemail';
         const isAnswered = call.talk_time && call.talk_time > 0;
-        const isWorkingHours = call.during_business_hours === true;
+        const isWorkingHours = call.custom_fields?.working_hours === 'Working Hours';
         
         return {
           call_id: String(call.id),
           tracking_number: call.tracking_number,
           caller_number: call.caller_number,
-          start_time: call.start_time,
-          end_time: call.end_time,
+          start_time: call.called_at,
+          end_time: null,
           duration: call.duration || 0,
           talk_time: call.talk_time || 0,
-          call_status: isVoicemail ? 'voicemail' : (isAnswered ? 'answered' : 'missed'),
+          call_status: call.call_status || (isVoicemail ? 'voicemail' : (isAnswered ? 'answered' : 'missed')),
           is_voicemail: isVoicemail,
           is_working_hours: isWorkingHours,
           qualified: call.qualified || false,
           sale_status: call.sale_status,
-          first_time_caller: call.first_time_caller || false,
+          first_time_caller: call.is_new_caller || false,
           keypress: call.keypress,
           
-          // Web attribution fields - CORRECTED MAPPING
-          web_source: call.tracking_source,
-          web_medium: call.tracking_medium,
-          web_campaign: call.utm_campaign,
-          web_campaign_id: call.utm_campaign_id,
-          web_keyword: call.keyword,
-          web_visit_keywords: call.keywords,
-          web_ad_group_id: call.gclid_ad_group_id,
-          web_adgroup_id: call.gclid_adgroup_id,
-          web_creative_id: call.gclid_creative_id,
-          web_ad_network: call.gclid_network,
-          web_ad_match_type: call.gclid_match_type,
-          web_ad_slot: call.gclid_slot,
-          web_ad_slot_position: call.gclid_slot_position,
-          web_ad_targeting_type: call.gclid_targeting_type,
+          // Web attribution fields - from actual API
+          web_source: call.web_source || call.source,
+          web_medium: call.medium,
+          web_campaign: call.ga?.campaign,
+          web_campaign_id: null,
+          web_keyword: call.webvisit?.keywords,
+          web_visit_keywords: call.webvisit?.keywords,
+          web_ad_group_id: null,
+          web_adgroup_id: null,
+          web_creative_id: null,
+          web_ad_network: null,
+          web_ad_match_type: null,
+          web_ad_slot: null,
+          web_ad_slot_position: null,
+          web_ad_targeting_type: null,
           
           // Additional fields
-          landing_page: call.landing_page_url,
-          referrer: call.referrer,
+          landing_page: call.webvisit?.location_host && call.webvisit?.location_path 
+            ? `https://${call.webvisit.location_host}${call.webvisit.location_path}` 
+            : call.last_location,
+          referrer: call.webvisit?.referrer_host && call.webvisit?.referrer_path
+            ? `https://${call.webvisit.referrer_host}${call.webvisit.referrer_path}`
+            : call.referrer,
           city: call.city,
           state: call.state,
           country: call.country,
-          recording_url: call.recording,
-          transcription: call.transcription,
-          tags: call.tags || [],
-          custom_fields: call.custom_source_data || {},
+          recording_url: call.audio,
+          transcription: call.transcription_text,
+          tags: call.tag_list || [],
+          custom_fields: call.custom_fields || {},
           
           sync_date: new Date().toISOString().split('T')[0]
         };
