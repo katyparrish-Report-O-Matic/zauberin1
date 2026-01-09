@@ -1,4 +1,3 @@
-
 import { base44 } from "@/api/base44Client";
 import { dataTransformationService } from "../data/DataTransformationService";
 import { backupService } from "../backup/BackupService";
@@ -94,6 +93,9 @@ class BackgroundJobService {
           break;
         case 'data_prefetch':
           result = await this.executeDataPrefetch(job);
+          break;
+        case 'data_transformation':
+          result = await this.executeDataTransformation(job);
           break;
         default:
           throw new Error(`Unknown job type: ${job.job_type}`);
@@ -315,7 +317,7 @@ class BackgroundJobService {
    * Execute API health check job
    */
   async executeApiHealthCheck(job) {
-    const orgId = job.configuration?.organization_id;
+    const orgId = job.configuration?.organization_id || job.organization_id;
     
     if (!orgId) {
       throw new Error('Organization ID required for health check');
@@ -337,7 +339,7 @@ class BackgroundJobService {
    * Execute data prefetch job
    */
   async executeDataPrefetch(job) {
-    const orgId = job.configuration?.organization_id;
+    const orgId = job.configuration?.organization_id || job.organization_id;
     
     if (!orgId) {
       throw new Error('Organization ID required for data prefetch');
@@ -351,6 +353,69 @@ class BackgroundJobService {
         prefetched: result.prefetched,
         total_metrics: result.total,
         error: result.error
+      }
+    };
+  }
+
+  /**
+   * Execute data transformation job
+   */
+  async executeDataTransformation(job) {
+    const orgId = job.configuration?.organization_id || job.organization_id;
+    
+    if (!orgId) {
+      throw new Error('Organization ID required for data transformation');
+    }
+
+    console.log(`[BackgroundJobs] Running data transformation for org: ${orgId}`);
+    
+    // Fetch raw call records
+    const callRecords = await base44.entities.CallRecord.filter({
+      organization_id: orgId
+    });
+
+    if (callRecords.length === 0) {
+      return {
+        recordsProcessed: 0,
+        summary: {
+          message: 'No call records found to transform'
+        }
+      };
+    }
+
+    // Group by date and aggregate
+    const metricsByDate = {};
+    
+    callRecords.forEach(call => {
+      const date = call.start_time ? call.start_time.split('T')[0] : null;
+      if (!date) return;
+      
+      if (!metricsByDate[date]) {
+        metricsByDate[date] = {
+          total_calls: 0,
+          answered_calls: 0,
+          missed_calls: 0,
+          total_duration: 0
+        };
+      }
+      
+      metricsByDate[date].total_calls++;
+      if (call.call_status === 'answered') {
+        metricsByDate[date].answered_calls++;
+        metricsByDate[date].total_duration += call.talk_time || 0;
+      } else {
+        metricsByDate[date].missed_calls++;
+      }
+    });
+
+    const transformedCount = Object.keys(metricsByDate).length;
+
+    return {
+      recordsProcessed: callRecords.length,
+      summary: {
+        call_records: callRecords.length,
+        dates_processed: transformedCount,
+        organization_id: orgId
       }
     };
   }
