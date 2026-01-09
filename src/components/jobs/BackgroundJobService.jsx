@@ -218,7 +218,7 @@ class BackgroundJobService {
     deletedCount += cacheCleanup;
 
     // Run archival for all entities
-    const orgId = job.configuration?.organization_id;
+    const orgId = job.configuration?.organization_id || job.organization_id;
     // Check if orgId is provided before attempting archival, or handle it within archivalService
     let archivalResults = {};
     let totalArchived = 0;
@@ -292,7 +292,7 @@ class BackgroundJobService {
    * Execute backup job
    */
   async executeBackup(job) {
-    const orgId = job.configuration?.organization_id;
+    const orgId = job.configuration?.organization_id || job.organization_id;
 
     if (!orgId) {
       throw new Error('Organization ID required for backup job');
