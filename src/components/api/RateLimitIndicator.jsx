@@ -24,13 +24,16 @@ export default function RateLimitIndicator() {
     enabled: !!currentUser?.organization_id
   });
 
-  if (!rateLimitStatus || rateLimitStatus.length === 0) {
+  // Ensure rateLimitStatus is always an array
+  const apiConfigs = Array.isArray(rateLimitStatus) ? rateLimitStatus : [];
+
+  if (apiConfigs.length === 0) {
     return null;
   }
 
   // Get overall status
-  const hasWarning = rateLimitStatus.some(api => api.status === 'warning');
-  const hasCritical = rateLimitStatus.some(api => api.status === 'critical');
+  const hasWarning = apiConfigs.some(api => api.status === 'warning');
+  const hasCritical = apiConfigs.some(api => api.status === 'critical');
   
   const overallStatus = hasCritical ? 'critical' : hasWarning ? 'warning' : 'healthy';
   
@@ -59,8 +62,8 @@ export default function RateLimitIndicator() {
   const Icon = config.icon;
 
   // Calculate total usage across all APIs
-  const totalUsed = rateLimitStatus.reduce((sum, api) => sum + api.used, 0);
-  const totalLimit = rateLimitStatus.reduce((sum, api) => sum + (api.total || 0), 0);
+  const totalUsed = apiConfigs.reduce((sum, api) => sum + api.used, 0);
+  const totalLimit = apiConfigs.reduce((sum, api) => sum + (api.total || 0), 0);
 
   return (
     <Popover>
@@ -84,12 +87,12 @@ export default function RateLimitIndicator() {
           <div>
             <h4 className="font-semibold text-sm mb-1">API Rate Limits</h4>
             <p className="text-xs text-gray-600">
-              {rateLimitStatus.length} API{rateLimitStatus.length !== 1 ? 's' : ''} configured
+              {apiConfigs.length} API{apiConfigs.length !== 1 ? 's' : ''} configured
             </p>
           </div>
 
           <div className="space-y-3">
-            {rateLimitStatus.map((api, idx) => {
+            {apiConfigs.map((api, idx) => {
               const apiConfig = statusConfig[api.status];
               const ApiIcon = apiConfig.icon;
 
