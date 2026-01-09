@@ -1,4 +1,3 @@
-
 import { base44 } from "@/api/base44Client";
 import { environmentConfig } from "../config/EnvironmentConfig";
 
@@ -112,7 +111,7 @@ class CacheService {
       if (existing.length > 0) {
         // Update existing
         await base44.entities.CacheEntry.update(existing[0].id, {
-          data,
+          data: typeof data === 'object' ? data : { value: data },
           expires_at: expiresAt.toISOString(),
           size_bytes: sizeBytes,
           metadata
@@ -123,7 +122,7 @@ class CacheService {
           cache_key: key,
           cache_type: type,
           organization_id: organizationId,
-          data,
+          data: typeof data === 'object' ? data : { value: data },
           ttl_seconds: ttl,
           expires_at: expiresAt.toISOString(),
           hit_count: 0,

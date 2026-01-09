@@ -320,7 +320,14 @@ class BackgroundJobService {
     const orgId = job.configuration?.organization_id || job.organization_id;
     
     if (!orgId) {
-      throw new Error('Organization ID required for health check');
+      console.warn('[BackgroundJobs] No organization_id for API health check - skipping');
+      return {
+        recordsProcessed: 0,
+        summary: {
+          skipped: true,
+          reason: 'No organization_id provided'
+        }
+      };
     }
 
     const result = await productionApiService.checkApiHealth(orgId);
@@ -342,7 +349,14 @@ class BackgroundJobService {
     const orgId = job.configuration?.organization_id || job.organization_id;
     
     if (!orgId) {
-      throw new Error('Organization ID required for data prefetch');
+      console.warn('[BackgroundJobs] No organization_id for data prefetch - skipping');
+      return {
+        recordsProcessed: 0,
+        summary: {
+          skipped: true,
+          reason: 'No organization_id provided'
+        }
+      };
     }
 
     const result = await productionApiService.prefetchDashboardData(orgId);
