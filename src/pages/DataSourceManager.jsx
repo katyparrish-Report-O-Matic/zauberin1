@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -60,6 +59,7 @@ export default function DataSourceManager() {
     api_key: '',
     account_ids: [],
     property_ids: '',
+    customer_id: '',
     schedule: 'hourly',
     backfill_days: 90
   });
@@ -176,7 +176,8 @@ export default function DataSourceManager() {
         last_sync_status: data.last_sync_status || 'pending',
         metadata: {
           api_url: data.api_url || null,
-          access_level: 'agency'
+          access_level: data.platform_type === 'call_tracking' ? 'agency' : null,
+          customer_id: data.customer_id || null
         }
       };
 
@@ -258,6 +259,7 @@ export default function DataSourceManager() {
       api_key: '',
       account_ids: [],
       property_ids: '',
+      customer_id: '',
       schedule: 'hourly',
       backfill_days: 90
     });
@@ -282,6 +284,7 @@ export default function DataSourceManager() {
       api_key: source.credentials?.api_key || source.credentials?.access_token || '',
       account_ids: source.account_ids || [],
       property_ids: source.property_ids?.join(', ') || '',
+      customer_id: source.metadata?.customer_id || '',
       schedule: source.sync_config?.schedule || 'hourly',
       backfill_days: source.sync_config?.backfill_days || 90,
       enabled: source.enabled,
@@ -317,15 +320,36 @@ export default function DataSourceManager() {
     }
 
     if (!formData.api_key.trim()) {
-      toast.error('Please enter your API credentials (Access Key:Secret Key)');
+      toast.error('Please enter your API credentials');
+      return;
+    }
+
+    // Additional validation based on platform type
+    if (formData.platform_type === 'google_ads' && !formData.customer_id.trim()) {
+      toast.error('Please enter your Google Ads Customer ID');
+      return;
+    }
+
+    if (formData.platform_type === 'google_analytics_4' && !formData.property_ids.trim()) {
+      toast.error('Please enter at least one GA4 Property ID');
       return;
     }
 
     console.log('[DataSourceManager] Testing connection with:', {
       name: formData.name,
+      platform: formData.platform_type,
       hasApiKey: !!formData.api_key
     });
 
+    // For Google Ads and GA4, skip test and go directly to step 2 (manual config)
+    if (formData.platform_type === 'google_ads' || formData.platform_type === 'google_analytics_4') {
+      setConnectionTested(true);
+      setCurrentStep(2);
+      toast.success('Credentials saved - configure sync settings');
+      return;
+    }
+
+    // For Call Tracking, test connection
     testConnectionMutation.mutate(formData);
   };
 
@@ -394,9 +418,24 @@ export default function DataSourceManager() {
       return;
     }
 
-    if (formData.account_ids.length === 0) {
+    // Only require account_ids for call tracking
+    if (formData.platform_type === 'call_tracking' && formData.account_ids.length === 0) {
       console.error('[DataSourceManager] ❌ Validation failed: No accounts selected');
       toast.error('Please select at least one account to sync');
+      return;
+    }
+
+    // Validate Google Ads
+    if (formData.platform_type === 'google_ads' && !formData.customer_id) {
+      console.error('[DataSourceManager] ❌ Validation failed: No customer ID');
+      toast.error('Customer ID is required for Google Ads');
+      return;
+    }
+
+    // Validate GA4
+    if (formData.platform_type === 'google_analytics_4' && !formData.property_ids) {
+      console.error('[DataSourceManager] ❌ Validation failed: No property IDs');
+      toast.error('Property IDs are required for Google Analytics 4');
       return;
     }
 
@@ -690,18 +729,99 @@ export default function DataSourceManager() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="api_key">API Credentials (Access Key:Secret Key) *</Label>
-                  <Input
-                    id="api_key"
-                    type="password"
-                    placeholder="access_key_here:secret_key_here"
-                    value={formData.api_key}
-                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                  />
-                  <p className="text-xs text-gray-500">
-                    Format: access_key:secret_key (found in CTM Agency Settings → API Access)
-                  </p>
+                  <Label htmlFor="platform_type">Platform Type *</Label>
+                  <Select
+                    value={formData.platform_type}
+                    onValueChange={(value) => setFormData({ ...formData, platform_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="call_tracking">Call Tracking Metrics</SelectItem>
+                      <SelectItem value="google_ads">Google Ads</SelectItem>
+                      <SelectItem value="google_analytics_4">Google Analytics 4</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {formData.platform_type === 'call_tracking' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="api_key">API Credentials (Access Key:Secret Key) *</Label>
+                      <Input
+                        id="api_key"
+                        type="password"
+                        placeholder="access_key_here:secret_key_here"
+                        value={formData.api_key}
+                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Format: access_key:secret_key (found in CTM Agency Settings → API Access)
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {formData.platform_type === 'google_ads' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="customer_id">Customer ID *</Label>
+                      <Input
+                        id="customer_id"
+                        placeholder="123-456-7890"
+                        value={formData.customer_id}
+                        onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Your Google Ads Customer ID (format: 123-456-7890)
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="api_key">Developer Token or API Key *</Label>
+                      <Input
+                        id="api_key"
+                        type="password"
+                        placeholder="Your Google Ads API credentials"
+                        value={formData.api_key}
+                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Google Ads API Developer Token or Service Account credentials
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {formData.platform_type === 'google_analytics_4' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="property_ids">GA4 Property IDs *</Label>
+                      <Input
+                        id="property_ids"
+                        placeholder="123456789, 987654321"
+                        value={formData.property_ids}
+                        onChange={(e) => setFormData({ ...formData, property_ids: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Comma-separated GA4 property IDs (found in Admin → Property Settings)
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="api_key">Service Account Key or API Token *</Label>
+                      <Input
+                        id="api_key"
+                        type="password"
+                        placeholder="Your GA4 API credentials"
+                        value={formData.api_key}
+                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Service Account JSON key or OAuth access token
+                      </p>
+                    </div>
+                  </>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -732,80 +852,132 @@ export default function DataSourceManager() {
                   </div>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-900 font-semibold mb-2">🔑 Agency-Level Access</p>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• Get credentials from CTM → Agency Settings → API Access</li>
-                    <li>• Format: access_key:secret_key (with colon separator)</li>
-                    <li>• We'll test connection and show available accounts</li>
-                    <li>• You can then select which accounts to sync</li>
-                  </ul>
-                </div>
+                {formData.platform_type === 'call_tracking' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-900 font-semibold mb-2">🔑 Agency-Level Access</p>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Get credentials from CTM → Agency Settings → API Access</li>
+                      <li>• Format: access_key:secret_key (with colon separator)</li>
+                      <li>• We'll test connection and show available accounts</li>
+                      <li>• You can then select which accounts to sync</li>
+                    </ul>
+                  </div>
+                )}
+
+                {formData.platform_type === 'google_ads' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-900 font-semibold mb-2">🔑 Google Ads Setup</p>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Customer ID: Found in your Google Ads account (top right)</li>
+                      <li>• Developer Token: Apply for API access in Google Ads</li>
+                      <li>• Or use Service Account credentials (JSON key)</li>
+                      <li>• Manual setup - no automatic account discovery</li>
+                    </ul>
+                  </div>
+                )}
+
+                {formData.platform_type === 'google_analytics_4' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-900 font-semibold mb-2">🔑 GA4 Setup</p>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Property ID: Admin → Property Settings → Property ID</li>
+                      <li>• Use Service Account with Analytics Viewer permissions</li>
+                      <li>• Or OAuth token with analytics.readonly scope</li>
+                      <li>• Add multiple properties separated by commas</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Step 2: Account Selection */}
+            {/* Step 2: Account Selection / Configuration */}
             {currentStep === 2 && (
               <div className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-                  <CheckCheck className="w-5 h-5 text-green-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-green-900 font-semibold">Connection Successful</p>
-                    <p className="text-sm text-green-800">Found {availableAccounts.length} account(s)</p>
-                  </div>
-                </div>
+                {formData.platform_type === 'call_tracking' && (
+                  <>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                      <CheckCheck className="w-5 h-5 text-green-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-green-900 font-semibold">Connection Successful</p>
+                        <p className="text-sm text-green-800">Found {availableAccounts.length} account(s)</p>
+                      </div>
+                    </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Select Accounts to Sync *</Label>
-                    {availableAccounts.length > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleSelectAllAccounts}
-                      >
-                        {formData.account_ids.length === availableAccounts.length 
-                          ? 'Deselect All' 
-                          : 'Select All'}
-                      </Button>
-                    )}
-                  </div>
-                  <div className="border border-gray-200 rounded-lg p-4 space-y-3 max-h-80 overflow-y-auto">
-                    {availableAccounts.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-4">
-                        No accounts found. Make sure your agency has sub-accounts configured.
-                      </p>
-                    ) : (
-                      availableAccounts.map(account => (
-                        <div
-                          key={account.id}
-                          className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
-                        >
-                          <Checkbox
-                            id={`account-${account.id}`}
-                            checked={formData.account_ids.includes(account.id)}
-                            onCheckedChange={() => handleAccountToggle(account.id)}
-                          />
-                          <div className="flex-1">
-                            <label
-                              htmlFor={`account-${account.id}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Select Accounts to Sync *</Label>
+                        {availableAccounts.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSelectAllAccounts}
+                          >
+                            {formData.account_ids.length === availableAccounts.length 
+                              ? 'Deselect All' 
+                              : 'Select All'}
+                          </Button>
+                        )}
+                      </div>
+                      <div className="border border-gray-200 rounded-lg p-4 space-y-3 max-h-80 overflow-y-auto">
+                        {availableAccounts.length === 0 ? (
+                          <p className="text-sm text-gray-500 text-center py-4">
+                            No accounts found. Make sure your agency has sub-accounts configured.
+                          </p>
+                        ) : (
+                          availableAccounts.map(account => (
+                            <div
+                              key={account.id}
+                              className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
                             >
-                              {account.name}
-                            </label>
-                            <p className="text-xs text-gray-500 mt-1">
-                              ID: {account.id} • Status: {account.status}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    {formData.account_ids.length} account(s) selected
-                  </p>
-                </div>
+                              <Checkbox
+                                id={`account-${account.id}`}
+                                checked={formData.account_ids.includes(account.id)}
+                                onCheckedChange={() => handleAccountToggle(account.id)}
+                              />
+                              <div className="flex-1">
+                                <label
+                                  htmlFor={`account-${account.id}`}
+                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                >
+                                  {account.name}
+                                </label>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  ID: {account.id} • Status: {account.status}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {formData.account_ids.length} account(s) selected
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {(formData.platform_type === 'google_ads' || formData.platform_type === 'google_analytics_4') && (
+                  <>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-blue-900 font-semibold mb-2">✓ Credentials Saved</p>
+                      <p className="text-sm text-blue-800">
+                        {formData.platform_type === 'google_ads' 
+                          ? `Customer ID: ${formData.customer_id}` 
+                          : `Property IDs: ${formData.property_ids}`}
+                      </p>
+                    </div>
+
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        {formData.platform_type === 'google_ads'
+                          ? 'Google Ads sync requires backend function setup. Click Create to save this data source.'
+                          : 'GA4 sync requires backend function setup. Click Create to save this data source.'}
+                      </AlertDescription>
+                    </Alert>
+                  </>
+                )}
 
                 <Button
                   variant="outline"
@@ -842,25 +1014,29 @@ export default function DataSourceManager() {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Testing Connection...
                     </>
-                  ) : (
+                  ) : formData.platform_type === 'call_tracking' ? (
                     'Test Connection & Fetch Accounts'
+                  ) : (
+                    'Continue →'
                   )}
                 </Button>
               )}
               
               {currentStep === 2 && (
                 <>
-                  <div className="text-xs text-gray-500 mr-auto">
-                    Debug: {formData.account_ids.length} selected, {availableAccounts.length} available
-                  </div>
+                  {formData.platform_type === 'call_tracking' && (
+                    <div className="text-xs text-gray-500 mr-auto">
+                      Debug: {formData.account_ids.length} selected, {availableAccounts.length} available
+                    </div>
+                  )}
                   <Button 
                     onClick={() => {
                       console.log('[DataSourceManager] 🔴 CREATE BUTTON CLICKED!');
                       console.log('[DataSourceManager] isPending:', saveSourceMutation.isPending);
-                      console.log('[DataSourceManager] account_ids length:', formData.account_ids.length);
+                      console.log('[DataSourceManager] platform_type:', formData.platform_type);
                       handleSave();
                     }}
-                    disabled={saveSourceMutation.isPending || formData.account_ids.length === 0}
+                    disabled={saveSourceMutation.isPending || (formData.platform_type === 'call_tracking' && formData.account_ids.length === 0)}
                   >
                     {saveSourceMutation.isPending ? 'Saving...' : editingSource ? 'Update Data Source' : 'Create Data Source'}
                   </Button>
