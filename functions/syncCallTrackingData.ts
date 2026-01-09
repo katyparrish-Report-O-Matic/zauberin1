@@ -141,39 +141,38 @@ Deno.serve(async (req) => {
     // Initialize with first page
     const allCalls = firstPage.calls || [];
     
-    // Parallel fetch remaining pages (max 5 concurrent)
+    // Sequential fetch remaining pages (simple and reliable)
     if (totalPages > 1) {
-      const remainingPages = [];
-      for (let page = 2; page <= Math.min(totalPages, 100); page++) {
-        remainingPages.push(page);
-      }
-
-      // Fetch in batches of 5 to avoid rate limiting
-      const batchSize = 5;
-      for (let i = 0; i < remainingPages.length; i += batchSize) {
-        const batch = remainingPages.slice(i, i + batchSize);
+      const maxPages = Math.min(totalPages, 100);
+      for (let page = 2; page <= maxPages; page++) {
+        console.log(`[CTM Sync] 📄 Fetching page ${page}/${maxPages}...`);
         
-        console.log(`[CTM Sync] ⚡ Fetching pages ${batch[0]}-${batch[batch.length - 1]}...`);
+        const url = `${baseUrl}${callsEndpoint}?page=${page}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
         
-        const promises = batch.map(page => {
-          const url = `${baseUrl}${callsEndpoint}?page=${page}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
-          return fetch(url, {
+        try {
+          const pageResponse = await fetch(url, {
             method: 'GET',
             headers: {
               'Authorization': `Basic ${auth}`,
               'Content-Type': 'application/json'
             }
-          }).then(r => r.ok ? r.json() : null);
-        });
-
-        const results = await Promise.all(promises);
-        
-        results.forEach((data, idx) => {
-          if (data?.calls) {
-            allCalls.push(...data.calls);
-            console.log(`[CTM Sync] ✓ Page ${batch[idx]}: ${data.calls.length} calls`);
+          });
+          
+          if (pageResponse.ok) {
+            const pageData = await pageResponse.json();
+            if (pageData?.calls && pageData.calls.length > 0) {
+              allCalls.push(...pageData.calls);
+              console.log(`[CTM Sync] ✓ Page ${page}: ${pageData.calls.length} calls`);
+            } else {
+              console.log(`[CTM Sync] ⚠️ Page ${page}: No calls found, stopping pagination`);
+              break;
+            }
+          } else {
+            console.warn(`[CTM Sync] ⚠️ Page ${page} failed (${pageResponse.status}), continuing...`);
           }
-        });
+        } catch (pageError) {
+          console.warn(`[CTM Sync] ⚠️ Page ${page} error: ${pageError.message}, continuing...`);
+        }
       }
     }
 
