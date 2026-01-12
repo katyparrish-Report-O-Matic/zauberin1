@@ -103,7 +103,20 @@ class CacheService {
       } = options;
 
       const expiresAt = new Date(Date.now() + ttl * 1000);
-      const sizeBytes = new Blob([JSON.stringify(data)]).size;
+      
+      // Ensure data is a valid object
+      let validData;
+      if (data === null || data === undefined) {
+        validData = {};
+      } else if (typeof data === 'object' && !Array.isArray(data)) {
+        validData = data;
+      } else if (Array.isArray(data)) {
+        validData = { items: data };
+      } else {
+        validData = { value: data };
+      }
+      
+      const sizeBytes = new Blob([JSON.stringify(validData)]).size;
 
       // Check if entry exists
       const existing = await base44.entities.CacheEntry.filter({ cache_key: key });
@@ -111,7 +124,7 @@ class CacheService {
       if (existing.length > 0) {
         // Update existing
         await base44.entities.CacheEntry.update(existing[0].id, {
-          data: typeof data === 'object' ? data : { value: data },
+          data: validData,
           expires_at: expiresAt.toISOString(),
           size_bytes: sizeBytes,
           metadata
@@ -122,7 +135,7 @@ class CacheService {
           cache_key: key,
           cache_type: type,
           organization_id: organizationId,
-          data: typeof data === 'object' ? data : { value: data },
+          data: validData,
           ttl_seconds: ttl,
           expires_at: expiresAt.toISOString(),
           hit_count: 0,
