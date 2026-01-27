@@ -70,6 +70,8 @@ class DataSyncService {
         result = await this.syncGoogleAds(syncJob, dataSource);
       } else if (dataSource.platform_type === 'google_analytics_4') {
         result = await this.syncGoogleAnalytics(syncJob, dataSource);
+      } else if (dataSource.platform_type === 'salesforce') {
+        result = await this.syncSalesforce(syncJob, dataSource);
       } else {
         throw new Error(`Unsupported platform type: ${dataSource.platform_type}`);
       }
@@ -358,6 +360,73 @@ class DataSyncService {
   async syncGoogleAnalytics(syncJob, dataSource) {
     console.log('[DataSync] Google Analytics sync not yet implemented');
     return { recordsSynced: 0, recordsCreated: 0, recordsUpdated: 0 };
+  }
+
+  async syncSalesforce(syncJob, dataSource) {
+    let recordsCreated = 0;
+    let recordsUpdated = 0;
+
+    console.log('[DataSync] Starting Salesforce sync');
+
+    await base44.entities.SyncJob.update(syncJob.id, {
+      current_step: 'Fetching Salesforce data...',
+      progress_percentage: 10
+    });
+
+    const result = await base44.functions.invoke('syncSalesforceData', {
+      startDate: syncJob.date_range.start_date,
+      endDate: syncJob.date_range.end_date
+    });
+
+    if (!result.data?.success) {
+      throw new Error(result.data?.error || 'Salesforce sync failed');
+    }
+
+    const { accounts, agreements } = result.data;
+
+    await base44.entities.SyncJob.update(syncJob.id, {
+      current_step: `Processing ${accounts.length} accounts and ${agreements.length} agreements...`,
+      progress_percentage: 30
+    });
+
+    const syncDate = new Date().toISOString().split('T')[0];
+
+    // Store accounts
+    const accountRecords = accounts.map(acc => ({
+      organization_id: dataSource.organization_id,
+      data_source_id: dataSource.id,
+      ...acc,
+      sync_date: syncDate
+    }));
+
+    if (accountRecords.length > 0) {
+      await base44.entities.SalesforceAccount.bulkCreate(accountRecords);
+      recordsCreated += accountRecords.length;
+    }
+
+    await base44.entities.SyncJob.update(syncJob.id, {
+      current_step: 'Storing service agreements...',
+      progress_percentage: 70
+    });
+
+    // Store agreements
+    const agreementRecords = agreements.map(agr => ({
+      organization_id: dataSource.organization_id,
+      data_source_id: dataSource.id,
+      ...agr,
+      sync_date: syncDate
+    }));
+
+    if (agreementRecords.length > 0) {
+      await base44.entities.ServiceAgreement.bulkCreate(agreementRecords);
+      recordsCreated += agreementRecords.length;
+    }
+
+    const recordsSynced = accounts.length + agreements.length;
+
+    console.log(`[DataSync] Salesforce sync complete - ${recordsCreated} records stored`);
+
+    return { recordsSynced, recordsCreated, recordsUpdated };
   }
 }
 

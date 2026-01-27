@@ -341,8 +341,10 @@ export default function DataSourceManager() {
       hasApiKey: !!formData.api_key
     });
 
-    // For Google Ads and GA4, skip test and go directly to step 2 (manual config)
-    if (formData.platform_type === 'google_ads' || formData.platform_type === 'google_analytics_4') {
+    // For Google Ads, GA4, and Salesforce, skip test and go directly to step 2 (manual config)
+    if (formData.platform_type === 'google_ads' || 
+        formData.platform_type === 'google_analytics_4' || 
+        formData.platform_type === 'salesforce') {
       setConnectionTested(true);
       setCurrentStep(2);
       toast.success('Credentials saved - configure sync settings');
@@ -464,7 +466,8 @@ export default function DataSourceManager() {
       google_ads: 'Google Ads',
       google_analytics_4: 'Google Analytics 4',
       call_tracking: 'Call Tracking',
-      facebook_ads: 'Facebook Ads'
+      facebook_ads: 'Facebook Ads',
+      salesforce: 'Salesforce'
     };
     return labels[type] || type;
   };
@@ -741,6 +744,7 @@ export default function DataSourceManager() {
                       <SelectItem value="call_tracking">Call Tracking Metrics</SelectItem>
                       <SelectItem value="google_ads">Google Ads</SelectItem>
                       <SelectItem value="google_analytics_4">Google Analytics 4</SelectItem>
+                      <SelectItem value="salesforce">Salesforce</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -821,6 +825,15 @@ export default function DataSourceManager() {
                       </p>
                     </div>
                   </>
+                )}
+
+                {formData.platform_type === 'salesforce' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-900 font-semibold mb-2">🔗 OAuth Connection</p>
+                    <p className="text-sm text-blue-800">
+                      Salesforce uses OAuth authentication. Click "Continue" to proceed with authorization.
+                    </p>
+                  </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
@@ -957,23 +970,23 @@ export default function DataSourceManager() {
                   </>
                 )}
 
-                {(formData.platform_type === 'google_ads' || formData.platform_type === 'google_analytics_4') && (
+                {(formData.platform_type === 'google_ads' || formData.platform_type === 'google_analytics_4' || formData.platform_type === 'salesforce') && (
                   <>
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <p className="text-sm text-blue-900 font-semibold mb-2">✓ Credentials Saved</p>
                       <p className="text-sm text-blue-800">
-                        {formData.platform_type === 'google_ads' 
-                          ? `Customer ID: ${formData.customer_id}` 
-                          : `Property IDs: ${formData.property_ids}`}
+                        {formData.platform_type === 'google_ads' && `Customer ID: ${formData.customer_id}`}
+                        {formData.platform_type === 'google_analytics_4' && `Property IDs: ${formData.property_ids}`}
+                        {formData.platform_type === 'salesforce' && 'Salesforce OAuth will be configured'}
                       </p>
                     </div>
 
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        {formData.platform_type === 'google_ads'
-                          ? 'Google Ads sync requires backend function setup. Click Create to save this data source.'
-                          : 'GA4 sync requires backend function setup. Click Create to save this data source.'}
+                        {formData.platform_type === 'google_ads' && 'Google Ads sync requires backend function setup. Click Create to save this data source.'}
+                        {formData.platform_type === 'google_analytics_4' && 'GA4 sync requires backend function setup. Click Create to save this data source.'}
+                        {formData.platform_type === 'salesforce' && 'Click Create to save this data source and authorize Salesforce access.'}
                       </AlertDescription>
                     </Alert>
                   </>
