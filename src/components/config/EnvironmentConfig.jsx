@@ -57,6 +57,10 @@ class EnvironmentConfig {
       }
     }
   }
+
+  isMonitoringEnabled() {
+    return CONFIG.monitoring.enabled === true;
+  }
 }
 
 export const environmentConfig = new EnvironmentConfig();
