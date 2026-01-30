@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
 
     const accessToken = await base44.asServiceRole.connectors.getAccessToken('salesforce');
 
-    const response = await fetch('https://adtrak.my.salesforce.com/services/data/v59.0/query?q=SELECT Id, Name, Industry, AnnualRevenue, NumberOfEmployees, Phone, Website, Type FROM Account ORDER BY CreatedDate DESC', {
+    const response = await fetch('https://adtrak.my.salesforce.com/services/data/v59.0/query?q=SELECT Id, Account_Manager__c, Active_Marketing_Budget__c, Active_Marketing_Client__c, Adtrak_Paid_Marketing_Customer__c, Agency_Analytics_ID__c, Archived__c, Breeez_Account__c, Client_Team__c, Client_Team_Owner__c, Company_History__c, Company_Status__c, Current_Account_Plan__c, Marketing_Package_Client__c, Marketing_Package_Type__c, Name, Number_of_Live_Services__c, Number_of_Marketing_Live_Services__c, Number_of_Opportunities__c, ParentId, Primary_Sector__c, Sector__c, Sector_Category__c, Service_Agreement__c, Subscription_Line_Item_c FROM Account ORDER BY CreatedDate DESC', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
