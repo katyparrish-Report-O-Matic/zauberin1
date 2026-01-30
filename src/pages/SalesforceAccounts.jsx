@@ -81,11 +81,30 @@ export default function SalesforceAccounts() {
                 <table className="w-full">
                   <thead className="bg-gray-100 border-b border-gray-200">
                     <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Account Name</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Primary Sector</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Account Manager</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Live Services</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Active Marketing Budget</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Active Marketing Client</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Adtrak Paid Marketing Customer</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Agency Analytics ID</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Archived</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Breeez Account</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Client Team</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Client Team Owner</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Company History</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Company Status</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Current Account Plan</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Marketing Package Client</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Marketing Package Type</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Live Services</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Marketing Live Services</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Opportunities</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Parent ID</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Primary Sector</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector Category</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Service Agreement</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Subscription Line Item</th>
                     </tr>
                   </thead>
                   <tbody>
