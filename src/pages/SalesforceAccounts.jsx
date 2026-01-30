@@ -104,7 +104,6 @@ export default function SalesforceAccounts() {
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector Category</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Service Agreement</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Subscription Line Item</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -133,7 +132,6 @@ export default function SalesforceAccounts() {
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Sector__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Sector_Category__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Service_Agreement__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Subscription_Line_Item_c || '-'}</td>
                        </tr>
                     ))}
                   </tbody>
