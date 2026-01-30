@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -54,15 +53,14 @@ export default function ReportBuilder() {
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
 
-  // Fetch API settings
-  const { data: apiSettings } = useQuery({
-    queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
+  // Fetch data sources (replacing legacy API settings check)
+  const { data: dataSources = [] } = useQuery({
+    queryKey: ['dataSourcesCheck', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') return null;
+      if (!orgId || orgId === 'all') return [];
       
-      const settings = await base44.entities.ApiSettings.filter({ organization_id: orgId });
-      return settings[0] || null;
+      return await base44.entities.DataSource.filter({ organization_id: orgId });
     },
     enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
@@ -517,7 +515,7 @@ export default function ReportBuilder() {
     }
   };
 
-  const isApiConfigured = apiSettings?.api_url && apiSettings?.api_token;
+  const isApiConfigured = dataSources.length > 0 && dataSources.some(ds => ds.enabled);
 
   return (
     <div className="min-h-screen bg-gray-50">
