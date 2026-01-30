@@ -22,7 +22,8 @@ export default function SalesforceAccounts() {
 
   const filteredAccounts = accounts.filter(account =>
     account.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.Industry?.toLowerCase().includes(searchTerm.toLowerCase())
+    account.Primary_Sector__c?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    account.Company_Status__c?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleRefresh = () => {
