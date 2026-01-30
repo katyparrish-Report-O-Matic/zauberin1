@@ -50,7 +50,7 @@ export default function SalesforceAccounts() {
         <div className="relative">
           <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
           <Input
-            placeholder="Search by account name or industry..."
+            placeholder="Search by name, sector, or status..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
