@@ -110,11 +110,30 @@ export default function SalesforceAccounts() {
                   <tbody>
                     {filteredAccounts.map((account) => (
                       <tr key={account.Id} className="border-b border-gray-200 hover:bg-gray-50">
-                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{account.Name}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Primary_Sector__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Company_Status__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{account.Name || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Account_Manager__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Active_Marketing_Budget__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Active_Marketing_Client__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Adtrak_Paid_Marketing_Customer__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Agency_Analytics_ID__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Archived__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Breeez_Account__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Client_Team__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Client_Team_Owner__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Company_History__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Company_Status__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Current_Account_Plan__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Marketing_Package_Client__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Marketing_Package_Type__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Live_Services__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Marketing_Live_Services__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Opportunities__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.ParentId || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Primary_Sector__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Sector__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Sector_Category__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Service_Agreement__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Subscription_Line_Item_c || '-'}</td>
                        </tr>
                     ))}
                   </tbody>
