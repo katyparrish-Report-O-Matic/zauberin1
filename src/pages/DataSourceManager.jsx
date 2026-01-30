@@ -78,16 +78,16 @@ export default function DataSourceManager() {
     queryKey: ['dataSources', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') {
-        if (isAgency && selectedOrgId === 'all') {
-          return await base44.entities.DataSource.list('-created_date');
-        }
-        return [];
+      if (orgId === 'all' && isAgency) {
+        return await base44.entities.DataSource.list('-created_date');
       }
-      return await base44.entities.DataSource.filter(
-        { organization_id: orgId },
-        '-created_date'
-      );
+      if (orgId && orgId !== 'all') {
+        return await base44.entities.DataSource.filter(
+          { organization_id: orgId },
+          '-created_date'
+        );
+      }
+      return await base44.entities.DataSource.list('-created_date');
     },
     initialData: []
   });
