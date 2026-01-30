@@ -53,14 +53,15 @@ export default function ReportBuilder() {
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
 
-  // Fetch data sources (replacing legacy API settings check)
-  const { data: dataSources = [] } = useQuery({
-    queryKey: ['dataSourcesCheck', selectedOrgId || currentUser?.organization_id],
+  // Fetch API settings
+  const { data: apiSettings } = useQuery({
+    queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') return [];
+      if (!orgId || orgId === 'all') return null;
       
-      return await base44.entities.DataSource.filter({ organization_id: orgId });
+      const settings = await base44.entities.ApiSettings.filter({ organization_id: orgId });
+      return settings[0] || null;
     },
     enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
@@ -515,7 +516,7 @@ export default function ReportBuilder() {
     }
   };
 
-  const isApiConfigured = dataSources.length > 0 && dataSources.some(ds => ds.enabled);
+  const isApiConfigured = apiSettings?.api_url && apiSettings?.api_token;
 
   return (
     <div className="min-h-screen bg-gray-50">
