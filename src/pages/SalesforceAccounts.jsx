@@ -83,9 +83,6 @@ export default function SalesforceAccounts() {
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Account Name</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Industry</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Annual Revenue</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Employees</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Phone</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -94,11 +91,6 @@ export default function SalesforceAccounts() {
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{account.Name}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{account.Type || '-'}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{account.Industry || '-'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {account.AnnualRevenue ? `£${(account.AnnualRevenue / 1000000).toFixed(1)}M` : '-'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{account.NumberOfEmployees || '-'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{account.Phone || '-'}</td>
                       </tr>
                     ))}
                   </tbody>
