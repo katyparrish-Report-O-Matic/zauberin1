@@ -92,7 +92,10 @@ export default function SalesforceAccounts() {
                     {filteredAccounts.map((account) => (
                       <tr key={account.Id} className="border-b border-gray-200 hover:bg-gray-50">
                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{account.Name}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Industry || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Primary_Sector__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Company_Status__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Account_Manager__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Live_Services__c || '-'}</td>
                        </tr>
                     ))}
                   </tbody>
