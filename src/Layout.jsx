@@ -5,7 +5,6 @@ import { Settings, Clock, Building2, Shield, Webhook, FlaskConical, FileText, Ac
 import JobScheduler from "./components/jobs/JobScheduler";
 import { usePermissions } from "./components/auth/usePermissions";
 import { Badge } from "@/components/ui/badge";
-import EnvironmentIndicator from "./components/config/EnvironmentIndicator";
 import MonitoringInitializer from "./components/monitoring/MonitoringInitializer";
 
 export default function Layout({ children }) {
@@ -91,10 +90,9 @@ export default function Layout({ children }) {
                         Admin
                       </Badge>
                     )}
-                  </div>
-                )}
-                <EnvironmentIndicator />
-              </div>
+                    </div>
+                    )}
+                    </div>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
                 {visibleNavItems.map((item) => {
                   const Icon = item.icon;
