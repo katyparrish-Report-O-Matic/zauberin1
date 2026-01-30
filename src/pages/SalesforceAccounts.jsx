@@ -82,7 +82,10 @@ export default function SalesforceAccounts() {
                   <thead className="bg-gray-100 border-b border-gray-200">
                     <tr>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Account Name</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Industry</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Primary Sector</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Account Manager</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Live Services</th>
                     </tr>
                   </thead>
                   <tbody>
