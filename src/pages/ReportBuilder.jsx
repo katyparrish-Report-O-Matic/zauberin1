@@ -505,8 +505,6 @@ export default function ReportBuilder() {
     }
   };
 
-  const isApiConfigured = apiSettings?.api_url && apiSettings?.api_token;
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="p-6 md:p-8">
