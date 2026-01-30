@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Download, Save, AlertCircle, BookTemplate } from "lucide-react";
+import { Download, Save, BookTemplate } from "lucide-react";
 import { toast } from "sonner";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
 import {
   Dialog,
   DialogContent,
@@ -53,18 +53,7 @@ export default function ReportBuilder() {
   const canEdit = currentUser?.permission_level === 'admin' || hasPermission('editor');
   const canDelete = currentUser?.permission_level === 'admin' || hasPermission('admin');
 
-  // Fetch API settings
-  const { data: apiSettings } = useQuery({
-    queryKey: ['apiSettings', selectedOrgId || currentUser?.organization_id],
-    queryFn: async () => {
-      const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') return null;
-      
-      const settings = await base44.entities.ApiSettings.filter({ organization_id: orgId });
-      return settings[0] || null;
-    },
-    enabled: !!(selectedOrgId || currentUser?.organization_id)
-  });
+
 
   // Fetch saved reports
   const { data: savedReports = [] } = useQuery({
@@ -542,18 +531,6 @@ export default function ReportBuilder() {
               <DataQualityIndicator />
             </div>
           </div>
-
-          {!isApiConfigured && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                API not fully configured. Some features may be limited.{' '}
-                {canDelete && (
-                  <a href="/settings" className="underline font-medium">Configure API settings</a>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
 
           {/* Main Layout */}
           <div className="grid lg:grid-cols-12 gap-6">
