@@ -143,9 +143,8 @@ export default function SalesforceAccounts() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              {uniqueAtRiskStatuses.map(status => (
-                <SelectItem key={status} value={status}>{status}</SelectItem>
-              ))}
+              {hasAtRiskAccounts && <SelectItem value="true">At Risk</SelectItem>}
+              {hasNotAtRiskAccounts && <SelectItem value="false">Not At Risk</SelectItem>}
             </SelectContent>
           </Select>
         </div>
