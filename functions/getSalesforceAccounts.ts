@@ -9,29 +9,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Find the Salesforce data source
-    let dataSources = [];
-
-    // Try user's organization first
-    if (user.organization_id) {
-      dataSources = await base44.asServiceRole.entities.DataSource.filter({
-        organization_id: user.organization_id,
-        platform_type: 'salesforce'
-      });
-    }
-
-    // If not found, try to find "adtrak" organization
-    if (dataSources.length === 0) {
-      const orgs = await base44.asServiceRole.entities.Organization.filter({
-        slug: 'adtrak'
-      });
-      if (orgs[0]) {
-        dataSources = await base44.asServiceRole.entities.DataSource.filter({
-          organization_id: orgs[0].id,
-          platform_type: 'salesforce'
-        });
-      }
-    }
+    // Find the Salesforce data source for this org
+    const dataSources = await base44.asServiceRole.entities.DataSource.filter({
+      organization_id: user.organization_id,
+      platform_type: 'salesforce'
+    });
 
     let dataSource = dataSources[0];
     let whereClause = '';
