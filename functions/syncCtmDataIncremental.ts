@@ -51,6 +51,35 @@ Deno.serve(async (req) => {
     
     console.log(`[CTM Sync] Last sync: ${lastSyncAt.toISOString()}`);
 
+    // Check for concurrent manual syncs
+    const activeManualSync = await base44.asServiceRole.entities.SyncJob.filter({
+      organization_id: dataSource.organization_id,
+      sync_type: 'manual',
+      status: 'in_progress'
+    }, '-created_date', 1);
+
+    if (activeManualSync.length > 0) {
+      return Response.json({
+        success: false,
+        error: 'Manual sync already in progress. Only one manual sync allowed at a time.',
+        active_sync_id: activeManualSync[0].id,
+        started_at: activeManualSync[0].started_at
+      }, { status: 409 });
+    }
+
+    // Create SyncJob to track progress
+    const syncJob = await base44.asServiceRole.entities.SyncJob.create({
+      organization_id: dataSource.organization_id,
+      data_source_id: dataSource.id,
+      sync_type: 'manual',
+      status: 'in_progress',
+      started_at: new Date().toISOString(),
+      progress_percentage: 0,
+      current_step: 'Initializing...',
+      records_synced: 0,
+      records_created: 0
+    });
+
     let totalCallsCreated = 0;
     let accountsProcessed = 0;
     let errors = [];
@@ -58,7 +87,8 @@ Deno.serve(async (req) => {
     const accountIds = dataSource.account_ids || [];
 
     // Process each account
-    for (const accountId of accountIds) {
+    for (let i = 0; i < accountIds.length; i++) {
+      const accountId = accountIds[i];
       try {
         // Rate limiting
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
