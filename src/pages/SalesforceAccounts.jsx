@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { RefreshCw, Search, Filter, Building2, AlertCircle, TrendingUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import AccountPlanModal from '@/components/accountplan/AccountPlanModal';
 
 export default function SalesforceAccounts() {
   const [searchTerm, setSearchTerm] = useState('');
