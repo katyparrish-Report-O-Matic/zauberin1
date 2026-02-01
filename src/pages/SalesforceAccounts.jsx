@@ -56,8 +56,9 @@ export default function SalesforceAccounts() {
     const matchesStatus = statusFilter === 'all' || account.Company_Status__c === statusFilter;
     const matchesPod = podFilter === 'all' || account.POD__c === podFilter;
     const matchesSector = sectorFilter === 'all' || account.Primary_Sector__c === sectorFilter;
+    const matchesAtRisk = atRiskFilter === 'all' || account.At_Risk__c === atRiskFilter;
 
-    return matchesSearch && matchesStatus && matchesPod && matchesSector;
+    return matchesSearch && matchesStatus && matchesPod && matchesSector && matchesAtRisk;
   });
 
   const handleRefresh = () => {
