@@ -224,6 +224,18 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('[CTM Sync] Error:', error);
+    // If we created a SyncJob, mark it as failed
+    if (syncJob) {
+      try {
+        await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+          status: 'failed',
+          error_message: error.message,
+          completed_at: new Date().toISOString()
+        });
+      } catch (updateError) {
+        console.error('[CTM Sync] Could not update SyncJob:', updateError);
+      }
+    }
     return Response.json({
       success: false,
       error: error.message
