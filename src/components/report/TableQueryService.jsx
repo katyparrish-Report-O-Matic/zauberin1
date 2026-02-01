@@ -65,19 +65,22 @@ ${dateContext}
 Available metrics: ${availableMetrics.join(', ')}
 Available dimensions: ${availableDimensions.join(', ')}
 
-IMPORTANT RULES:
+**CRITICAL: DATA SOURCE DECISION RULES (DO THIS FIRST)**
+1. If request mentions ANY of these keywords → MUST use "salesforce":
+   - industry, sector, account type, spend, budget, revenue, employee count, company info, account details, owner, manager
+   - billing address, city, state, country, account number
+   
+2. If request mentions ONLY call-specific keywords → use "calls":
+   - calls, call metrics, call duration, answer rate, call status, voicemail, missed calls, tracking
+
+3. NEVER mix data sources. If ANY groupBy dimension comes from Salesforce (industry, account_type, billing_state, owner_name, etc), set dataSource to "salesforce"
+
+**THEN generate table configuration:**
 1. Map user's request to EXACT dimension names. "sector" = "industry", "marketing channel" = "web_ad_network", "medium" = "web_medium"
-2. Extract ONLY the dimensions user explicitly mentions—do NOT add account_name unless they ask for it
-3. Determine data source:
-   - Use "salesforce" if request mentions: industry, sector, account type, account info, company details, location (city/state/country), employee count, revenue, billing address, owner/manager
-   - Use "calls" if request mentions: call metrics, call duration, answer rate, call status, call volume, call tracking, qualified calls, talking about call-specific data ONLY
-4. For "by region and account" → groupBy: ["region", "account_name"]
-5. For "accounts by type" → groupBy: ["account_type"]
-6. Show subtotals when grouping by multiple levels
-7. Format percentages (answer_rate), numbers (calls/employees), currency (revenue), durations (seconds)
-8. Set dataSource: "calls" or "salesforce" based on request intent
-9. If groupBy dimensions exist in Salesforce schema (industry, account_type, billing_state, owner_name, etc) → use salesforce
-10. CRITICAL: "spend" and "budget" metrics are on Salesforce accounts, NOT call tracking
+2. Extract dimensions user mentions—do NOT add account_name unless asked
+3. Default groupBy to ["account_name"] if user doesn't specify grouping
+4. Show subtotals when grouping by multiple levels
+5. Choose metrics that match the data source you selected
 
 Generate a complete table configuration.`,
         response_json_schema: {
