@@ -69,7 +69,7 @@ export default function Layout({ children }) {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center gap-3">
                 <img 
-                  src="https://base44.app/api/apps/690dde1a97d67b2c9dbceb00/files/public/690dde1a97d67b2c9dbceb00/961e1fc85_Zauberin.png" 
+                  src="https://base44.app/api/apps/691599fd95dfa732e5bd8802/files/public/691599fd95dfa732e5bd8802/961e1fc85_Zauberin.png" 
                   alt="Zauberin Logo" 
                   className="h-10 w-10 object-contain"
                 />
