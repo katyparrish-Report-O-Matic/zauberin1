@@ -83,41 +83,7 @@ export default function SalesforceAccounts() {
             />
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {uniqueStatuses.map(status => (
-                <SelectItem key={status} value={status}>{status}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
 
-          <Select value={podFilter} onValueChange={setPodFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="POD" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All PODs</SelectItem>
-              {uniquePods.map(pod => (
-                <SelectItem key={pod} value={pod}>{pod}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={sectorFilter} onValueChange={setSectorFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Sector" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sectors</SelectItem>
-              {uniqueSectors.map(sector => (
-                <SelectItem key={sector} value={sector}>{sector}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Content */}
