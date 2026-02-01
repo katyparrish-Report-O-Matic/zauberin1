@@ -110,12 +110,13 @@ Deno.serve(async (req) => {
         // Rate limiting
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
 
-        // Fetch with pagination
+        // Fetch with pagination - max 10 pages per account to prevent runaway
         let allAccountCalls = [];
         let page = 1;
         let hasMore = true;
+        const maxPages = 10;
 
-        while (hasMore) {
+        while (hasMore && page <= maxPages) {
           const url = `${baseUrl}/accounts/${accountId}/calls.json?per_page=100&page=${page}`;
 
           const response = await fetch(url, {
@@ -129,14 +130,12 @@ Deno.serve(async (req) => {
           if (response.status === 429) {
             console.warn(`[CTM Sync] Rate limited for account ${accountId}`);
             errors.push({ account: accountId, error: 'Rate limited' });
-            hasMore = false;
             break;
           }
 
           if (!response.ok) {
-            console.error(`[CTM Sync] Failed to fetch calls for account ${accountId}: ${response.status}`);
-            errors.push({ account: accountId, error: `HTTP ${response.status}` });
-            hasMore = false;
+            console.error(`[CTM Sync] Failed page ${page} for account ${accountId}: ${response.status}`);
+            errors.push({ account: accountId, error: `HTTP ${response.status} page ${page}` });
             break;
           }
 
@@ -144,12 +143,18 @@ Deno.serve(async (req) => {
           const calls = callsData.calls || [];
           allAccountCalls = allAccountCalls.concat(calls);
 
+          console.log(`[CTM Sync] Account ${accountId} page ${page}: ${calls.length} calls`);
+
           hasMore = calls.length === 100;
           page++;
 
-          if (hasMore) {
+          if (hasMore && page <= maxPages) {
             await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
           }
+        }
+
+        if (page > maxPages) {
+          console.warn(`[CTM Sync] Account ${accountId} hit max pages (${maxPages}), stopping pagination`);
         }
 
         // Filter to calls in date range
