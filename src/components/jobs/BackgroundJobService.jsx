@@ -459,6 +459,7 @@ class BackgroundJobService {
     }
 
     await base44.entities.ScheduledJob.update(job.id, {
+      organization_id: job.organization_id,
       last_run: now.toISOString(),
       next_run: nextRun ? nextRun.toISOString() : null
     });
