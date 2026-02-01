@@ -90,6 +90,14 @@ Deno.serve(async (req) => {
     for (let i = 0; i < accountIds.length; i++) {
       const accountId = accountIds[i];
       try {
+        // Update progress
+        const progress = Math.round((i / accountIds.length) * 100);
+        await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+          progress_percentage: progress,
+          current_step: `Fetched ${accountsProcessed}/${accountIds.length} accounts`,
+          records_synced: totalCallsCreated
+        });
+
         // Rate limiting
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
 
@@ -125,7 +133,7 @@ Deno.serve(async (req) => {
         });
 
         if (newCalls.length > 0) {
-          // Bulk create call records
+          // Bulk create call records immediately
           const callRecords = newCalls.map(call => ({
             call_id: call.id,
             account_id: accountId,
@@ -145,7 +153,7 @@ Deno.serve(async (req) => {
 
           await base44.asServiceRole.entities.CallRecord.bulkCreate(callRecords);
           totalCallsCreated += newCalls.length;
-          console.log(`[CTM Sync] Account ${accountId}: ${newCalls.length} new calls`);
+          console.log(`[CTM Sync] Account ${accountId}: ${newCalls.length} new calls saved`);
         }
 
         accountsProcessed++;
