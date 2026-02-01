@@ -164,18 +164,18 @@ export default function AccountPlanModal({ accountId, isOpen, onClose }) {
 
                     return (
                       <div key={group.label}>
-                        <h3 className="font-semibold text-sm mb-3 text-gray-700">{group.label}</h3>
-                        <div className="space-y-3">
+                        <h3 className="font-semibold text-base mb-3 text-gray-800 border-b pb-2">{group.label}</h3>
+                        <div className="space-y-4">
                           {group.fields.map((field) => {
                             const value = selectedPlan[field.key];
                             if (!value) return null;
 
                             return (
-                              <div key={field.key} className="border-b border-gray-100 pb-3">
-                                <div className="text-xs font-medium text-gray-600 mb-1">
+                              <div key={field.key} className="pb-3">
+                                <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
                                   {field.label}
                                 </div>
-                                <div className="text-sm text-gray-900 whitespace-pre-wrap">
+                                <div className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
                                   {renderFieldValue(value)}
                                 </div>
                               </div>
