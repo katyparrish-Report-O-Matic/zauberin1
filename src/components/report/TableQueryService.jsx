@@ -9,8 +9,8 @@ import { environmentConfig } from "../config/EnvironmentConfig";
 class TableQueryService {
   
   /**
-   * Generate table configuration from natural language
-   */
+    * Generate table configuration from natural language
+    */
   async generateTableFromRequest(naturalLanguageRequest, organizationId, dateContext = '') {
     try {
       environmentConfig.log('info', '[TableQuery] Processing NL request:', naturalLanguageRequest);
@@ -25,7 +25,12 @@ class TableQueryService {
         'qualified_calls',
         'average_duration',
         'average_talk_time',
-        'answer_rate'
+        'answer_rate',
+        'account_type',
+        'industry',
+        'number_of_employees',
+        'annual_revenue',
+        'owner_name'
       ];
 
       const availableDimensions = [
@@ -34,7 +39,11 @@ class TableQueryService {
         'date',
         'call_status',
         'web_source',
-        'web_campaign'
+        'web_campaign',
+        'billing_state',
+        'billing_city',
+        'account_type',
+        'owner_name'
       ];
 
       // Use LLM to interpret the request
