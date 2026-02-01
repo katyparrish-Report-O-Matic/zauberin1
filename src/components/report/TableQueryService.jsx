@@ -338,6 +338,86 @@ Generate a complete table configuration.`,
 
     return aggregated;
   }
+
+  /**
+   * Aggregate Salesforce accounts by specified dimensions
+   */
+  aggregateSalesforceAccounts(accounts, groupByDimensions) {
+    const groups = {};
+
+    accounts.forEach(account => {
+      const groupKey = groupByDimensions
+        .map(dim => {
+          if (dim === 'account_type') return account.type || 'Unknown';
+          if (dim === 'billing_state') return account.billing_state || 'Unknown';
+          if (dim === 'billing_city') return account.billing_city || 'Unknown';
+          if (dim === 'owner_name') return account.owner_name || 'Unknown';
+          return account[dim] || 'Unknown';
+        })
+        .join('|||');
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          _groupKey: groupKey
+        };
+
+        groupByDimensions.forEach(dim => {
+          if (dim === 'account_type') {
+            groups[groupKey].account_type = account.type || 'Unknown';
+          } else if (dim === 'billing_state') {
+            groups[groupKey].billing_state = account.billing_state || 'Unknown';
+          } else if (dim === 'billing_city') {
+            groups[groupKey].billing_city = account.billing_city || 'Unknown';
+          } else if (dim === 'owner_name') {
+            groups[groupKey].owner_name = account.owner_name || 'Unknown';
+          } else {
+            groups[groupKey][dim] = account[dim] || 'Unknown';
+          }
+        });
+
+        groups[groupKey].account_count = 0;
+        groups[groupKey].total_employees = 0;
+        groups[groupKey].total_revenue = 0;
+        groups[groupKey]._accountsWithRevenue = 0;
+      }
+
+      const group = groups[groupKey];
+      group.account_count++;
+
+      if (account.number_of_employees) {
+        group.total_employees += account.number_of_employees;
+      }
+
+      if (account.annual_revenue) {
+        group.total_revenue += account.annual_revenue;
+        group._accountsWithRevenue++;
+      }
+    });
+
+    const aggregated = Object.values(groups).map(group => {
+      group.average_employees = group.account_count > 0 
+        ? Math.round(group.total_employees / group.account_count) 
+        : 0;
+      
+      group.average_revenue = group._accountsWithRevenue > 0
+        ? Math.round(group.total_revenue / group._accountsWithRevenue)
+        : 0;
+
+      delete group._accountsWithRevenue;
+      delete group._groupKey;
+
+      return group;
+    });
+
+    const firstDimension = groupByDimensions[0];
+    aggregated.sort((a, b) => {
+      const dimCompare = String(a[firstDimension]).localeCompare(String(b[firstDimension]));
+      if (dimCompare !== 0) return dimCompare;
+      return (b.account_count || 0) - (a.account_count || 0);
+    });
+
+    return aggregated;
+  }
 }
 
 export const tableQueryService = new TableQueryService();
