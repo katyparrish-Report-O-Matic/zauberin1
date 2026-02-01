@@ -125,8 +125,10 @@ Generate a complete table configuration.`,
       // Ensure we have proper defaults
       config.showSubtotals = config.showSubtotals ?? true;
       config.showGrandTotal = config.showGrandTotal ?? true;
+      config.dataSource = config.dataSource || 'calls';
 
       environmentConfig.log('info', '[TableQuery] Generated config:', config);
+      environmentConfig.log('info', '[TableQuery] Data source:', config.dataSource);
 
       return config;
 
