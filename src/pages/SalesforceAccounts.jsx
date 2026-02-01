@@ -160,7 +160,7 @@ export default function SalesforceAccounts() {
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
                           <Building2 className="w-5 h-5 text-blue-600" />
-                          <CardTitle className="text-lg">{account.Name || 'Unnamed Account'}</CardTitle>
+                          <CardTitle className="text-lg">{account.Name}</CardTitle>
                         </div>
                         {account.At_Risk__c && (
                           <Badge variant="destructive" className="gap-1">
@@ -170,29 +170,25 @@ export default function SalesforceAccounts() {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {account.Company_Status__c && (
-                          <Badge variant="outline">{account.Company_Status__c}</Badge>
-                        )}
                         {account.POD__c && (
                           <Badge variant="secondary">{account.POD__c}</Badge>
                         )}
+                        {account.Primary_Sector__c && (
+                          <Badge variant="outline">{account.Primary_Sector__c}</Badge>
+                        )}
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-1">
+                    <CardContent className="space-y-1 text-sm">
                       {renderField('Account Manager', account.Account_Manager__c)}
-                      {renderField('Primary Sector', account.Primary_Sector__c)}
                       {renderField('Sector Category', account.Sector_Category__c)}
                       {renderField('Marketing Budget', account.Total_Current_Marketing_Budget__c)}
                       {renderField('Active Marketing Client', account.Active_Marketing_Client__c)}
                       {renderField('Marketing Package', account.Marketing_Package_Type__c)}
-                      {renderField('Live Services', account.Number_of_Live_Services__c)}
-                      {renderField('Marketing Live Services', account.Number_of_Marketing_Live_Services__c)}
+                      {renderField('Live Services', account.Live_Services__c)}
                       {renderField('Opportunities', account.Number_of_Opportunities__c)}
-                      {renderField('Client Team', account.Client_Team__c)}
                       {renderField('Client Team Owner', account.Client_Team_Owner__c)}
                       {renderField('Current Account Plan', account.Current_Account_Plan__c)}
                       {renderField('Service Agreement', account.Service_Agreement__c)}
-                      {renderField('Subscription Line Item', account.Subscription_Line_Item__c)}
                       {renderField('Agency Analytics ID', account.Agency_Analytics_ID__c)}
                       {account.Company_History__c && (
                         <div className="pt-2 mt-2 border-t border-gray-200">
