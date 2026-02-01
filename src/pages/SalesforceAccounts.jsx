@@ -220,7 +220,7 @@ export default function SalesforceAccounts() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-1 text-sm">
-                      {renderField('Account Manager', account.Account_Manager__c)}
+                      {renderField('Account Manager', account.Account_Owner__c)}
                       {renderField('Sector Category', account.Sector_Category__c)}
                       {renderField('Marketing Budget', account.Total_Current_Marketing_Budget__c)}
                       {renderField('Active Marketing Client', account.Active_Marketing_Client__c)}
@@ -229,7 +229,6 @@ export default function SalesforceAccounts() {
                       {renderField('Opportunities', account.Number_of_Opportunities__c)}
                       {renderField('Client Team Owner', account.Client_Team_Owner__c)}
                       {renderField('Current Account Plan', account.Current_Account_Plan__c)}
-                      {renderField('Service Agreement', account.Service_Agreement__c)}
                       {renderField('Agency Analytics ID', account.Agency_Analytics_ID__c)}
                       {account.Company_History__c && (
                         <div className="pt-2 mt-2 border-t border-gray-200">
@@ -237,6 +236,8 @@ export default function SalesforceAccounts() {
                           <p className="text-xs text-gray-700 mt-1">{account.Company_History__c}</p>
                         </div>
                       )}
+                      {renderServiceAgreements(account.serviceAgreements)}
+                      {renderSubscriptionLineItems(account.subscriptionLineItems)}
                     </CardContent>
                   </Card>
                 ))}
