@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     return Response.json({ 
       accounts,
       syncMetadata: {
-        type: syncType,
+        type: 'full',
         recordsFetched: accounts.length,
         lastSyncAt: now,
         previousSyncAt: dataSource?.last_sync_at || null
