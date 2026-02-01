@@ -78,7 +78,7 @@ export default function SalesforceAccounts() {
               </Card>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="min-w-max">
                   <thead className="bg-gray-100 border-b border-gray-200">
                     <tr>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>

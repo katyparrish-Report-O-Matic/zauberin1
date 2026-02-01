@@ -69,11 +69,11 @@ import ProductionDashboard from './pages/ProductionDashboard';
 import ReportBuilder from './pages/ReportBuilder';
 import ReportLibrary from './pages/ReportLibrary';
 import ReportTemplates from './pages/ReportTemplates';
+import SalesforceAccounts from './pages/SalesforceAccounts';
 import Settings from './pages/Settings';
 import StatusPage from './pages/StatusPage';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
-import SalesforceAccounts from './pages/SalesforceAccounts';
 import __Layout from './Layout.jsx';
 
 
@@ -100,11 +100,11 @@ export const PAGES = {
     "ReportBuilder": ReportBuilder,
     "ReportLibrary": ReportLibrary,
     "ReportTemplates": ReportTemplates,
+    "SalesforceAccounts": SalesforceAccounts,
     "Settings": Settings,
     "StatusPage": StatusPage,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
-    "SalesforceAccounts": SalesforceAccounts,
 }
 
 export const pagesConfig = {
