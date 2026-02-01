@@ -201,6 +201,16 @@ Deno.serve(async (req) => {
       total_records_synced: (dataSource.total_records_synced || 0) + totalCalls
     });
 
+    // Mark sync job as completed
+    await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+      status: 'completed',
+      completed_at: now,
+      progress_percentage: 100,
+      current_step: 'Completed',
+      records_synced: totalCalls,
+      records_created: totalCalls
+    });
+
     console.log(`[CTM Sync] ✅ Sync complete: ${totalCalls} new calls`);
 
     return Response.json({
@@ -208,7 +218,8 @@ Deno.serve(async (req) => {
       calls_synced: totalCalls,
       accounts_processed: accountIds.length,
       sync_type: 'incremental',
-      last_sync_at: now
+      last_sync_at: now,
+      sync_job_id: syncJob.id
     });
 
   } catch (error) {
