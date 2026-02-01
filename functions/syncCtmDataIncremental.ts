@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
 
     // Get CTM DataSource
     const dataSources = await base44.asServiceRole.entities.DataSource.filter({
+      organization_id: '691599fd95dfa732e5bd8802',
       platform_type: 'call_tracking'
     }, '-updated_date', 1);
 
