@@ -57,13 +57,14 @@ Available metrics: ${availableMetrics.join(', ')}
 Available dimensions: ${availableDimensions.join(', ')}
 
 IMPORTANT RULES:
-1. Identify dimensions to GROUP BY (account_name, region, date, etc.)
-2. Metrics will be calculated from raw call records
-3. ALWAYS include account_name unless user specifically says otherwise
-4. For "by region and account" → groupBy: ["region", "account_name"]
-5. For "by account" → groupBy: ["account_name"]
+1. Identify dimensions to GROUP BY (account_name, region, date, billing_state, account_type, etc.)
+2. Determine data source: "calls" if request mentions calls/contacts/metrics, "salesforce" if mentions accounts/types/locations
+3. ALWAYS include account_name in groupBy unless explicitly excluded
+4. For "by region and account" → groupBy: ["billing_state", "account_name"]
+5. For "accounts by type" → groupBy: ["account_type", "account_name"]
 6. Show subtotals when grouping by multiple levels
-7. Format percentages (answer_rate), numbers (calls), durations (seconds)
+7. Format percentages (answer_rate), numbers (calls/employees), currency (revenue), durations (seconds)
+8. Set dataSource: "calls" or "salesforce" based on request intent
 
 Generate a complete table configuration.`,
         response_json_schema: {
