@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     // If we have a previous sync timestamp, use incremental sync
     if (dataSource?.last_sync_at) {
       const lastSyncDate = new Date(dataSource.last_sync_at).toISOString();
-      whereClause = ` WHERE LastModifiedDate > ${lastSyncDate}`;
+      whereClause = ` WHERE LastModifiedDate > ${lastSyncDate.replace('.000Z', '+00:00')}`;
       syncType = 'incremental';
     }
 
