@@ -107,7 +107,7 @@ export default function AccountPlanModal({ accountId, isOpen, onClose }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[95vh] p-0">
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="text-2xl">Account Plan Details</DialogTitle>
         </DialogHeader>
@@ -148,8 +148,8 @@ export default function AccountPlanModal({ accountId, isOpen, onClose }) {
           <div className="col-span-2">
             {selectedPlan ? (
               <ScrollArea className="h-full p-6">
-                <div className="space-y-4 pr-4">
-                          <div className="sticky top-0 bg-white pb-4 border-b">
+                <div className="space-y-6">
+                          <div>
                             <h2 className="text-xl font-bold mb-2">{selectedPlan.Name}</h2>
                             <div className="flex gap-2 flex-wrap">
                               {selectedPlan.Status__c && (
@@ -164,18 +164,18 @@ export default function AccountPlanModal({ accountId, isOpen, onClose }) {
 
                     return (
                       <div key={group.label}>
-                        <h3 className="font-semibold text-base mb-3 text-gray-800 border-b pb-2">{group.label}</h3>
-                        <div className="space-y-4">
+                        <h3 className="font-semibold text-sm mb-3 text-gray-700">{group.label}</h3>
+                        <div className="space-y-3">
                           {group.fields.map((field) => {
                             const value = selectedPlan[field.key];
                             if (!value) return null;
 
                             return (
-                              <div key={field.key} className="pb-3">
-                                <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                              <div key={field.key} className="border-b border-gray-100 pb-3">
+                                <div className="text-xs font-medium text-gray-600 mb-1">
                                   {field.label}
                                 </div>
-                                <div className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+                                <div className="text-sm text-gray-900 whitespace-pre-wrap">
                                   {renderFieldValue(value)}
                                 </div>
                               </div>
