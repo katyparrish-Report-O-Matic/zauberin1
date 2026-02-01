@@ -34,19 +34,25 @@ class TableQueryService {
       ];
 
       const availableDimensions = [
+        // Call dimensions
         'account_name',
         'region',
         'date',
         'call_status',
         'web_source',
         'web_campaign',
+        'web_medium',
+        'web_ad_network',
+        // Salesforce dimensions
+        'account_type',
+        'industry',
         'billing_state',
         'billing_city',
-        'account_type',
+        'billing_postal_code',
+        'billing_country',
         'owner_name',
-        'industry',
-        'web_medium',
-        'web_ad_network'
+        'owner_email',
+        'account_number'
       ];
 
       // Use LLM to interpret the request
