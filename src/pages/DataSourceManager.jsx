@@ -78,13 +78,16 @@ export default function DataSourceManager() {
     queryKey: ['dataSources', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-      if (!orgId || orgId === 'all') {
+      if (orgId === 'all' && isAgency) {
         return await base44.entities.DataSource.list('-created_date');
       }
-      return await base44.entities.DataSource.filter(
-        { organization_id: orgId },
-        '-created_date'
-      );
+      if (orgId && orgId !== 'all') {
+        return await base44.entities.DataSource.filter(
+          { organization_id: orgId },
+          '-created_date'
+        );
+      }
+      return await base44.entities.DataSource.list('-created_date');
     },
     initialData: []
   });
@@ -486,11 +489,13 @@ export default function DataSourceManager() {
                 <p className="text-gray-600 mt-1">Connect and sync data from Call Tracking, Google Ads, and GA4</p>
               </div>
               <div className="flex gap-3">
-                <OrganizationSelector
-                  value={selectedOrgId || currentUser?.organization_id}
-                  onChange={setSelectedOrgId}
-                  showLabel={false}
-                />
+                {isAgency && (
+                  <OrganizationSelector
+                    value={selectedOrgId || currentUser?.organization_id}
+                    onChange={setSelectedOrgId}
+                    showLabel={false}
+                  />
+                )}
                 <Button onClick={handleCreate} className="gap-2" disabled={!hasOrganization}>
                   <Plus className="w-4 h-4" />
                   Add Data Source
