@@ -27,6 +27,22 @@ Deno.serve(async (req) => {
 
     console.log(`[CTM Sync] Starting incremental sync for org: ${organizationId}`);
 
+    // Check for concurrent manual syncs
+    const activeManualSync = await base44.asServiceRole.entities.SyncJob.filter({
+      organization_id: organizationId,
+      sync_type: 'manual',
+      status: 'in_progress'
+    }, '-created_date', 1);
+
+    if (activeManualSync.length > 0) {
+      return Response.json({
+        success: false,
+        error: 'Manual sync already in progress. Only one manual sync allowed at a time.',
+        active_sync_id: activeManualSync[0].id,
+        started_at: activeManualSync[0].started_at
+      }, { status: 409 });
+    }
+
     // Get CTM DataSource
     const dataSources = await base44.asServiceRole.entities.DataSource.filter({
       organization_id: organizationId,
