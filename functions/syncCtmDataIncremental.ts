@@ -9,6 +9,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const RATE_LIMIT_DELAY = 600; // ms between requests (100 req/min)
 
 Deno.serve(async (req) => {
+  let syncJob;
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
