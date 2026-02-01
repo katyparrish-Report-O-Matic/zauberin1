@@ -111,7 +111,14 @@ Generate a complete table configuration.`,
               }
             }
           },
-          required: ["title", "groupBy", "columns"]
+          dataSource: { 
+            type: "string",
+            enum: ["calls", "salesforce"],
+            default: "calls",
+            description: "Data source to query"
+          }
+        },
+        required: ["title", "groupBy", "columns", "dataSource"]
         }
       });
 
