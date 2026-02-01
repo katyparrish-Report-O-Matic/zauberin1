@@ -92,7 +92,7 @@ export default function SalesforceAccounts() {
         </div>
 
         {/* Search and Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative md:col-span-1">
             <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
             <Input
@@ -135,6 +135,18 @@ export default function SalesforceAccounts() {
               <SelectItem value="all">All Sectors</SelectItem>
               {uniqueSectors.map(sector => (
                 <SelectItem key={sector} value={sector}>{sector}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={atRiskFilter} onValueChange={setAtRiskFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="At Risk" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {uniqueAtRiskStatuses.map(status => (
+                <SelectItem key={status} value={status}>{status}</SelectItem>
               ))}
             </SelectContent>
           </Select>
