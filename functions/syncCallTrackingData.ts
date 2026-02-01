@@ -9,6 +9,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     
     let body;
     try {
@@ -20,16 +25,42 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    const { accountId, startDate, endDate, apiKey, isAgencyLevel, includeRawCalls = false, accountRegion = null } = body;
+    const { accountId, dataSourceId, endDate, apiKey, isAgencyLevel, includeRawCalls = false, accountRegion = null } = body;
+    let { startDate } = body;
 
-    if (!accountId || !startDate || !endDate || !apiKey) {
+    if (!accountId || !endDate || !apiKey) {
       return Response.json({ 
         error: 'Missing required parameters',
-        required: ['accountId', 'startDate', 'endDate', 'apiKey']
+        required: ['accountId', 'endDate', 'apiKey']
       }, { status: 400 });
     }
 
-    console.log(`[CTM Sync] 🚀 Starting sync for account ${accountId} (${startDate} to ${endDate})`);
+    // Fetch DataSource to check for incremental sync
+    let dataSource = null;
+    let syncType = 'full';
+    
+    if (dataSourceId) {
+      const dataSources = await base44.asServiceRole.entities.DataSource.filter({
+        id: dataSourceId
+      });
+      dataSource = dataSources[0];
+      
+      // If no startDate provided and we have a last_sync_at, use incremental sync
+      if (!startDate && dataSource?.last_sync_at) {
+        startDate = new Date(dataSource.last_sync_at).toISOString().split('T')[0];
+        syncType = 'incremental';
+        console.log(`[CTM Sync] 📅 Using incremental sync from ${startDate}`);
+      }
+    }
+
+    if (!startDate) {
+      return Response.json({ 
+        error: 'startDate required (or provide dataSourceId for incremental sync)',
+        details: 'Either specify startDate or provide a dataSourceId with last_sync_at'
+      }, { status: 400 });
+    }
+
+    console.log(`[CTM Sync] 🚀 Starting ${syncType} sync for account ${accountId} (${startDate} to ${endDate})`);
 
     // Parse credentials
     const parseCredentials = (token) => {
@@ -243,6 +274,17 @@ Deno.serve(async (req) => {
 
     console.log(`[CTM Sync] ✅ Aggregated into ${metrics.length} days`);
 
+    // Update last_sync_at timestamp
+    const now = new Date().toISOString();
+    if (dataSource) {
+      await base44.asServiceRole.entities.DataSource.update(dataSource.id, {
+        last_sync_at: now,
+        last_sync_status: 'success',
+        total_records_synced: (dataSource.total_records_synced || 0) + allCalls.length
+      });
+      console.log(`[CTM Sync] ✓ Updated last_sync_at to ${now}`);
+    }
+
     // ⚡ STEP 4: Process raw call records (if requested)
     let callRecords = null;
     if (includeRawCalls) {
@@ -329,7 +371,9 @@ Deno.serve(async (req) => {
         days_with_data: metrics.length,
         pages_fetched: totalPages,
         call_records_included: includeRawCalls,
-        date_range: `${startDate} to ${endDate}`
+        date_range: `${startDate} to ${endDate}`,
+        sync_type: syncType,
+        last_sync_at: dataSource?.last_sync_at || null
       }
     });
 
