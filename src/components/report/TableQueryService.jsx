@@ -43,7 +43,10 @@ class TableQueryService {
         'billing_state',
         'billing_city',
         'account_type',
-        'owner_name'
+        'owner_name',
+        'industry',
+        'web_medium',
+        'web_ad_network'
       ];
 
       // Use LLM to interpret the request
@@ -57,11 +60,11 @@ Available metrics: ${availableMetrics.join(', ')}
 Available dimensions: ${availableDimensions.join(', ')}
 
 IMPORTANT RULES:
-1. Identify dimensions to GROUP BY (account_name, region, date, billing_state, account_type, etc.)
-2. Determine data source: "calls" if request mentions calls/contacts/metrics, "salesforce" if mentions accounts/types/locations
-3. ALWAYS include account_name in groupBy unless explicitly excluded
-4. For "by region and account" → groupBy: ["billing_state", "account_name"]
-5. For "accounts by type" → groupBy: ["account_type", "account_name"]
+1. Map user's request to EXACT dimension names. "sector" = "industry", "marketing channel" = "web_ad_network", "medium" = "web_medium"
+2. Extract ONLY the dimensions user explicitly mentions—do NOT add account_name unless they ask for it
+3. Determine data source: "calls" if request mentions calls/contacts/metrics, "salesforce" if mentions accounts/types/locations
+4. For "by region and account" → groupBy: ["region", "account_name"]
+5. For "accounts by type" → groupBy: ["account_type"]
 6. Show subtotals when grouping by multiple levels
 7. Format percentages (answer_rate), numbers (calls/employees), currency (revenue), durations (seconds)
 8. Set dataSource: "calls" or "salesforce" based on request intent
