@@ -154,8 +154,19 @@ class DataSyncService {
       }
     });
 
-    const accountPromises = accountIds.map(async (accountId, index) => {
+    // Process accounts SEQUENTIALLY with rate limiting (not in parallel)
+    const accountResults = [];
+    const ACCOUNT_DELAY = 200; // 200ms between account syncs to avoid base44 rate limits
+
+    for (let index = 0; index < accountIds.length; index++) {
+      const accountId = accountIds[index];
       const accountRegion = accountRegionMap[String(accountId)] || null;
+      
+      // Rate limit between accounts
+      if (index > 0) {
+        await new Promise(resolve => setTimeout(resolve, ACCOUNT_DELAY));
+      }
+
       console.log(`[DataSync] 📞 [${index + 1}/${accountIds.length}] Fetching account ${accountId} (Region: ${accountRegion || 'None'})`);
 
       const result = await base44.functions.invoke('syncCallTrackingData', {
@@ -180,16 +191,14 @@ class DataSyncService {
         progress_percentage: Math.round(currentProgress)
       });
 
-      return {
+      accountResults.push({
         accountId: String(accountId),
         accountName: result.data.account.name,
         accountMetadata: result.data.account,
         callRecords: result.data.callRecords || [],
         callCount: result.data.totalCalls
-      };
-    });
-
-    const accountResults = await Promise.all(accountPromises);
+      });
+    }
 
     const totalCalls = accountResults.reduce((sum, r) => sum + r.callCount, 0);
     console.log(`[DataSync] ✅ Fetched ${totalCalls} total calls from ${accountResults.length} accounts`);
