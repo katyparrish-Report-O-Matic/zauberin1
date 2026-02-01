@@ -56,7 +56,6 @@ import BookViewer from './pages/BookViewer';
 import CacheManager from './pages/CacheManager';
 import DashboardBuilder from './pages/DashboardBuilder';
 import DataQuality from './pages/DataQuality';
-import DataSourceManager from './pages/DataSourceManager';
 import FilesManager from './pages/FilesManager';
 import HelpGuide from './pages/HelpGuide';
 import Home from './pages/Home';
@@ -74,6 +73,7 @@ import Settings from './pages/Settings';
 import StatusPage from './pages/StatusPage';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
+import DataSourceManager from './pages/DataSourceManager';
 import __Layout from './Layout.jsx';
 
 
@@ -87,7 +87,6 @@ export const PAGES = {
     "CacheManager": CacheManager,
     "DashboardBuilder": DashboardBuilder,
     "DataQuality": DataQuality,
-    "DataSourceManager": DataSourceManager,
     "FilesManager": FilesManager,
     "HelpGuide": HelpGuide,
     "Home": Home,
@@ -105,6 +104,7 @@ export const PAGES = {
     "StatusPage": StatusPage,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
+    "DataSourceManager": DataSourceManager,
 }
 
 export const pagesConfig = {

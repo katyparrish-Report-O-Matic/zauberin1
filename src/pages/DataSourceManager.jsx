@@ -513,8 +513,57 @@ export default function DataSourceManager() {
               </Alert>
             )}
 
+            {/* Agency API Info */}
+            <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+              <CardHeader>
+                <CardTitle className="text-lg">Agency API Info</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Tabs defaultValue="adtrak" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="adtrak">Adtrak</TabsTrigger>
+                    <TabsTrigger value="breeze">Breeze</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="adtrak" className="space-y-3">
+                    <div className="bg-white rounded-lg p-3 space-y-2">
+                      <div className="text-sm">
+                        <span className="text-gray-600 block font-medium">CTM Agency ID</span>
+                        <p className="text-gray-900 font-mono">9999999</p>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600 block font-medium">API Access</span>
+                        <p className="text-gray-900 font-mono text-xs break-all">contact@adtrak.co.uk</p>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600 block font-medium">Salesforce Org</span>
+                        <p className="text-gray-900 font-mono">adtrak.my.salesforce.com</p>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="breeze" className="space-y-3">
+                    <div className="bg-white rounded-lg p-3 space-y-2">
+                      <div className="text-sm">
+                        <span className="text-gray-600 block font-medium">CTM Agency ID</span>
+                        <p className="text-gray-900 font-mono">Pending</p>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600 block font-medium">API Access</span>
+                        <p className="text-gray-900 font-mono text-xs">contact@breeze.co.uk</p>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600 block font-medium">Salesforce Org</span>
+                        <p className="text-gray-900 font-mono">Pending Setup</p>
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+
             {/* Data Sources Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {dataSources.map(source => (
                 <Card key={source.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
