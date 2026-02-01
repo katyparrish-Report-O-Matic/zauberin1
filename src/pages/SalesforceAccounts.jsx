@@ -69,6 +69,47 @@ export default function SalesforceAccounts() {
     );
   };
 
+  const renderServiceAgreements = (sas) => {
+    if (!sas || sas.length === 0) return null;
+    return (
+      <div className="pt-4 border-t border-gray-200">
+        <h4 className="text-sm font-semibold text-gray-900 mb-3">Service Agreements</h4>
+        <div className="space-y-3">
+          {sas.map((sa) => (
+            <div key={sa.Id} className="bg-blue-50 p-3 rounded border border-blue-100">
+              {renderField('SA Name', sa.Name)}
+              {renderField('Status', sa.Status__c)}
+              {renderField('Start Date', sa.Start_Date__c)}
+              {renderField('End Date', sa.End_Date__c)}
+              {renderField('Recurring Amount', sa.Recurring_Amount__c)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSubscriptionLineItems = (slis) => {
+    if (!slis || slis.length === 0) return null;
+    return (
+      <div className="pt-4 border-t border-gray-200">
+        <h4 className="text-sm font-semibold text-gray-900 mb-3">Subscription Line Items</h4>
+        <div className="space-y-3">
+          {slis.map((sli) => (
+            <div key={sli.Id} className="bg-green-50 p-3 rounded border border-green-100">
+              {renderField('SLI Name', sli.Name)}
+              {renderField('Status', sli.Status__c)}
+              {renderField('Start Date', sli.Start_Date__c)}
+              {renderField('End Date', sli.End_Date__c)}
+              {renderField('Recurring Amount', sli.Recurring_Amount__c)}
+              {renderField('Service Tier', sli.Service_Tier__c)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
