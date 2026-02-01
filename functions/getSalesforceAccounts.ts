@@ -21,16 +21,8 @@ Deno.serve(async (req) => {
     FROM Account 
     LIMIT 500`;
 
-    const response = await fetch('https://login.salesforce.com/services/oauth2/authorize?response_type=code', {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    // Use Salesforce REST API to query accounts
-    const instanceUrl = 'https://adtrak.salesforce.com';
-    const sfResponse = await fetch(`${instanceUrl}/services/data/v60.0/query?q=${encodeURIComponent(query)}`, {
+    // Query Salesforce accounts
+    const sfResponse = await fetch(`https://adtrak.salesforce.com/services/data/v60.0/query?q=${encodeURIComponent(query)}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
@@ -38,7 +30,8 @@ Deno.serve(async (req) => {
     });
 
     if (!sfResponse.ok) {
-      return Response.json({ error: 'Salesforce API error: ' + sfResponse.statusText }, { status: 500 });
+      const errorText = await sfResponse.text();
+      return Response.json({ error: `Salesforce API error: ${sfResponse.statusText} - ${errorText}` }, { status: 500 });
     }
 
     const data = await sfResponse.json();
