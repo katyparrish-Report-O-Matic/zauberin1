@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     const dataSources = await base44.asServiceRole.entities.DataSource.filter({
       organization_id: user.organization_id,
       platform_type: 'salesforce'
-    });
+    }, '-updated_date', 1);
 
     let dataSource = dataSources[0];
     let whereClause = '';
