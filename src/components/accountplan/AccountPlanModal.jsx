@@ -21,7 +21,9 @@ export default function AccountPlanModal({ accountId, isOpen, onClose }) {
     setIsLoading(true);
     setError(null);
     try {
+      console.log('[DEBUG] Fetching plans for serviceAgreementId:', accountId);
       const response = await base44.functions.invoke('getAccountPlanDetails', { serviceAgreementId: accountId });
+      console.log('[DEBUG] Plans response:', response.data);
       setPlans(response.data.plans || []);
       if (response.data.plans?.length > 0) {
         setSelectedPlan(response.data.plans[0]);
