@@ -16,6 +16,8 @@ export default function SalesforceAccounts() {
   const [podFilter, setPodFilter] = useState('all');
   const [sectorFilter, setSectorFilter] = useState('all');
   const [atRiskFilter, setAtRiskFilter] = useState('all');
+  const [selectedAccountId, setSelectedAccountId] = useState(null);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
 
   const { data: result, isLoading, error, refetch } = useQuery({
     queryKey: ['salesforceAccounts'],
