@@ -316,12 +316,17 @@ class DataSyncService {
        }));
       
       // Save this account's calls immediately
+      console.log(`[DataSync] 💾 Attempting to save ${accountCallRecords.length} records for account ${accountResult.accountId}`);
+      console.log(`[DataSync] 📋 First record sample:`, JSON.stringify(accountCallRecords[0], null, 2));
+
       try {
         const created = await base44.entities.CallRecord.bulkCreate(accountCallRecords);
         totalCreated += created.length;
-        console.log(`[DataSync] ✓ Account ${accountResult.accountId}: Saved ${created.length} calls`);
+        console.log(`[DataSync] ✓ Account ${accountResult.accountId}: Saved ${created.length} calls (response: ${JSON.stringify(created)})`);
       } catch (error) {
-        console.error(`[DataSync] ❌ Account ${accountResult.accountId}: Failed to save calls:`, error.message);
+        console.error(`[DataSync] ❌ Account ${accountResult.accountId}: Failed to save calls`);
+        console.error(`[DataSync] Error details:`, error);
+        console.error(`[DataSync] Records being saved:`, JSON.stringify(accountCallRecords.slice(0, 2)));
         throw error;
       }
     }
