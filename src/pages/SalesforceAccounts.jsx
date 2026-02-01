@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { RefreshCw, Search } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { RefreshCw, Search, Filter, Building2, AlertCircle, TrendingUp } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 export default function SalesforceAccounts() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [podFilter, setPodFilter] = useState('all');
+  const [sectorFilter, setSectorFilter] = useState('all');
 
   const { data: result, isLoading, error, refetch } = useQuery({
     queryKey: ['salesforceAccounts'],
@@ -20,15 +25,48 @@ export default function SalesforceAccounts() {
 
   const accounts = result?.accounts || [];
 
-  const filteredAccounts = accounts.filter(account =>
-    account.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.Primary_Sector__c?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.Company_Status__c?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Extract unique values for filters
+  const uniquePods = useMemo(() => 
+    [...new Set(accounts.map(a => a.POD__c).filter(Boolean))].sort(),
+    [accounts]
   );
+
+  const uniqueSectors = useMemo(() => 
+    [...new Set(accounts.map(a => a.Primary_Sector__c).filter(Boolean))].sort(),
+    [accounts]
+  );
+
+  const uniqueStatuses = useMemo(() => 
+    [...new Set(accounts.map(a => a.Company_Status__c).filter(Boolean))].sort(),
+    [accounts]
+  );
+
+  const filteredAccounts = accounts.filter(account => {
+    const matchesSearch = !searchTerm || 
+      account.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      account.Account_Manager__c?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      account.Primary_Sector__c?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || account.Company_Status__c === statusFilter;
+    const matchesPod = podFilter === 'all' || account.POD__c === podFilter;
+    const matchesSector = sectorFilter === 'all' || account.Primary_Sector__c === sectorFilter;
+
+    return matchesSearch && matchesStatus && matchesPod && matchesSector;
+  });
 
   const handleRefresh = () => {
     refetch();
     toast.success('Refreshing Salesforce accounts...');
+  };
+
+  const renderField = (label, value) => {
+    if (!value) return null;
+    return (
+      <div className="flex justify-between items-start py-2 border-b border-gray-100">
+        <span className="text-sm text-gray-600 font-medium">{label}</span>
+        <span className="text-sm text-gray-900 text-right max-w-[200px]">{value}</span>
+      </div>
+    );
   };
 
   return (
@@ -46,15 +84,53 @@ export default function SalesforceAccounts() {
           </Button>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-          <Input
-            placeholder="Search by name, sector, or status..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search and Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="relative md:col-span-1">
+            <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+            <Input
+              placeholder="Search accounts..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {uniqueStatuses.map(status => (
+                <SelectItem key={status} value={status}>{status}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={podFilter} onValueChange={setPodFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="POD" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All PODs</SelectItem>
+              {uniquePods.map(pod => (
+                <SelectItem key={pod} value={pod}>{pod}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={sectorFilter} onValueChange={setSectorFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sector" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sectors</SelectItem>
+              {uniqueSectors.map(sector => (
+                <SelectItem key={sector} value={sector}>{sector}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Content */}
@@ -77,73 +153,56 @@ export default function SalesforceAccounts() {
                 <p className="text-gray-600">No accounts found</p>
               </Card>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-max">
-                  <thead className="bg-gray-100 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Account Manager</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Active Marketing Budget</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Active Marketing Client</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Adtrak Paid Marketing Customer</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Agency Analytics ID</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Archived</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">At Risk</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Breeez Account</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Client Team</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Client Team Owner</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Company History</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Company Status</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Current Account Plan</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Marketing Package Client</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Marketing Package Type</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Live Services</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Marketing Live Services</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Opportunities</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Parent ID</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">POD</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Primary Sector</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector Category</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Service Agreement</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Subscription Line Item</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Total Current Marketing Budget</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAccounts.map((account) => (
-                      <tr key={account.Id} className="border-b border-gray-200 hover:bg-gray-50">
-                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{account.Name || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Account_Manager__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Active_Marketing_Budget__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Active_Marketing_Client__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Adtrak_Paid_Marketing_Customer__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Agency_Analytics_ID__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Archived__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.At_Risk__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Breeez_Account__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Client_Team__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Client_Team_Owner__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Company_History__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Company_Status__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Current_Account_Plan__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Marketing_Package_Client__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Marketing_Package_Type__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Live_Services__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Marketing_Live_Services__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Opportunities__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.ParentId || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.POD__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Primary_Sector__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Sector__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Sector_Category__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Service_Agreement__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Subscription_Line_Item__c || '-'}</td>
-                         <td className="px-6 py-4 text-sm text-gray-600">{account.Total_Current_Marketing_Budget__c || '-'}</td>
-                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredAccounts.map((account) => (
+                  <Card key={account.Id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-5 h-5 text-blue-600" />
+                          <CardTitle className="text-lg">{account.Name || 'Unnamed Account'}</CardTitle>
+                        </div>
+                        {account.At_Risk__c && (
+                          <Badge variant="destructive" className="gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            At Risk
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {account.Company_Status__c && (
+                          <Badge variant="outline">{account.Company_Status__c}</Badge>
+                        )}
+                        {account.POD__c && (
+                          <Badge variant="secondary">{account.POD__c}</Badge>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-1">
+                      {renderField('Account Manager', account.Account_Manager__c)}
+                      {renderField('Primary Sector', account.Primary_Sector__c)}
+                      {renderField('Sector Category', account.Sector_Category__c)}
+                      {renderField('Marketing Budget', account.Total_Current_Marketing_Budget__c)}
+                      {renderField('Active Marketing Client', account.Active_Marketing_Client__c)}
+                      {renderField('Marketing Package', account.Marketing_Package_Type__c)}
+                      {renderField('Live Services', account.Number_of_Live_Services__c)}
+                      {renderField('Marketing Live Services', account.Number_of_Marketing_Live_Services__c)}
+                      {renderField('Opportunities', account.Number_of_Opportunities__c)}
+                      {renderField('Client Team', account.Client_Team__c)}
+                      {renderField('Client Team Owner', account.Client_Team_Owner__c)}
+                      {renderField('Current Account Plan', account.Current_Account_Plan__c)}
+                      {renderField('Service Agreement', account.Service_Agreement__c)}
+                      {renderField('Subscription Line Item', account.Subscription_Line_Item__c)}
+                      {renderField('Agency Analytics ID', account.Agency_Analytics_ID__c)}
+                      {account.Company_History__c && (
+                        <div className="pt-2 mt-2 border-t border-gray-200">
+                          <span className="text-xs text-gray-500 font-medium">Company History</span>
+                          <p className="text-xs text-gray-700 mt-1">{account.Company_History__c}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             )}
           </div>
