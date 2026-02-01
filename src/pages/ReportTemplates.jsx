@@ -69,17 +69,22 @@ export default function ReportTemplates() {
   });
 
   // Archive mutation
-  const archiveTemplateMutation = useMutation({
-    mutationFn: (templateId) => 
-      base44.entities.ReportTemplate.update(templateId, { is_archived: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userTemplates'] });
-      toast.success('Template archived');
-    },
-    onError: () => {
-      toast.error('Failed to archive template');
-    }
-  });
+   const archiveTemplateMutation = useMutation({
+     mutationFn: (templateId) => {
+       const template = [...userTemplates, ...archivedTemplates].find(t => t.id === templateId);
+       const newStatus = template?.is_archived ? false : true;
+       return base44.entities.ReportTemplate.update(templateId, { is_archived: newStatus });
+     },
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['userTemplates'] });
+       queryClient.invalidateQueries({ queryKey: ['archivedTemplates'] });
+       queryClient.invalidateQueries({ queryKey: ['agencyTemplates'] });
+       toast.success('Template updated');
+     },
+     onError: () => {
+       toast.error('Failed to update template');
+     }
+   });
 
   // Delete mutation
   const deleteTemplateMutation = useMutation({
@@ -383,6 +388,7 @@ export default function ReportTemplates() {
             {/* My Templates */}
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-4">My Templates</h2>
+              {userTemplates.length > 0 ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {userTemplates.map((template) => {
                     const Icon = getIconForChartType(template.chart_settings?.chart_type);
