@@ -4,7 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FlaskConical, TrendingUp, BarChart3, PieChart, Table, PlayCircle, Calendar as CalendarIcon } from "lucide-react";
+import { FlaskConical, TrendingUp, BarChart3, PieChart, Table, PlayCircle, Calendar as CalendarIcon, Trash2, Archive, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -20,6 +22,8 @@ export default function ReportTemplates() {
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState({ from: null, to: null });
   const [selectedAccount, setSelectedAccount] = useState('all');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState(null);
 
   // Fetch current user's templates
   const { data: currentUser } = useQuery({
@@ -32,12 +36,40 @@ export default function ReportTemplates() {
     queryFn: async () => {
       if (!currentUser?.email) return [];
       return await base44.entities.ReportTemplate.filter(
-        { created_by: currentUser.email },
+        { created_by: currentUser.email, is_archived: false },
         '-created_date'
       );
     },
     enabled: !!currentUser?.email,
     initialData: []
+  });
+
+  // Archive mutation
+  const archiveTemplateMutation = useMutation({
+    mutationFn: (templateId) => 
+      base44.entities.ReportTemplate.update(templateId, { is_archived: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userTemplates'] });
+      toast.success('Template archived');
+    },
+    onError: () => {
+      toast.error('Failed to archive template');
+    }
+  });
+
+  // Delete mutation
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (templateId) => 
+      base44.entities.ReportTemplate.delete(templateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userTemplates'] });
+      setDeleteDialogOpen(false);
+      setTemplateToDelete(null);
+      toast.success('Template deleted');
+    },
+    onError: () => {
+      toast.error('Failed to delete template');
+    }
   });
 
   // Mock accounts
@@ -277,14 +309,42 @@ export default function ReportTemplates() {
                                 </Badge>
                               )}
                             </div>
-                            <Button 
-                              onClick={() => handleUseTemplate(template)}
-                              className="w-full gap-2"
-                              size="sm"
-                            >
-                              <PlayCircle className="w-4 h-4" />
-                              Use Template
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button 
+                                onClick={() => handleUseTemplate(template)}
+                                className="flex-1 gap-2"
+                                size="sm"
+                              >
+                                <PlayCircle className="w-4 h-4" />
+                                Use
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <MoreVertical className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem 
+                                    onClick={() => archiveTemplateMutation.mutate(template.id)}
+                                    disabled={archiveTemplateMutation.isPending}
+                                  >
+                                    <Archive className="w-4 h-4 mr-2" />
+                                    Archive
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => {
+                                      setTemplateToDelete(template);
+                                      setDeleteDialogOpen(true);
+                                    }}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -307,6 +367,28 @@ export default function ReportTemplates() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{templateToDelete?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTemplateMutation.mutate(templateToDelete?.id)}
+              disabled={deleteTemplateMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteTemplateMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </PermissionGuard>
   );
 }
