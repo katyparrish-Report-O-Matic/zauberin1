@@ -279,19 +279,13 @@ export default function BookEditor() {
                 <CardTitle>Book Settings</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Title</Label>
-                    <Input
-                      value={book.title}
-                      onChange={(e) => setBook({ ...book, title: e.target.value })}
-                      onBlur={() => updateBookMutation.mutate({ title: book.title })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Status</Label>
-                    <Input value={book.status} disabled className="capitalize" />
-                  </div>
+                <div>
+                  <Label>Title</Label>
+                  <Input
+                    value={book.title}
+                    onChange={(e) => setBook({ ...book, title: e.target.value })}
+                    onBlur={() => updateBookMutation.mutate({ title: book.title })}
+                  />
                 </div>
                 <div>
                   <Label>Description</Label>
