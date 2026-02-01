@@ -19,6 +19,17 @@ class DataSyncService {
       const ds = dataSource[0];
       const orgId = ds.organization_id;
 
+      // Check for concurrent syncs
+      const activeSyncs = await base44.entities.SyncJob.filter({
+        organization_id: orgId,
+        data_source_id: ds.id,
+        status: 'in_progress'
+      });
+
+      if (activeSyncs.length > 0) {
+        throw new Error(`Sync already in progress. Started at ${activeSyncs[0].started_at}`);
+      }
+
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(endDate.getDate() - (ds.sync_config?.backfill_days || 30));
