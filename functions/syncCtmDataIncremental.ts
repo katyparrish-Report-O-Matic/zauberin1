@@ -172,6 +172,16 @@ Deno.serve(async (req) => {
       total_records_synced: (dataSource.total_records_synced || 0) + totalCallsCreated
     });
 
+    // Mark sync job as completed
+    await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+      status: 'completed',
+      completed_at: now,
+      progress_percentage: 100,
+      current_step: 'Completed',
+      records_synced: totalCallsCreated,
+      records_created: totalCallsCreated
+    });
+
     console.log(`[CTM Sync] ✅ Complete: ${totalCallsCreated} calls, ${accountsProcessed}/${accountIds.length} accounts`);
 
     return Response.json({
@@ -179,6 +189,7 @@ Deno.serve(async (req) => {
       calls_synced: totalCallsCreated,
       accounts_processed: accountsProcessed,
       total_accounts: accountIds.length,
+      sync_job_id: syncJob.id,
       errors: errors.length > 0 ? errors : undefined
     });
 
