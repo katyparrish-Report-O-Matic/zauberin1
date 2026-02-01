@@ -372,12 +372,12 @@ Generate a complete table configuration.`,
         groupByDimensions.forEach(dim => {
           if (dim === 'account_type') {
             groups[groupKey].account_type = account.type || 'Unknown';
-          } else if (dim === 'billing_state') {
-            groups[groupKey].billing_state = account.billing_state || 'Unknown';
-          } else if (dim === 'billing_city') {
-            groups[groupKey].billing_city = account.billing_city || 'Unknown';
           } else if (dim === 'owner_name') {
             groups[groupKey].owner_name = account.owner_name || 'Unknown';
+          } else if (dim === 'owner_email') {
+            groups[groupKey].owner_email = account.owner_email || 'Unknown';
+          } else if (dim === 'industry') {
+            groups[groupKey].industry = account.industry || 'Unknown';
           } else {
             groups[groupKey][dim] = account[dim] || 'Unknown';
           }
