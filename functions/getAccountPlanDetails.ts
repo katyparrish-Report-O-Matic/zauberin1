@@ -12,6 +12,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { serviceAgreementId } = body;
 
+    console.log('[DEBUG] getAccountPlanDetails called with:', { serviceAgreementId });
+
     if (!serviceAgreementId) {
       return Response.json({ error: 'Service Agreement ID required' }, { status: 400 });
     }
