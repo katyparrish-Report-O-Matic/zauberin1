@@ -301,13 +301,12 @@ Deno.serve(async (req) => {
         const isVoicemail = call.call_status === 'voicemail' || call.status === 'voicemail';
         const isAnswered = call.talk_time && call.talk_time > 0;
         const isWorkingHours = call.custom_fields?.working_hours === 'Working Hours';
-        const syncDateStr = new Date().toISOString().split('T')[0];
 
         return {
           call_id: String(call.id),
-          tracking_number: call.tracking_number || null,
-          caller_number: call.caller_number || null,
-          start_time: call.called_at || new Date().toISOString(),
+          tracking_number: call.tracking_number,
+          caller_number: call.caller_number,
+          start_time: call.called_at,
           end_time: null,
           duration: call.duration || 0,
           talk_time: call.talk_time || 0,
@@ -315,15 +314,17 @@ Deno.serve(async (req) => {
           is_voicemail: isVoicemail,
           is_working_hours: isWorkingHours,
           qualified: call.qualified || false,
-          sale_status: call.sale_status || null,
+          sale_status: call.sale_status,
           first_time_caller: call.is_new_caller || false,
-          keypress: call.keypress || null,
-          web_source: call.web_source || call.source || null,
-          web_medium: call.medium || null,
-          web_campaign: call.ga?.campaign || null,
+          keypress: call.keypress,
+
+          // Web attribution fields - from actual API
+          web_source: call.web_source || call.source,
+          web_medium: call.medium,
+          web_campaign: call.ga?.campaign,
           web_campaign_id: null,
-          web_keyword: call.webvisit?.keywords || null,
-          web_visit_keywords: call.webvisit?.keywords || null,
+          web_keyword: call.webvisit?.keywords,
+          web_visit_keywords: call.webvisit?.keywords,
           web_ad_group_id: null,
           web_adgroup_id: null,
           web_creative_id: null,
@@ -332,20 +333,23 @@ Deno.serve(async (req) => {
           web_ad_slot: null,
           web_ad_slot_position: null,
           web_ad_targeting_type: null,
+
+          // Additional fields
           landing_page: call.webvisit?.location_host && call.webvisit?.location_path 
             ? `https://${call.webvisit.location_host}${call.webvisit.location_path}` 
-            : (call.last_location || null),
+            : call.last_location,
           referrer: call.webvisit?.referrer_host && call.webvisit?.referrer_path
             ? `https://${call.webvisit.referrer_host}${call.webvisit.referrer_path}`
-            : (call.referrer || null),
-          city: call.city || null,
-          state: call.state || null,
-          country: call.country || null,
-          recording_url: call.audio || null,
-          transcription: call.transcription_text || null,
+            : call.referrer,
+          city: call.city,
+          state: call.state,
+          country: call.country,
+          recording_url: call.audio,
+          transcription: call.transcription_text,
           tags: call.tag_list || [],
           custom_fields: call.custom_fields || {},
-          sync_date: syncDateStr
+
+          sync_date: new Date().toISOString().split('T')[0]
         };
       });
       
