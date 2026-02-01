@@ -239,6 +239,12 @@ export default function SalesforceAccounts() {
             )}
           </div>
         )}
+
+        <AccountPlanModal 
+          accountId={selectedAccountId}
+          isOpen={planModalOpen}
+          onClose={() => setPlanModalOpen(false)}
+        />
       </div>
     </div>
   );
