@@ -64,7 +64,7 @@ export default function DataSourceManager() {
     backfill_days: 90
   });
 
-  const { currentUser, isAgency } = usePermissions();
+  const { currentUser, isAgency, isLoading: permissionsLoading } = usePermissions();
 
   // Auto-select organization when user loads
   useEffect(() => {
@@ -78,13 +78,16 @@ export default function DataSourceManager() {
     queryKey: ['dataSources', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
+      console.log('[DataSourceManager] Fetching with orgId:', orgId);
       
       // If user has organization, always filter by it
       if (orgId && orgId !== 'all') {
-        return await base44.entities.DataSource.filter(
+        const result = await base44.entities.DataSource.filter(
           { organization_id: orgId },
           '-created_date'
         );
+        console.log('[DataSourceManager] Found sources:', result.length);
+        return result;
       }
       
       // If agency viewing all orgs
@@ -95,7 +98,7 @@ export default function DataSourceManager() {
       return [];
     },
     initialData: [],
-    enabled: !!(selectedOrgId || currentUser?.organization_id)
+    enabled: !permissionsLoading && !!(selectedOrgId || currentUser?.organization_id)
   });
 
   // Fetch sync jobs for selected source - WITH AUTO REFRESH
