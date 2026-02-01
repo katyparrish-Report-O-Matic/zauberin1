@@ -18,8 +18,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { organizationId, dateRange } = await req.json();
+
     // Get CTM DataSource
     const dataSources = await base44.asServiceRole.entities.DataSource.filter({
+      organization_id: organizationId,
       platform_type: 'call_tracking'
     }, '-updated_date', 1);
 
@@ -45,12 +48,17 @@ Deno.serve(async (req) => {
     const data = encoder.encode(apiKey);
     const auth = btoa(String.fromCharCode(...data));
 
-    // For incremental: only fetch since last sync (or last 24h if never synced)
-    const lastSyncAt = dataSource.last_sync_at 
-      ? new Date(dataSource.last_sync_at) 
-      : new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
-    console.log(`[CTM Sync] Last sync: ${lastSyncAt.toISOString()}`);
+    // For manual backfill: use dateRange if provided, otherwise incremental from last_sync_at
+    let filterStartDate;
+    if (dateRange?.start_date) {
+      filterStartDate = new Date(dateRange.start_date);
+      console.log(`[CTM Sync] Manual backfill from: ${filterStartDate.toISOString()}`);
+    } else {
+      filterStartDate = dataSource.last_sync_at 
+        ? new Date(dataSource.last_sync_at) 
+        : new Date(Date.now() - 24 * 60 * 60 * 1000);
+      console.log(`[CTM Sync] Incremental from: ${filterStartDate.toISOString()}`);
+    }
 
     // Check for concurrent manual syncs
     const activeManualSync = await base44.asServiceRole.entities.SyncJob.filter({
@@ -102,35 +110,52 @@ Deno.serve(async (req) => {
         // Rate limiting
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
 
-        const url = `${baseUrl}/accounts/${accountId}/calls.json?per_page=100`;
-        
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/json'
+        // Fetch with pagination
+        let allAccountCalls = [];
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore) {
+          const url = `${baseUrl}/accounts/${accountId}/calls.json?per_page=100&page=${page}`;
+
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${auth}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.status === 429) {
+            console.warn(`[CTM Sync] Rate limited for account ${accountId}`);
+            errors.push({ account: accountId, error: 'Rate limited' });
+            hasMore = false;
+            break;
           }
-        });
 
-        if (response.status === 429) {
-          console.warn(`[CTM Sync] Rate limited for account ${accountId}`);
-          errors.push({ account: accountId, error: 'Rate limited' });
-          continue;
+          if (!response.ok) {
+            console.error(`[CTM Sync] Failed to fetch calls for account ${accountId}: ${response.status}`);
+            errors.push({ account: accountId, error: `HTTP ${response.status}` });
+            hasMore = false;
+            break;
+          }
+
+          const callsData = await response.json();
+          const calls = callsData.calls || [];
+          allAccountCalls = allAccountCalls.concat(calls);
+
+          hasMore = calls.length === 100;
+          page++;
+
+          if (hasMore) {
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+          }
         }
 
-        if (!response.ok) {
-          console.error(`[CTM Sync] Failed to fetch calls for account ${accountId}: ${response.status}`);
-          errors.push({ account: accountId, error: `HTTP ${response.status}` });
-          continue;
-        }
-
-        const callsData = await response.json();
-        const calls = callsData.calls || [];
-        
-        // Filter to calls since last sync (incremental)
-        const newCalls = calls.filter(call => {
+        // Filter to calls in date range
+        const newCalls = allAccountCalls.filter(call => {
           const callDate = new Date(call.start_time);
-          return callDate >= lastSyncAt;
+          return callDate >= filterStartDate;
         });
 
         if (newCalls.length > 0) {
