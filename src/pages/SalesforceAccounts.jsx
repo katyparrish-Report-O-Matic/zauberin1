@@ -108,51 +108,31 @@ export default function SalesforceAccounts() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredAccounts.map((account) => (
-                  <Card key={account.Id} className="hover:shadow-lg transition-shadow">
+                  <Card key={account.salesforce_id} className="hover:shadow-lg transition-shadow">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
                           <Building2 className="w-5 h-5 text-blue-600" />
-                          <CardTitle className="text-lg">{account.Name || 'Unnamed Account'}</CardTitle>
+                          <CardTitle className="text-lg">{account.account_name || 'Unnamed Account'}</CardTitle>
                         </div>
-                        {account.At_Risk__c && (
-                          <Badge variant="destructive" className="gap-1">
-                            <AlertCircle className="w-3 h-3" />
-                            At Risk
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {account.Company_Status__c && (
-                          <Badge variant="outline">{account.Company_Status__c}</Badge>
-                        )}
-                        {account.POD__c && (
-                          <Badge variant="secondary">{account.POD__c}</Badge>
-                        )}
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      {renderField('Account Manager', account.Account_Manager__c)}
-                      {renderField('Primary Sector', account.Primary_Sector__c)}
-                      {renderField('Sector Category', account.Sector_Category__c)}
-                      {renderField('Marketing Budget', account.Total_Current_Marketing_Budget__c)}
-                      {renderField('Active Marketing Client', account.Active_Marketing_Client__c)}
-                      {renderField('Marketing Package', account.Marketing_Package_Type__c)}
-                      {renderField('Live Services', account.Number_of_Live_Services__c)}
-                      {renderField('Marketing Live Services', account.Number_of_Marketing_Live_Services__c)}
-                      {renderField('Opportunities', account.Number_of_Opportunities__c)}
-                      {renderField('Client Team', account.Client_Team__c)}
-                      {renderField('Client Team Owner', account.Client_Team_Owner__c)}
-                      {renderField('Current Account Plan', account.Current_Account_Plan__c)}
-                      {renderField('Service Agreement', account.Service_Agreement__c)}
-                      {renderField('Subscription Line Item', account.Subscription_Line_Item__c)}
-                      {renderField('Agency Analytics ID', account.Agency_Analytics_ID__c)}
-                      {account.Company_History__c && (
-                        <div className="pt-2 mt-2 border-t border-gray-200">
-                          <span className="text-xs text-gray-500 font-medium">Company History</span>
-                          <p className="text-xs text-gray-700 mt-1">{account.Company_History__c}</p>
-                        </div>
-                      )}
+                      {renderField('Owner', account.owner_name)}
+                      {renderField('Email', account.owner_email)}
+                      {renderField('Phone', account.phone)}
+                      {renderField('Type', account.type)}
+                      {renderField('Industry', account.industry)}
+                      {renderField('Website', account.website)}
+                      {renderField('Employees', account.number_of_employees)}
+                      {renderField('Annual Revenue', account.annual_revenue)}
+                      {renderField('Billing Street', account.billing_street)}
+                      {renderField('Billing City', account.billing_city)}
+                      {renderField('Billing State', account.billing_state)}
+                      {renderField('Postal Code', account.billing_postal_code)}
+                      {renderField('Country', account.billing_country)}
+                      {renderField('Account Number', account.account_number)}
+                      {renderField('Active', account.is_active ? 'Yes' : 'No')}
                     </CardContent>
                   </Card>
                 ))}
