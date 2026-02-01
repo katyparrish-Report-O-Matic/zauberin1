@@ -250,6 +250,9 @@ export default function DataSourceManager() {
     }
   });
 
+  // Check if any sync is currently running
+  const isAnySyncRunning = syncJobs.some(job => job.status === 'in_progress');
+
   const resetForm = () => {
     setFormData({
       name: '',
