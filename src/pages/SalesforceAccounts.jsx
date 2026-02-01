@@ -42,16 +42,14 @@ export default function SalesforceAccounts() {
   );
 
   const filteredAccounts = accounts.filter(account => {
+    const name = account.account_name || account.Name || '';
+    const ownerName = account.owner_name || account.Account_Manager__c || '';
+    
     const matchesSearch = !searchTerm || 
-      account.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.Account_Manager__c?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.Primary_Sector__c?.toLowerCase().includes(searchTerm.toLowerCase());
+      name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ownerName.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === 'all' || account.Company_Status__c === statusFilter;
-    const matchesPod = podFilter === 'all' || account.POD__c === podFilter;
-    const matchesSector = sectorFilter === 'all' || account.Primary_Sector__c === sectorFilter;
-
-    return matchesSearch && matchesStatus && matchesPod && matchesSector;
+    return matchesSearch;
   });
 
   const handleRefresh = () => {
