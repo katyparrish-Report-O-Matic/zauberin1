@@ -78,18 +78,24 @@ export default function DataSourceManager() {
     queryKey: ['dataSources', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-      if (orgId === 'all' && isAgency) {
-        return await base44.entities.DataSource.list('-created_date');
-      }
+      
+      // If user has organization, always filter by it
       if (orgId && orgId !== 'all') {
         return await base44.entities.DataSource.filter(
           { organization_id: orgId },
           '-created_date'
         );
       }
-      return await base44.entities.DataSource.list('-created_date');
+      
+      // If agency viewing all orgs
+      if (orgId === 'all' && isAgency) {
+        return await base44.entities.DataSource.list('-created_date');
+      }
+      
+      return [];
     },
-    initialData: []
+    initialData: [],
+    enabled: !!(selectedOrgId || currentUser?.organization_id)
   });
 
   // Fetch sync jobs for selected source - WITH AUTO REFRESH
