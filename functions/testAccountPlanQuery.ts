@@ -14,8 +14,8 @@ Deno.serve(async (req) => {
 
     const accessToken = await base44.asServiceRole.connectors.getAccessToken('salesforce');
 
-    // First, check if the Account Plan object exists and what it's called
-    const testQuery = `SELECT Id, Name FROM Account_Plan__c LIMIT 1`;
+    // Get Account Plan with all relationship fields
+    const testQuery = `SELECT Id, Name, Account__c, Company__c, Service_Agreement__c, Service_Agreement__r.Company__c FROM Account_Plan__c LIMIT 5`;
     const encodedQuery = encodeURIComponent(testQuery);
     
     const response = await fetch(`https://adtrak.my.salesforce.com/services/data/v59.0/query?q=${encodedQuery}`, {
