@@ -109,16 +109,15 @@ Generate a complete table configuration.`,
                 column: { type: "string" },
                 direction: { type: "string", enum: ["asc", "desc"] }
               }
+            },
+            dataSource: { 
+              type: "string",
+              enum: ["calls", "salesforce"],
+              default: "calls",
+              description: "Data source to query"
             }
           },
-          dataSource: { 
-            type: "string",
-            enum: ["calls", "salesforce"],
-            default: "calls",
-            description: "Data source to query"
-          }
-        },
-        required: ["title", "groupBy", "columns", "dataSource"]
+          required: ["title", "groupBy", "columns", "dataSource"]
         }
       });
 
