@@ -44,6 +44,30 @@ export default function ReportTemplates() {
     initialData: []
   });
 
+  const { data: agencyTemplates } = useQuery({
+    queryKey: ['agencyTemplates'],
+    queryFn: async () => {
+      return await base44.entities.ReportTemplate.filter(
+        { created_by: 'agency', is_archived: false },
+        '-created_date'
+      );
+    },
+    initialData: []
+  });
+
+  const { data: archivedTemplates } = useQuery({
+    queryKey: ['archivedTemplates', currentUser?.email],
+    queryFn: async () => {
+      if (!currentUser?.email) return [];
+      return await base44.entities.ReportTemplate.filter(
+        { created_by: currentUser.email, is_archived: true },
+        '-created_date'
+      );
+    },
+    enabled: !!currentUser?.email,
+    initialData: []
+  });
+
   // Archive mutation
   const archiveTemplateMutation = useMutation({
     mutationFn: (templateId) => 
@@ -242,6 +266,81 @@ export default function ReportTemplates() {
               </CardContent>
             </Card>
 
+            {/* Agency Templates */}
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Agency Templates</h2>
+              {agencyTemplates.length > 0 ? (
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {agencyTemplates.map((template) => {
+                    const Icon = getIconForChartType(template.chart_settings?.chart_type);
+                    return (
+                      <Card key={template.id} className="hover:shadow-lg transition-shadow">
+                        <CardHeader>
+                          <div className="w-12 h-12 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center mb-3">
+                            <Icon className="w-6 h-6" />
+                          </div>
+                          <CardTitle className="text-lg">{template.name}</CardTitle>
+                          <CardDescription className="text-sm">{template.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge variant="outline" className="text-xs">
+                                {template.chart_settings?.chart_type || 'custom'}
+                              </Badge>
+                              {template.usage_count > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Used {template.usage_count}x
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button 
+                                onClick={() => handleUseTemplate(template)}
+                                className="flex-1 gap-2"
+                                size="sm"
+                              >
+                                <PlayCircle className="w-4 h-4" />
+                                Use
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <MoreVertical className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem 
+                                    onClick={() => archiveTemplateMutation.mutate(template.id)}
+                                    disabled={archiveTemplateMutation.isPending}
+                                  >
+                                    <Archive className="w-4 h-4 mr-2" />
+                                    Archive
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => {
+                                      setTemplateToDelete(template);
+                                      setDeleteDialogOpen(true);
+                                    }}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">No agency templates available</p>
+              )}
+            </div>
+
             {/* Popular Templates */}
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Popular Templates</h2>
@@ -282,9 +381,8 @@ export default function ReportTemplates() {
             </div>
 
             {/* My Templates */}
-            {userTemplates.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">My Templates</h2>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">My Templates</h2>
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {userTemplates.map((template) => {
                     const Icon = getIconForChartType(template.chart_settings?.chart_type);
@@ -345,6 +443,56 @@ export default function ReportTemplates() {
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">No templates created yet. Save custom reports as templates from the Report Builder.</p>
+              )}
+            </div>
+
+            {/* Archived Templates */}
+            {archivedTemplates.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Archive</h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {archivedTemplates.map((template) => {
+                    const Icon = getIconForChartType(template.chart_settings?.chart_type);
+                    return (
+                      <Card key={template.id} className="hover:shadow-lg transition-shadow opacity-60">
+                        <CardHeader>
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center mb-3">
+                            <Icon className="w-6 h-6" />
+                          </div>
+                          <CardTitle className="text-lg">{template.name}</CardTitle>
+                          <CardDescription className="text-sm text-gray-500">Archived</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            <Button 
+                              onClick={() => archiveTemplateMutation.mutate(template.id)}
+                              variant="outline"
+                              className="w-full gap-2"
+                              size="sm"
+                              disabled={archiveTemplateMutation.isPending}
+                            >
+                              Restore
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                setTemplateToDelete(template);
+                                setDeleteDialogOpen(true);
+                              }}
+                              variant="outline"
+                              className="w-full text-red-600 hover:text-red-700 gap-2"
+                              size="sm"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </Button>
                           </div>
                         </CardContent>
                       </Card>
