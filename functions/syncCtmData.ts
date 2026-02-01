@@ -1,0 +1,166 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+
+/**
+ * Sync CTM call tracking data incrementally with rate limiting
+ * - Only syncs accounts updated since last sync (incremental)
+ * - Respects CTM API rate limits (100 req/min = 1 req/600ms)
+ */
+
+const RATE_LIMIT_DELAY = 600; // ms between requests to stay under 100 req/min
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { organizationId } = await req.json();
+    if (!organizationId) {
+      return Response.json({ 
+        success: false, 
+        error: 'Organization ID is required' 
+      }, { status: 400 });
+    }
+
+    console.log(`[CTM Sync] Starting incremental sync for org: ${organizationId}`);
+
+    // Get CTM DataSource
+    const dataSources = await base44.asServiceRole.entities.DataSource.filter({
+      organization_id: organizationId,
+      platform_type: 'call_tracking'
+    }, '-updated_date', 1);
+
+    if (!dataSources.length) {
+      return Response.json({ 
+        success: false, 
+        error: 'CTM data source not configured' 
+      }, { status: 400 });
+    }
+
+    const dataSource = dataSources[0];
+    const apiKey = dataSource.credentials?.api_key;
+    
+    if (!apiKey) {
+      return Response.json({ 
+        success: false, 
+        error: 'CTM API key not configured' 
+      }, { status: 400 });
+    }
+
+    // Setup auth
+    const encoder = new TextEncoder();
+    const data = encoder.encode(apiKey);
+    const auth = btoa(String.fromCharCode(...data));
+
+    // For incremental sync: only fetch accounts updated since last sync
+    const lastSyncAt = dataSource.last_sync_at ? new Date(dataSource.last_sync_at) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+    console.log(`[CTM Sync] Last sync: ${lastSyncAt.toISOString()}`);
+
+    let allAccounts = [];
+    let totalCalls = 0;
+    let currentPage = 1;
+    let totalPages = 1;
+    const baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
+
+    // Fetch accounts (only those in account_ids list from DataSource)
+    const accountIds = dataSource.account_ids || [];
+    console.log(`[CTM Sync] Syncing ${accountIds.length} configured accounts`);
+
+    for (const accountId of accountIds) {
+      try {
+        // Rate limiting - respect API limits
+        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+
+        const url = `${baseUrl}/accounts/${accountId}/calls.json?per_page=100`;
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.status === 429) {
+          // Rate limited - back off and retry
+          console.warn(`[CTM Sync] Rate limited for account ${accountId}, backing off...`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        }
+
+        if (!response.ok) {
+          console.error(`[CTM Sync] Failed to fetch calls for account ${accountId}: ${response.status}`);
+          continue;
+        }
+
+        const callsData = await response.json();
+        const calls = callsData.calls || [];
+        
+        if (calls.length > 0) {
+          // Filter to only calls since last sync (incremental)
+          const filteredCalls = calls.filter(call => {
+            const callDate = new Date(call.start_time);
+            return callDate >= lastSyncAt;
+          });
+
+          totalCalls += filteredCalls.length;
+          console.log(`[CTM Sync] Account ${accountId}: ${filteredCalls.length} new calls`);
+
+          // Bulk create call records
+          if (filteredCalls.length > 0) {
+            await base44.asServiceRole.entities.CallRecord.bulkCreate(
+              filteredCalls.map(call => ({
+                call_id: call.id,
+                account_id: accountId,
+                account_name: call.account_name,
+                caller_number: call.caller_number,
+                tracking_number: call.tracking_number,
+                duration: call.duration,
+                call_status: call.call_status,
+                start_time: call.start_time,
+                first_time_caller: call.first_time_caller,
+                tags: call.tags || [],
+                custom_fields: call.custom_fields || {},
+                data_source_id: dataSource.id,
+                organization_id: organizationId,
+                sync_date: new Date().toISOString().split('T')[0]
+              }))
+            );
+          }
+        }
+
+      } catch (error) {
+        console.error(`[CTM Sync] Error processing account ${accountId}:`, error.message);
+        continue;
+      }
+    }
+
+    // Update DataSource with sync info
+    const now = new Date().toISOString();
+    await base44.asServiceRole.entities.DataSource.update(dataSource.id, {
+      last_sync_at: now,
+      last_sync_status: 'success',
+      total_records_synced: (dataSource.total_records_synced || 0) + totalCalls
+    });
+
+    console.log(`[CTM Sync] ✅ Sync complete: ${totalCalls} new calls`);
+
+    return Response.json({
+      success: true,
+      calls_synced: totalCalls,
+      accounts_processed: accountIds.length,
+      sync_type: 'incremental',
+      last_sync_at: now
+    });
+
+  } catch (error) {
+    console.error('[CTM Sync] Error:', error);
+    return Response.json({
+      success: false,
+      error: error.message
+    }, { status: 500 });
+  }
+});
