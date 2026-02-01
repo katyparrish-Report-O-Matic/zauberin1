@@ -139,48 +139,82 @@ Generate a complete table configuration.`,
   }
 
   /**
-   * Execute query - Fetch CallRecords and aggregate on-demand
-   */
+    * Execute query - Fetch data and aggregate on-demand
+    */
   async executeTableQuery(config, organizationId, accountId = 'all') {
     try {
       environmentConfig.log('info', '[TableQuery] Executing query for organization:', organizationId);
-      environmentConfig.log('info', '[TableQuery] Account filter:', accountId);
+      environmentConfig.log('info', '[TableQuery] Data source:', config.dataSource);
       environmentConfig.log('info', '[TableQuery] GroupBy dimensions:', config.groupBy);
 
-      // Build filter for CallRecords
-      const filter = {
-        organization_id: organizationId
-      };
+      const dataSource = config.dataSource || 'calls';
 
-      if (accountId && accountId !== 'all') {
-        filter.account_id = accountId;
+      if (dataSource === 'salesforce') {
+        return await this.executeSalesforceQuery(config, organizationId);
+      } else {
+        return await this.executeCallsQuery(config, organizationId, accountId);
       }
-
-      // Fetch CallRecords
-      const callRecords = await base44.entities.CallRecord.filter(
-        filter,
-        '-start_time',
-        10000
-      );
-
-      environmentConfig.log('info', `[TableQuery] Fetched ${callRecords.length} call records`);
-
-      if (callRecords.length === 0) {
-        return [];
-      }
-
-      // Aggregate by groupBy dimensions
-      const groupBy = config.groupBy || ['account_name'];
-      const aggregatedData = this.aggregateCallRecords(callRecords, groupBy);
-
-      environmentConfig.log('info', `[TableQuery] Aggregated into ${aggregatedData.length} groups`);
-
-      return aggregatedData;
 
     } catch (error) {
       environmentConfig.log('error', '[TableQuery] Query error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Execute calls query
+   */
+  async executeCallsQuery(config, organizationId, accountId = 'all') {
+    const filter = {
+      organization_id: organizationId
+    };
+
+    if (accountId && accountId !== 'all') {
+      filter.account_id = accountId;
+    }
+
+    const callRecords = await base44.entities.CallRecord.filter(
+      filter,
+      '-start_time',
+      10000
+    );
+
+    environmentConfig.log('info', `[TableQuery] Fetched ${callRecords.length} call records`);
+
+    if (callRecords.length === 0) {
+      return [];
+    }
+
+    const groupBy = config.groupBy || ['account_name'];
+    const aggregatedData = this.aggregateCallRecords(callRecords, groupBy);
+
+    environmentConfig.log('info', `[TableQuery] Aggregated into ${aggregatedData.length} groups`);
+
+    return aggregatedData;
+  }
+
+  /**
+   * Execute Salesforce query
+   */
+  async executeSalesforceQuery(config, organizationId) {
+    const accounts = await base44.entities.SalesforceAccount.filter(
+      { organization_id: organizationId },
+      '-account_name',
+      10000
+    );
+
+    environmentConfig.log('info', `[TableQuery] Fetched ${accounts.length} Salesforce accounts`);
+
+    if (accounts.length === 0) {
+      return [];
+    }
+
+    const groupBy = config.groupBy || ['account_name'];
+    const aggregatedData = this.aggregateSalesforceAccounts(accounts, groupBy);
+
+    environmentConfig.log('info', `[TableQuery] Aggregated into ${aggregatedData.length} groups`);
+
+    return aggregatedData;
   }
 
   /**
