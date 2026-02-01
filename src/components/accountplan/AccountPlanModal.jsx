@@ -107,7 +107,7 @@ export default function AccountPlanModal({ accountId, isOpen, onClose }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+      <DialogContent className="max-w-6xl max-h-[95vh] p-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="text-2xl">Account Plan Details</DialogTitle>
         </DialogHeader>
