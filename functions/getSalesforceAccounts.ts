@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
     const accessToken = await base44.asServiceRole.connectors.getAccessToken('salesforce');
 
-    const soqlQuery = `SELECT Id, Name, At_Risk__c, At_Risk_Reason__c, POD__c, Current_Account_Plan__c, Total_Current_Marketing_Budget__c, Company__c, Company__r.Name, Company__r.Account_Manager__c, Primary_Sector__c, Status__c FROM Service_Agreement__c${whereClause} ORDER BY LastModifiedDate DESC`;
+    const soqlQuery = `SELECT Id, Name, At_Risk__c, At_Risk_Reason__c, POD__c, Current_Account_Plan__c, Total_Current_Marketing_Budget__c, Company__c, Company__r.Name, Company__r.Account_Manager__c, Company__r.Primary_Sector__c, Status__c FROM Service_Agreement__c${whereClause} ORDER BY LastModifiedDate DESC`;
 
     const encodedQuery = encodeURIComponent(soqlQuery);
     const response = await fetch(`https://adtrak.my.salesforce.com/services/data/v59.0/query?q=${encodedQuery}`, {
