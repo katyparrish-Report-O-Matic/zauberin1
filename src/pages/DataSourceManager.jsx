@@ -572,7 +572,7 @@ export default function DataSourceManager() {
                         size="sm"
                         className="flex-1 gap-2"
                         onClick={() => triggerSyncMutation.mutate(source.id)}
-                        disabled={!source.enabled || triggerSyncMutation.isPending}
+                        disabled={!source.enabled || triggerSyncMutation.isPending || isAnySyncRunning}
                       >
                         <RefreshCw className="w-3 h-3" />
                         Sync
