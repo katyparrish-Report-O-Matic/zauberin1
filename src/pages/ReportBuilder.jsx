@@ -268,6 +268,7 @@ export default function ReportBuilder() {
       );
 
       console.log('[ReportBuilder] 🔍 Querying real data...');
+      console.log('[ReportBuilder] 📋 Table config:', JSON.stringify(tableConfig, null, 2));
       
       // Execute query to get real data - pass selected account filter
       const realData = await tableQueryService.executeTableQuery(
@@ -277,6 +278,10 @@ export default function ReportBuilder() {
       );
 
       console.log(`[ReportBuilder] ✅ Retrieved ${realData.length} real records`);
+      if (realData.length > 0) {
+        console.log('[ReportBuilder] 📊 Sample data row:', realData[0]);
+        console.log('[ReportBuilder] 📊 Data keys:', Object.keys(realData[0]));
+      }
 
       if (realData.length === 0) {
         toast.warning('No data found for the specified criteria');
