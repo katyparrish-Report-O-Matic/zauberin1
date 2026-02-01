@@ -15,7 +15,6 @@ Deno.serve(async (req) => {
       platform_type: 'salesforce'
     }, '-updated_date', 1);
 
-    const dataSource = dataSources[0];
     let whereClause = '';
     let syncType = 'full';
 

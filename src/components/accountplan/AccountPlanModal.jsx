@@ -149,16 +149,16 @@ export default function AccountPlanModal({ accountId, isOpen, onClose }) {
             {selectedPlan ? (
               <ScrollArea className="h-full p-6">
                 <div className="space-y-6">
-                          <div>
-                            <h2 className="text-xl font-bold mb-2">{selectedPlan.Name}</h2>
-                            <div className="flex gap-2 flex-wrap">
-                              {selectedPlan.Status__c && (
-                                <Badge>{selectedPlan.Status__c}</Badge>
-                              )}
-                            </div>
-                          </div>
+                  <div>
+                    <h2 className="text-xl font-bold mb-2">{selectedPlan.Name}</h2>
+                    <div className="flex gap-2 flex-wrap">
+                      {selectedPlan.Status__c && (
+                        <Badge>{selectedPlan.Status__c}</Badge>
+                      )}
+                    </div>
+                  </div>
 
-                          {fieldGroups.map((group) => {
+                  {fieldGroups.map((group) => {
                     const hasValues = group.fields.some(f => selectedPlan[f.key]);
                     if (!hasValues) return null;
 
