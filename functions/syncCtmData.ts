@@ -43,6 +43,19 @@ Deno.serve(async (req) => {
       }, { status: 409 });
     }
 
+    // Create SyncJob record to track progress
+    const syncJob = await base44.asServiceRole.entities.SyncJob.create({
+      organization_id: organizationId,
+      data_source_id: 'placeholder',
+      sync_type: 'manual',
+      status: 'in_progress',
+      started_at: new Date().toISOString(),
+      progress_percentage: 0,
+      current_step: 'Initializing...',
+      records_synced: 0,
+      records_created: 0
+    });
+
     // Get CTM DataSource
     const dataSources = await base44.asServiceRole.entities.DataSource.filter({
       organization_id: organizationId,
@@ -50,6 +63,11 @@ Deno.serve(async (req) => {
     }, '-updated_date', 1);
 
     if (!dataSources.length) {
+      await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+        status: 'failed',
+        error_message: 'CTM data source not configured',
+        completed_at: new Date().toISOString()
+      });
       return Response.json({ 
         success: false, 
         error: 'CTM data source not configured' 
@@ -60,11 +78,21 @@ Deno.serve(async (req) => {
     const apiKey = dataSource.credentials?.api_key;
     
     if (!apiKey) {
+      await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+        status: 'failed',
+        error_message: 'CTM API key not configured',
+        completed_at: new Date().toISOString()
+      });
       return Response.json({ 
         success: false, 
         error: 'CTM API key not configured' 
       }, { status: 400 });
     }
+
+    // Update SyncJob with data_source_id
+    await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+      data_source_id: dataSource.id
+    });
 
     // Setup auth
     const encoder = new TextEncoder();
@@ -75,18 +103,23 @@ Deno.serve(async (req) => {
     const lastSyncAt = dataSource.last_sync_at ? new Date(dataSource.last_sync_at) : new Date(Date.now() - 24 * 60 * 60 * 1000);
     console.log(`[CTM Sync] Last sync: ${lastSyncAt.toISOString()}`);
 
-    let allAccounts = [];
     let totalCalls = 0;
-    let currentPage = 1;
-    let totalPages = 1;
     const baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
 
     // Fetch accounts (only those in account_ids list from DataSource)
     const accountIds = dataSource.account_ids || [];
     console.log(`[CTM Sync] Syncing ${accountIds.length} configured accounts`);
 
-    for (const accountId of accountIds) {
+    for (let i = 0; i < accountIds.length; i++) {
+      const accountId = accountIds[i];
       try {
+        // Update progress
+        const progress = Math.round((i / accountIds.length) * 100);
+        await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+          progress_percentage: progress,
+          current_step: `Processing account ${i + 1}/${accountIds.length}`
+        });
+
         // Rate limiting - respect API limits
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
 
@@ -122,29 +155,35 @@ Deno.serve(async (req) => {
             return callDate >= lastSyncAt;
           });
 
-          totalCalls += filteredCalls.length;
-          console.log(`[CTM Sync] Account ${accountId}: ${filteredCalls.length} new calls`);
-
-          // Bulk create call records
           if (filteredCalls.length > 0) {
-            await base44.asServiceRole.entities.CallRecord.bulkCreate(
-              filteredCalls.map(call => ({
-                call_id: call.id,
-                account_id: accountId,
-                account_name: call.account_name,
-                caller_number: call.caller_number,
-                tracking_number: call.tracking_number,
-                duration: call.duration,
-                call_status: call.call_status,
-                start_time: call.start_time,
-                first_time_caller: call.first_time_caller,
-                tags: call.tags || [],
-                custom_fields: call.custom_fields || {},
-                data_source_id: dataSource.id,
-                organization_id: organizationId,
-                sync_date: new Date().toISOString().split('T')[0]
-              }))
-            );
+            const callRecords = filteredCalls.map(call => ({
+              call_id: call.id,
+              account_id: accountId,
+              account_name: call.account_name,
+              caller_number: call.caller_number,
+              tracking_number: call.tracking_number,
+              duration: call.duration,
+              call_status: call.call_status,
+              start_time: call.start_time,
+              first_time_caller: call.first_time_caller,
+              tags: call.tags || [],
+              custom_fields: call.custom_fields || {},
+              data_source_id: dataSource.id,
+              organization_id: organizationId,
+              sync_date: new Date().toISOString().split('T')[0]
+            }));
+
+            // Bulk create call records immediately
+            await base44.asServiceRole.entities.CallRecord.bulkCreate(callRecords);
+            totalCalls += filteredCalls.length;
+            
+            // Update sync job with new totals
+            await base44.asServiceRole.entities.SyncJob.update(syncJob.id, {
+              records_synced: totalCalls,
+              records_created: totalCalls
+            });
+
+            console.log(`[CTM Sync] Account ${accountId}: ${filteredCalls.length} new calls saved`);
           }
         }
 
