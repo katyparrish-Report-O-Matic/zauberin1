@@ -37,10 +37,8 @@ export default function SalesforceAccounts() {
     [accounts]
   );
 
-  const uniqueAtRiskStatuses = useMemo(() => 
-    [...new Set(accounts.map(a => a.At_Risk__c).filter(Boolean))].sort(),
-    [accounts]
-  );
+  const hasAtRiskAccounts = accounts.some(a => a.At_Risk__c === true);
+  const hasNotAtRiskAccounts = accounts.some(a => a.At_Risk__c === false);
 
   const uniqueStatuses = useMemo(() => 
     [...new Set(accounts.map(a => a.Company_Status__c).filter(Boolean))].sort(),
