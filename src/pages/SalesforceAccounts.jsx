@@ -88,6 +88,7 @@ export default function SalesforceAccounts() {
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Adtrak Paid Marketing Customer</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Agency Analytics ID</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Archived</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">At Risk</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Breeez Account</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Client Team</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Client Team Owner</th>
@@ -100,10 +101,13 @@ export default function SalesforceAccounts() {
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Marketing Live Services</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Number of Opportunities</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Parent ID</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">POD</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Primary Sector</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sector Category</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Service Agreement</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Subscription Line Item</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Total Current Marketing Budget</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -116,6 +120,7 @@ export default function SalesforceAccounts() {
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Adtrak_Paid_Marketing_Customer__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Agency_Analytics_ID__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Archived__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.At_Risk__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Breeez_Account__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Client_Team__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Client_Team_Owner__c || '-'}</td>
@@ -128,10 +133,13 @@ export default function SalesforceAccounts() {
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Marketing_Live_Services__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Number_of_Opportunities__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.ParentId || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.POD__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Primary_Sector__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Sector__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Sector_Category__c || '-'}</td>
                          <td className="px-6 py-4 text-sm text-gray-600">{account.Service_Agreement__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Subscription_Line_Item__c || '-'}</td>
+                         <td className="px-6 py-4 text-sm text-gray-600">{account.Total_Current_Marketing_Budget__c || '-'}</td>
                        </tr>
                     ))}
                   </tbody>
