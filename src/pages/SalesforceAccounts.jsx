@@ -209,7 +209,20 @@ export default function SalesforceAccounts() {
                       {renderField('Opportunities', account.Number_of_Opportunities__c)}
                       {renderField('Client Team', account.Client_Team__c)}
                       {renderField('Client Team Owner', account.Client_Team_Owner__c)}
-                      {renderField('Current Account Plan', account.Current_Account_Plan__c)}
+                      {account.Current_Account_Plan__c && (
+                        <button
+                          onClick={() => {
+                            setSelectedAccountId(account.Id);
+                            setPlanModalOpen(true);
+                          }}
+                          className="py-2 border-b border-gray-100 w-full text-left hover:bg-blue-50 rounded px-2 -mx-2 transition-colors"
+                        >
+                          <span className="text-xs text-gray-600 font-medium">Current Account Plan</span>
+                          <div className="text-sm text-blue-600 hover:underline font-medium">
+                            {account.Current_Account_Plan__c}
+                          </div>
+                        </button>
+                      )}
                       {renderField('Service Agreement', account.Service_Agreement__c)}
                       {renderField('Subscription Line Item', account.Subscription_Line_Item__c)}
                       {renderField('Agency Analytics ID', account.Agency_Analytics_ID__c)}
