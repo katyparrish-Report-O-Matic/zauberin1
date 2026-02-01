@@ -9,29 +9,61 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const accountQuery = `SELECT Id, Name FROM Account LIMIT 500`;
-    const serviceAgreementQuery = `SELECT Id, Name FROM Service_Agreement__c LIMIT 500`;
-    const subscriptionLineItemQuery = `SELECT Id, Name FROM Subscription_Line_Item__c LIMIT 500`;
+    // Find the Salesforce data source for this org
+    const dataSources = await base44.asServiceRole.entities.DataSource.filter({
+      organization_id: user.organization_id,
+      platform_type: 'salesforce'
+    });
 
-    const [accountRes, saRes, sliRes] = await Promise.all([
-      base44.asServiceRole.integrations.Salesforce.Query({ soql: accountQuery }),
-      base44.asServiceRole.integrations.Salesforce.Query({ soql: serviceAgreementQuery }),
-      base44.asServiceRole.integrations.Salesforce.Query({ soql: subscriptionLineItemQuery })
-    ]);
+    let dataSource = dataSources[0];
+    let whereClause = '';
+    let syncType = 'full';
 
-    const enrichedAccounts = accountRes.records?.map(account => ({
-      ...account,
-      serviceAgreements: saRes.records?.filter(sa => sa.AccountId === account.Id) || [],
-      subscriptionLineItems: sliRes.records?.filter(sli => sli.AccountId === account.Id) || []
-    })) || [];
+    // If we have a previous sync timestamp, use incremental sync
+    if (dataSource?.last_sync_at) {
+      const lastSyncDate = new Date(dataSource.last_sync_at).toISOString();
+      whereClause = ` WHERE LastModifiedDate > ${lastSyncDate.replace('.000Z', '+00:00')}`;
+      syncType = 'incremental';
+    }
+
+    const accessToken = await base44.asServiceRole.connectors.getAccessToken('salesforce');
+
+    const soqlQuery = `SELECT Id, Name, At_Risk__c, At_Risk_Reason__c, POD__c, Current_Account_Plan__c, Total_Current_Marketing_Budget__c, Company__c, Company__r.Name, Company__r.Account_Manager__c, Primary_Sector__c, Status__c FROM Service_Agreement__c${whereClause} ORDER BY LastModifiedDate DESC`;
+
+    const encodedQuery = encodeURIComponent(soqlQuery);
+    const response = await fetch(`https://adtrak.my.salesforce.com/services/data/v59.0/query?q=${encodedQuery}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return Response.json({ error: `Salesforce API error: ${error}` }, { status: response.status });
+    }
+
+    const data = await response.json();
+    const accounts = data.records || [];
+
+    // Update last_sync_at timestamp
+    const now = new Date().toISOString();
+    if (dataSource) {
+      await base44.asServiceRole.entities.DataSource.update(dataSource.id, {
+        last_sync_at: now,
+        last_sync_status: 'success',
+        total_records_synced: (dataSource.total_records_synced || 0) + accounts.length
+      });
+    }
 
     return Response.json({ 
-      accounts: enrichedAccounts,
+      accounts,
       syncMetadata: {
-        accountsFetched: accountRes.records?.length || 0,
-        serviceAgreementsFetched: saRes.records?.length || 0,
-        subscriptionLineItemsFetched: sliRes.records?.length || 0,
-        source: 'salesforce_api'
+        type: syncType,
+        recordsFetched: accounts.length,
+        lastSyncAt: now,
+        previousSyncAt: dataSource?.last_sync_at || null
       }
     });
   } catch (error) {

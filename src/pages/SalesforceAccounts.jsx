@@ -69,47 +69,6 @@ export default function SalesforceAccounts() {
     );
   };
 
-  const renderServiceAgreements = (sas) => {
-    if (!sas || sas.length === 0) return null;
-    return (
-      <div className="pt-4 border-t border-gray-200">
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">Service Agreements</h4>
-        <div className="space-y-3">
-          {sas.map((sa) => (
-            <div key={sa.Id} className="bg-blue-50 p-3 rounded border border-blue-100">
-              {renderField('SA Name', sa.Name)}
-              {renderField('Status', sa.Status__c)}
-              {renderField('Start Date', sa.Start_Date__c)}
-              {renderField('End Date', sa.End_Date__c)}
-              {renderField('Recurring Amount', sa.Recurring_Amount__c)}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderSubscriptionLineItems = (slis) => {
-    if (!slis || slis.length === 0) return null;
-    return (
-      <div className="pt-4 border-t border-gray-200">
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">Subscription Line Items</h4>
-        <div className="space-y-3">
-          {slis.map((sli) => (
-            <div key={sli.Id} className="bg-green-50 p-3 rounded border border-green-100">
-              {renderField('SLI Name', sli.Name)}
-              {renderField('Status', sli.Status__c)}
-              {renderField('Start Date', sli.Start_Date__c)}
-              {renderField('End Date', sli.End_Date__c)}
-              {renderField('Recurring Amount', sli.Recurring_Amount__c)}
-              {renderField('Service Tier', sli.Service_Tier__c)}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -201,7 +160,7 @@ export default function SalesforceAccounts() {
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
                           <Building2 className="w-5 h-5 text-blue-600" />
-                          <CardTitle className="text-lg">{account.Name}</CardTitle>
+                          <CardTitle className="text-lg">{account.Name || 'Unnamed Account'}</CardTitle>
                         </div>
                         {account.At_Risk__c && (
                           <Badge variant="destructive" className="gap-1">
@@ -211,24 +170,29 @@ export default function SalesforceAccounts() {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
+                        {account.Company_Status__c && (
+                          <Badge variant="outline">{account.Company_Status__c}</Badge>
+                        )}
                         {account.POD__c && (
                           <Badge variant="secondary">{account.POD__c}</Badge>
                         )}
-                        {account.Primary_Sector__c && (
-                          <Badge variant="outline">{account.Primary_Sector__c}</Badge>
-                        )}
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
-                      {renderField('Account Manager', account.Account_Owner__c)}
+                    <CardContent className="space-y-1">
+                      {renderField('Account Manager', account.Account_Manager__c)}
+                      {renderField('Primary Sector', account.Primary_Sector__c)}
                       {renderField('Sector Category', account.Sector_Category__c)}
                       {renderField('Marketing Budget', account.Total_Current_Marketing_Budget__c)}
                       {renderField('Active Marketing Client', account.Active_Marketing_Client__c)}
                       {renderField('Marketing Package', account.Marketing_Package_Type__c)}
-                      {renderField('Live Services', account.Live_Services__c)}
+                      {renderField('Live Services', account.Number_of_Live_Services__c)}
+                      {renderField('Marketing Live Services', account.Number_of_Marketing_Live_Services__c)}
                       {renderField('Opportunities', account.Number_of_Opportunities__c)}
+                      {renderField('Client Team', account.Client_Team__c)}
                       {renderField('Client Team Owner', account.Client_Team_Owner__c)}
                       {renderField('Current Account Plan', account.Current_Account_Plan__c)}
+                      {renderField('Service Agreement', account.Service_Agreement__c)}
+                      {renderField('Subscription Line Item', account.Subscription_Line_Item__c)}
                       {renderField('Agency Analytics ID', account.Agency_Analytics_ID__c)}
                       {account.Company_History__c && (
                         <div className="pt-2 mt-2 border-t border-gray-200">
@@ -236,8 +200,6 @@ export default function SalesforceAccounts() {
                           <p className="text-xs text-gray-700 mt-1">{account.Company_History__c}</p>
                         </div>
                       )}
-                      {renderServiceAgreements(account.serviceAgreements)}
-                      {renderSubscriptionLineItems(account.subscriptionLineItems)}
                     </CardContent>
                   </Card>
                 ))}

@@ -64,7 +64,7 @@ export default function DataSourceManager() {
     backfill_days: 90
   });
 
-  const { currentUser, isAgency, isLoading: permissionsLoading } = usePermissions();
+  const { currentUser, isAgency } = usePermissions();
 
   // Auto-select organization when user loads
   useEffect(() => {
@@ -78,27 +78,18 @@ export default function DataSourceManager() {
     queryKey: ['dataSources', selectedOrgId || currentUser?.organization_id],
     queryFn: async () => {
       const orgId = selectedOrgId || currentUser?.organization_id;
-      console.log('[DataSourceManager] Fetching with orgId:', orgId);
-      
-      // If user has organization, always filter by it
-      if (orgId && orgId !== 'all') {
-        const result = await base44.entities.DataSource.filter(
-          { organization_id: orgId },
-          '-created_date'
-        );
-        console.log('[DataSourceManager] Found sources:', result.length);
-        return result;
-      }
-      
-      // If agency viewing all orgs
       if (orgId === 'all' && isAgency) {
         return await base44.entities.DataSource.list('-created_date');
       }
-      
-      return [];
+      if (orgId && orgId !== 'all') {
+        return await base44.entities.DataSource.filter(
+          { organization_id: orgId },
+          '-created_date'
+        );
+      }
+      return await base44.entities.DataSource.list('-created_date');
     },
-    initialData: [],
-    enabled: !permissionsLoading && !!(selectedOrgId || currentUser?.organization_id)
+    initialData: []
   });
 
   // Fetch sync jobs for selected source - WITH AUTO REFRESH
@@ -523,7 +514,7 @@ export default function DataSourceManager() {
             )}
 
             {/* Data Sources Grid */}
-             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {dataSources.map(source => (
                 <Card key={source.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
