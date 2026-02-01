@@ -68,12 +68,16 @@ Available dimensions: ${availableDimensions.join(', ')}
 IMPORTANT RULES:
 1. Map user's request to EXACT dimension names. "sector" = "industry", "marketing channel" = "web_ad_network", "medium" = "web_medium"
 2. Extract ONLY the dimensions user explicitly mentions—do NOT add account_name unless they ask for it
-3. Determine data source: "calls" if request mentions calls/contacts/metrics, "salesforce" if mentions accounts/types/locations
+3. Determine data source:
+   - Use "salesforce" if request mentions: industry, sector, account type, account info, company details, location (city/state/country), employee count, revenue, billing address, owner/manager
+   - Use "calls" if request mentions: call metrics, call duration, answer rate, call status, call volume, call tracking, qualified calls, talking about call-specific data ONLY
 4. For "by region and account" → groupBy: ["region", "account_name"]
 5. For "accounts by type" → groupBy: ["account_type"]
 6. Show subtotals when grouping by multiple levels
 7. Format percentages (answer_rate), numbers (calls/employees), currency (revenue), durations (seconds)
 8. Set dataSource: "calls" or "salesforce" based on request intent
+9. If groupBy dimensions exist in Salesforce schema (industry, account_type, billing_state, owner_name, etc) → use salesforce
+10. CRITICAL: "spend" and "budget" metrics are on Salesforce accounts, NOT call tracking
 
 Generate a complete table configuration.`,
         response_json_schema: {
