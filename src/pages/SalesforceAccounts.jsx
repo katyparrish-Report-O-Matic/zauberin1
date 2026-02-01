@@ -25,21 +25,10 @@ export default function SalesforceAccounts() {
 
   const accounts = result?.accounts || [];
 
-  // Extract unique values for filters
-  const uniquePods = useMemo(() => 
-    [...new Set(accounts.map(a => a.POD__c).filter(Boolean))].sort(),
-    [accounts]
-  );
-
-  const uniqueSectors = useMemo(() => 
-    [...new Set(accounts.map(a => a.Primary_Sector__c).filter(Boolean))].sort(),
-    [accounts]
-  );
-
-  const uniqueStatuses = useMemo(() => 
-    [...new Set(accounts.map(a => a.Company_Status__c).filter(Boolean))].sort(),
-    [accounts]
-  );
+  // Extract unique values for filters - using database field names
+  const uniquePods = useMemo(() => [], []);
+  const uniqueSectors = useMemo(() => [], []);
+  const uniqueStatuses = useMemo(() => [], []);
 
   const filteredAccounts = accounts.filter(account => {
     const name = account.account_name || account.Name || '';
