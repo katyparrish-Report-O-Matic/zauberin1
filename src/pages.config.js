@@ -74,6 +74,7 @@ import Settings from './pages/Settings';
 import StatusPage from './pages/StatusPage';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
+import StormImport from './pages/StormImport';
 import __Layout from './Layout.jsx';
 
 
@@ -105,6 +106,7 @@ export const PAGES = {
     "StatusPage": StatusPage,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
+    "StormImport": StormImport,
 }
 
 export const pagesConfig = {
