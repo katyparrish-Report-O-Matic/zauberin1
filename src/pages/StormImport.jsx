@@ -411,8 +411,54 @@ export default function StormImport() {
               </CardContent>
             </Card>
           )}
-        </div>
-      </div>
-    </PermissionGuard>
-  );
-}
+
+          {importHistory.length > 0 && (
+           <Card>
+             <CardHeader>
+               <CardTitle className="flex items-center gap-2">
+                 <History className="w-5 h-5" />
+                 Import History
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <div className="overflow-x-auto">
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Date</TableHead>
+                       <TableHead>Records</TableHead>
+                       <TableHead>Status</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {importHistory.map(job => (
+                       <TableRow key={job.id}>
+                         <TableCell>
+                           {format(new Date(job.created_date), "MMM d, yyyy h:mm a")}
+                         </TableCell>
+                         <TableCell>
+                           {(job.records_synced || 0).toLocaleString()}
+                         </TableCell>
+                         <TableCell>
+                           <Badge className={
+                             job.status === 'completed' ? 'bg-green-600' :
+                             job.status === 'failed' ? 'bg-red-600' :
+                             job.status === 'in_progress' ? 'bg-blue-600' :
+                             'bg-gray-600'
+                           }>
+                             {job.status}
+                           </Badge>
+                         </TableCell>
+                       </TableRow>
+                     ))}
+                   </TableBody>
+                 </Table>
+               </div>
+             </CardContent>
+           </Card>
+          )}
+          </div>
+          </div>
+          </PermissionGuard>
+          );
+          }
