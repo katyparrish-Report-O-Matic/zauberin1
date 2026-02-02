@@ -158,10 +158,10 @@ export default function TelecomsReport() {
                   </SelectTrigger>
                   <SelectContent>
                     {accounts.map(account => (
-                      <SelectItem key={account.Id} value={account.Name}>
-                        {account.Name}
-                      </SelectItem>
-                    ))}
+                                                <SelectItem key={account.Id} value={account.Company__r?.Name || account.Name}>
+                                                  {account.Name} {account.Company__r?.Name ? `(${account.Company__r.Name})` : ''}
+                                                </SelectItem>
+                                              ))}
                   </SelectContent>
                 </Select>
               </div>
