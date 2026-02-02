@@ -660,7 +660,7 @@ export default function DataSourceManager() {
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle>{selectedSource.name} - Sync History</CardTitle>
+                      <CardTitle>{selectedSource.name} - {selectedSource.name.toLowerCase().includes('storm') ? 'Import History' : 'Sync History'}</CardTitle>
                       <CardDescription>
                         Recent synchronization jobs
                         {Array.isArray(syncJobs) && syncJobs.some(j => j.status === 'in_progress') && ( // Added Array.isArray(syncJobs) check
