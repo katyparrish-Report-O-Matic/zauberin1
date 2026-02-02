@@ -79,16 +79,20 @@ export default function StormImport() {
              return;
            }
 
-           // Expected headers
+           // Expected headers - normalize by trimming and lowercasing for comparison
            const headers = rows[0];
-           const dateTimeIdx = headers.indexOf('date_time');
-           const ctNumberIdx = headers.indexOf('ct_number');
-           const callEndIdx = headers.indexOf('call_end');
-           const callIdIdx = headers.indexOf('call_id');
-           const durationIdx = headers.indexOf('Call Duration');
-           const numberIdIdx = headers.indexOf('Number ID');
+           const normalizeHeader = (h) => String(h || '').trim().toLowerCase();
+           const normalizedHeaders = headers.map(normalizeHeader);
+
+           const dateTimeIdx = normalizedHeaders.indexOf('date_time');
+           const ctNumberIdx = normalizedHeaders.indexOf('ct_number');
+           const callEndIdx = normalizedHeaders.indexOf('call_end');
+           const callIdIdx = normalizedHeaders.indexOf('call_id');
+           const durationIdx = normalizedHeaders.indexOf('call duration');
+           const numberIdIdx = normalizedHeaders.indexOf('number id');
 
            console.log('Header indices:', { dateTimeIdx, ctNumberIdx, callEndIdx, callIdIdx, durationIdx, numberIdIdx });
+           console.log('Normalized headers:', normalizedHeaders);
 
            if (dateTimeIdx === -1 || ctNumberIdx === -1 || callEndIdx === -1 || callIdIdx === -1 || durationIdx === -1 || numberIdIdx === -1) {
              setError('Missing required columns. Found: ' + headers.join(', '));

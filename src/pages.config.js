@@ -72,9 +72,9 @@ import ReportTemplates from './pages/ReportTemplates';
 import SalesforceAccounts from './pages/SalesforceAccounts';
 import Settings from './pages/Settings';
 import StatusPage from './pages/StatusPage';
+import StormImport from './pages/StormImport';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
-import StormImport from './pages/StormImport';
 import __Layout from './Layout.jsx';
 
 
@@ -104,9 +104,9 @@ export const PAGES = {
     "SalesforceAccounts": SalesforceAccounts,
     "Settings": Settings,
     "StatusPage": StatusPage,
+    "StormImport": StormImport,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
-    "StormImport": StormImport,
 }
 
 export const pagesConfig = {
