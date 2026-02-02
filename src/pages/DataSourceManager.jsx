@@ -112,6 +112,27 @@ export default function DataSourceManager() {
     }
   });
 
+  // Fetch latest sync job for each data source
+  const { data: latestSyncJobs = {} } = useQuery({
+    queryKey: ['latestSyncJobs', dataSources?.map(s => s.id).join(',')],
+    queryFn: async () => {
+      if (!dataSources?.length) return {};
+      const result = {};
+      for (const source of dataSources) {
+        const jobs = await base44.entities.SyncJob.filter(
+          { data_source_id: source.id },
+          '-completed_at',
+          1
+        );
+        if (jobs.length > 0) {
+          result[source.id] = jobs[0];
+        }
+      }
+      return result;
+    },
+    initialData: {}
+  });
+
   // Test connection and fetch accounts
   const testConnectionMutation = useMutation({
     mutationFn: async (credentials) => {
