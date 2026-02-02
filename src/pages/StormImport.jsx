@@ -125,7 +125,7 @@ export default function StormImport() {
         }
       };
 
-      reader.readAsArrayBuffer(selectedFile);
+      reader.readAsText(selectedFile);
     } catch (err) {
       setError(`Error reading file: ${err.message}`);
     }
