@@ -253,7 +253,8 @@ export default function StormImport() {
         records_created: imported,
         records_updated: 0,
         records_failed: 0,
-        progress_percentage: 100
+        progress_percentage: 100,
+        current_step: fileName
       });
 
       setResult({
