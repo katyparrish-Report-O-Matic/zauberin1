@@ -636,9 +636,10 @@ export default function DataSourceManager() {
                       View Sync History
                     </Button>
                   </CardContent>
-                </Card>
-              ))}
-            </div>
+                  </Card>
+                  );
+                  })}
+                  </div>
 
             {dataSources.length === 0 && hasOrganization && (
               <Card>
