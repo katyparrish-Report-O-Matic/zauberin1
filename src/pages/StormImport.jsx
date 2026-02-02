@@ -309,7 +309,9 @@ export default function StormImport() {
                     </Button>
                   </label>
                   {file && (
-                    <span className="text-sm text-gray-600">{file.name}</span>
+                    <span className="text-sm text-gray-600">
+                      {file.name} ({(fileSize / 1024 / 1024).toFixed(2)} MB)
+                    </span>
                   )}
                 </div>
 
