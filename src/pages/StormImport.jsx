@@ -68,7 +68,7 @@ export default function StormImport() {
     if (!selectedFile) return;
 
     setFile(selectedFile);
-    setFileSize(selectedFile.size);
+    setFileName(selectedFile.name);
     setError(null);
     setResult(null);
 
