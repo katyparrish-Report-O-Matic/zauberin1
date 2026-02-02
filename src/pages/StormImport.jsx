@@ -349,7 +349,7 @@ export default function StormImport() {
                         <span>Importing records...</span>
                         <span>{progress}%</span>
                       </div>
-                      <Progress value={progress} />
+                      <SimpleProgress value={progress} />
                     </div>
                   )}
 
