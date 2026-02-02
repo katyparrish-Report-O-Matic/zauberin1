@@ -63,13 +63,13 @@ export default function StormImport() {
     setResult(null);
 
     try {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const data = new Uint8Array(event.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            try {
+              const data = event.target.result;
+              const workbook = XLSX.read(data, { type: 'binary' });
+              const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+              const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
           if (rows.length < 2) {
             setError('File must contain headers and at least one data row');
