@@ -224,7 +224,7 @@ export default function StormImport() {
                 Upload File
               </CardTitle>
               <CardDescription>
-                Select an Excel (.xlsx) or CSV file with columns: date_time, ct_number, call_id, Call Duration, Number ID
+                Select an Excel (.xlsx) or CSV file with columns: date_time, ct_number, call_end, call_id, Call Duration, Number ID
               </CardDescription>
             </CardHeader>
             <CardContent>
