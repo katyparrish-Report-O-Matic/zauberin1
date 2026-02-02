@@ -225,10 +225,78 @@ export default function AccountMapping() {
           </CardContent>
         </Card>
 
+        {/* Probable Matches Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Probable Matches</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : !probableMatches?.length ? (
+              <p className="text-gray-500 text-center py-8">No accounts to match</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>CTM Account Name</TableHead>
+                      <TableHead>Probable Salesforce Match</TableHead>
+                      <TableHead className="text-center">Confidence</TableHead>
+                      <TableHead className="text-center">Wrong Match?</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {probableMatches.map((match, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{match.ctmName}</TableCell>
+                        <TableCell>
+                          {match.sfMatch ? (
+                            <div>
+                              <div>{match.sfMatch.name}</div>
+                              <div className="text-xs text-gray-500">{match.sfMatch.saName}</div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">No match found</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {match.score > 0 ? (
+                            <Badge 
+                              variant={match.score >= 70 ? 'default' : match.score >= 40 ? 'secondary' : 'outline'}
+                              className={
+                                match.score >= 70 ? 'bg-green-100 text-green-800' :
+                                match.score >= 40 ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }
+                            >
+                              {match.score}%
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={wrongMatches[match.ctmName] || false}
+                            onCheckedChange={(checked) => handleWrongMatchToggle(match.ctmName, checked)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Existing Mappings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Existing Mappings</CardTitle>
+            <CardTitle className="text-lg">Confirmed Mappings</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -236,7 +304,7 @@ export default function AccountMapping() {
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
             ) : !mappings?.length ? (
-              <p className="text-gray-500 text-center py-8">No mappings created yet</p>
+              <p className="text-gray-500 text-center py-8">No confirmed mappings yet</p>
             ) : (
               <Table>
                 <TableHeader>
