@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
 
     // Date range
     const endDate = new Date().toISOString().split('T')[0];
-    const startDate = '2024-01-01';  // Get all historical data
+    const startDate = '2025-01-01';  // Get all historical data
 
     // Parse API credentials
     let auth;
