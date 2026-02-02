@@ -13,20 +13,26 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { accountName } = await req.json();
-
-    if (!accountName) {
-      return Response.json({ error: 'accountName required' }, { status: 400 });
-    }
+    const { accountName, debug } = await req.json();
 
     // Get Salesforce access token
     const accessToken = await base44.asServiceRole.connectors.getAccessToken("salesforce");
 
-    // Query Telecoms__c by Account_Name__c
-    const query = `SELECT Id, Name, Access_Number__c, Account_Name__c, Active__c 
-                   FROM Telecoms__c 
-                   WHERE Account_Name__c = '${accountName.replace(/'/g, "\\'")}'
-                   ORDER BY Name`;
+    // Debug mode: return sample records to see field values
+    let query;
+    if (debug) {
+      query = `SELECT Id, Name, Access_Number__c, Account_Name__c, Active__c 
+               FROM Telecoms__c 
+               LIMIT 10`;
+    } else if (!accountName) {
+      return Response.json({ error: 'accountName required' }, { status: 400 });
+    } else {
+      // Query Telecoms__c by Account_Name__c
+      query = `SELECT Id, Name, Access_Number__c, Account_Name__c, Active__c 
+               FROM Telecoms__c 
+               WHERE Account_Name__c = '${accountName.replace(/'/g, "\\'")}'
+               ORDER BY Name`;
+    }
 
     const response = await fetch(
       `https://adtrak.my.salesforce.com/services/data/v59.0/query?q=${encodeURIComponent(query)}`,
