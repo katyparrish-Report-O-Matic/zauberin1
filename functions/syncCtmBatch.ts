@@ -118,41 +118,13 @@ Deno.serve(async (req) => {
          while (page <= maxPages) {
            const callsUrl = `${baseUrl}/accounts/${accountId}/calls.json?page=${page}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
 
-           let retries = 0;
-           const maxRetries = 3;
-           let callsResponse;
-
-           while (retries < maxRetries) {
-             try {
-               callsResponse = await fetch(callsUrl, {
-                 method: 'GET',
-                 headers: {
-                   'Authorization': `Basic ${auth}`,
-                   'Content-Type': 'application/json'
-                 }
-               });
-
-               if (callsResponse.status === 429) {
-                 retries++;
-                 if (retries < maxRetries) {
-                   const delay = Math.pow(2, retries) * 1000;
-                   console.warn(`[CTM Batch] Rate limited on account ${accountId} page ${page}, retrying in ${delay}ms...`);
-                   await new Promise(resolve => setTimeout(resolve, delay));
-                   continue;
-                 }
-               }
-               break;
-             } catch (fetchError) {
-               retries++;
-               if (retries < maxRetries) {
-                 const delay = Math.pow(2, retries) * 1000;
-                 console.warn(`[CTM Batch] Fetch error on account ${accountId}, retrying in ${delay}ms...`);
-                 await new Promise(resolve => setTimeout(resolve, delay));
-                 continue;
-               }
-               throw fetchError;
+           const callsResponse = await fetch(callsUrl, {
+             method: 'GET',
+             headers: {
+               'Authorization': `Basic ${auth}`,
+               'Content-Type': 'application/json'
              }
-           }
+           });
 
            if (!callsResponse.ok) {
              console.warn(`[CTM Batch] Account ${accountId} page ${page} failed: ${callsResponse.status}`);
