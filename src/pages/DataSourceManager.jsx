@@ -1004,6 +1004,83 @@ export default function DataSourceManager() {
           </DialogContent>
         </Dialog>
 
+        {/* Sync History Dialog */}
+        <Dialog open={!!selectedSource} onOpenChange={(open) => {
+          if (!open) setSelectedSource(null);
+        }}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{selectedSource?.name} - {selectedSource?.name.toLowerCase().includes('storm') ? 'Import History' : 'Sync History'}</DialogTitle>
+              <DialogDescription>
+                Recent synchronization jobs
+                {Array.isArray(syncJobs) && syncJobs.some(j => j.status === 'in_progress') && (
+                  <span className="ml-2 text-blue-600 font-medium">
+                    • Live updates every 2s
+                  </span>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {syncJobs.map(job => (
+                <div
+                  key={job.id}
+                  className="flex flex-col gap-2 p-4 border border-gray-200 rounded-lg"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {job.status === 'completed' && <CheckCircle className="w-5 h-5 text-green-600" />}
+                      {job.status === 'failed' && <XCircle className="w-5 h-5 text-red-600" />}
+                      {job.status === 'in_progress' && <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />}
+                      {job.status === 'pending' && <AlertCircle className="w-5 h-5 text-gray-400" />}
+                      <div>
+                        <p className="font-medium capitalize">{job.sync_type} Sync</p>
+                        <p className="text-sm text-gray-600">
+                          {job.date_range?.start_date} to {job.date_range?.end_date}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">
+                        {job.records_synced || 0} records
+                        {job.status === 'in_progress' && ` (${job.progress_percentage}%)`}
+                      </p>
+                      {job.completed_at && (
+                        <p className="text-xs text-gray-500">
+                          {format(new Date(job.completed_at), "MMM d, h:mm a")}
+                          {job.duration_seconds && ` (${job.duration_seconds}s)`}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress bar for active jobs */}
+                  {job.status === 'in_progress' && (
+                    <div className="space-y-1">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${job.progress_percentage || 0}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-600">{job.current_step || 'Processing...'}</p>
+                    </div>
+                  )}
+
+                  {/* Error message */}
+                  {job.status === 'failed' && job.error_message && (
+                    <div className="bg-red-50 border border-red-200 rounded p-2">
+                      <p className="text-xs text-red-800">{job.error_message}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {syncJobs.length === 0 && (
+                <p className="text-center text-gray-500 py-8">No sync history yet</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!deletingSource} onOpenChange={() => setDeletingSource(null)}>
           <AlertDialogContent>
