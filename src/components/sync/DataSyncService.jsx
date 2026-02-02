@@ -138,28 +138,30 @@ class DataSyncService {
     console.log(`[DataSync] 🚀 Starting batched sync for ${accountIds.length} accounts`);
 
     let currentIndex = 0;
+    let currentPage = 1;
     let totalCreated = 0;
-    const batchSize = 25; // Process 25 accounts per batch
 
     while (currentIndex < accountIds.length) {
-      console.log(`[DataSync] 📦 Batch starting at index ${currentIndex}`);
+      console.log(`[DataSync] 📦 Batch starting at index ${currentIndex}, page ${currentPage}`);
 
       try {
         // Call backend batch function
         const result = await base44.functions.invoke('syncCtmBatch', {
           dataSourceId: dataSource.id,
-          startIndex: currentIndex,
-          maxRecordsPerBatch: 2500
+          startAccountIndex: currentIndex,
+          startPage: currentPage,
+          maxRecords: 500
         });
 
         if (!result.data?.success) {
           throw new Error(result.data?.error || 'Batch sync failed');
         }
 
-        const { processedCount, totalSaved, nextStartIndex, isComplete } = result.data;
+        const { recordsSaved, nextAccountIndex, nextPage, isComplete } = result.data;
 
-        totalCreated += totalSaved;
-        currentIndex = nextStartIndex;
+        totalCreated += recordsSaved || 0;
+        currentIndex = nextAccountIndex;
+        currentPage = nextPage || 1;
 
         // Update progress
         const progress = Math.round((currentIndex / accountIds.length) * 100);
