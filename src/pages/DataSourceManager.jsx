@@ -600,16 +600,18 @@ export default function DataSourceManager() {
                     )}
                     
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-2"
-                        onClick={() => triggerSyncMutation.mutate(source.id)}
-                        disabled={!source.enabled || triggerSyncMutation.isPending || isAnySyncRunning}
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                        Sync
-                      </Button>
+                      {!isStorm && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 gap-2"
+                          onClick={() => triggerSyncMutation.mutate(source.id)}
+                          disabled={!source.enabled || triggerSyncMutation.isPending || isAnySyncRunning}
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Sync
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
