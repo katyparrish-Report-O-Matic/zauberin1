@@ -61,7 +61,19 @@ Deno.serve(async (req) => {
       : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     let totalSaved = 0;
-    const isAgencyLevel = apiKey.includes(':');
+    
+    // Parse API credentials
+    let auth;
+    if (apiKey.includes(':')) {
+      const [access, secret] = apiKey.split(':');
+      const encoder = new TextEncoder();
+      const data = encoder.encode(`${access}:${secret}`);
+      auth = btoa(String.fromCharCode(...data));
+    } else {
+      auth = apiKey;
+    }
+
+    const baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
 
     // Get account regions
     const accountHierarchies = await base44.asServiceRole.entities.AccountHierarchy.filter({
@@ -82,37 +94,108 @@ Deno.serve(async (req) => {
       try {
         console.log(`[CTM Batch] [${i+1}/${batchAccountIds.length}] Fetching account ${accountId}`);
 
-        const result = await base44.asServiceRole.functions.invoke('syncCallTrackingData', {
-          accountId: String(accountId),
-          startDate,
-          endDate,
-          apiKey,
-          isAgencyLevel,
-          includeRawCalls: true,
-          accountRegion,
-          dataSourceId: dataSource.id
-        });
-
-        if (!result.data?.success) {
-          console.warn(`[CTM Batch] Account ${accountId} failed:`, result.data?.error);
-          continue;
+        // Fetch account metadata
+        let accountName = `Account ${accountId}`;
+        try {
+          const accountResponse = await fetch(`${baseUrl}/accounts/${accountId}.json`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${auth}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (accountResponse.ok) {
+            const accountData = await accountResponse.json();
+            accountName = accountData.name || accountName;
+          }
+        } catch (metaError) {
+          console.warn(`[CTM Batch] Could not fetch metadata for ${accountId}`);
         }
 
-        const callRecords = result.data.callRecords || [];
-        const accountName = result.data.account?.name || `Account ${accountId}`;
+        // Fetch calls for this account
+        let allCalls = [];
+        let page = 1;
+        const maxPages = 10;
 
-        // Save records immediately
-        if (callRecords.length > 0) {
-          const recordsToSave = callRecords.map(call => ({
-            organization_id: dataSource.organization_id,
-            data_source_id: dataSource.id,
-            account_id: String(accountId),
-            account_name: accountName,
-            region: accountRegion,
-            ...call
-          }));
+        while (page <= maxPages) {
+          const callsUrl = `${baseUrl}/accounts/${accountId}/calls.json?page=${page}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
+          
+          const callsResponse = await fetch(callsUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${auth}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-          const created = await base44.asServiceRole.entities.CallRecord.bulkCreate(recordsToSave);
+          if (!callsResponse.ok) {
+            console.warn(`[CTM Batch] Account ${accountId} page ${page} failed: ${callsResponse.status}`);
+            break;
+          }
+
+          const callsData = await callsResponse.json();
+          const calls = callsData.calls || [];
+          
+          if (calls.length === 0) break;
+          
+          allCalls = allCalls.concat(calls);
+          
+          if (calls.length < 100) break;
+          page++;
+        }
+
+        console.log(`[CTM Batch] Account ${accountId}: ${allCalls.length} calls fetched`);
+
+        // Process and save call records
+        if (allCalls.length > 0) {
+          const callRecords = allCalls
+            .filter(call => call.called_at)
+            .map(call => {
+              const isVoicemail = call.call_status === 'voicemail' || call.status === 'voicemail';
+              const isAnswered = call.talk_time && call.talk_time > 0;
+              const isWorkingHours = call.custom_fields?.working_hours === 'Working Hours';
+
+              return {
+                organization_id: dataSource.organization_id,
+                data_source_id: dataSource.id,
+                account_id: String(accountId),
+                account_name: accountName,
+                region: accountRegion,
+                call_id: String(call.id),
+                tracking_number: call.tracking_number,
+                caller_number: call.caller_number,
+                start_time: call.called_at,
+                duration: call.duration || 0,
+                talk_time: call.talk_time || 0,
+                call_status: call.call_status || (isVoicemail ? 'voicemail' : (isAnswered ? 'answered' : 'missed')),
+                is_voicemail: isVoicemail,
+                is_working_hours: isWorkingHours,
+                qualified: call.qualified || false,
+                sale_status: call.sale_status,
+                first_time_caller: call.is_new_caller || false,
+                keypress: call.keypress,
+                web_source: call.web_source || call.source,
+                web_medium: call.medium,
+                web_campaign: call.ga?.campaign,
+                web_keyword: call.webvisit?.keywords,
+                landing_page: call.webvisit?.location_host && call.webvisit?.location_path 
+                  ? `https://${call.webvisit.location_host}${call.webvisit.location_path}` 
+                  : call.last_location,
+                referrer: call.webvisit?.referrer_host && call.webvisit?.referrer_path
+                  ? `https://${call.webvisit.referrer_host}${call.webvisit.referrer_path}`
+                  : call.referrer,
+                city: call.city,
+                state: call.state,
+                country: call.country,
+                recording_url: call.audio,
+                transcription: call.transcription_text,
+                tags: call.tag_list || [],
+                custom_fields: call.custom_fields || {},
+                sync_date: new Date().toISOString().split('T')[0]
+              };
+            });
+
+          const created = await base44.asServiceRole.entities.CallRecord.bulkCreate(callRecords);
           const savedCount = Array.isArray(created) ? created.length : 0;
           totalSaved += savedCount;
           console.log(`[CTM Batch] Account ${accountId} saved ${savedCount} records`);
@@ -145,7 +228,7 @@ Deno.serve(async (req) => {
         }
 
         // Small delay to prevent rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
 
       } catch (error) {
         console.error(`[CTM Batch] Account ${accountId} error:`, error.message);
