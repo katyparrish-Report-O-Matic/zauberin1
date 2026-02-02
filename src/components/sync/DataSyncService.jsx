@@ -125,17 +125,15 @@ class DataSyncService {
   }
 
   /**
-   * SIMPLIFIED: Sync call tracking data - Store CallRecords ONLY
-   * Reports will aggregate on-demand from CallRecords
+   * SIMPLIFIED: Sync call tracking data - Store CallRecords IMMEDIATELY after each fetch
+   * KEY CHANGE: Save after each account fetch instead of accumulating in memory
    */
   async syncCallTracking(syncJob, dataSource) {
-    let recordsSynced = 0;
-    let recordsCreated = 0;
-    let recordsUpdated = 0;
-
     const accountIds = dataSource.account_ids || [];
     const apiKey = dataSource.credentials?.api_key || dataSource.credentials?.access_token;
     const isAgencyLevel = dataSource.metadata?.access_level === 'agency' || apiKey.includes(':');
+    const organizationId = dataSource.organization_id;
+    const dataSourceId = dataSource.id;
 
     if (accountIds.length === 0) {
       throw new Error('No account IDs configured for Call Tracking sync');
@@ -145,13 +143,7 @@ class DataSyncService {
       throw new Error('No API credentials found for Call Tracking sync');
     }
 
-    console.log(`[DataSync] 🚀 Syncing ${accountIds.length} account(s) - storing raw call records only`);
-
-    // STEP 1: Fetch all accounts in parallel (0% → 50%)
-    await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: `Fetching ${accountIds.length} account(s) with call data...`,
-      progress_percentage: 10
-    });
+    console.log(`[DataSync] 🚀 Syncing ${accountIds.length} account(s) - saving after each fetch`);
 
     // Get account hierarchy records for region info
     const accountHierarchies = await base44.entities.AccountHierarchy.filter({
@@ -165,189 +157,170 @@ class DataSyncService {
       }
     });
 
-    // Process accounts SEQUENTIALLY with rate limiting (not in parallel)
-    const accountResults = [];
-    const ACCOUNT_DELAY = 200; // 200ms between account syncs to avoid base44 rate limits
+    let totalCreated = 0;
+    let totalFetched = 0;
+    let failedAccounts = [];
 
-    for (let index = 0; index < accountIds.length; index++) {
-      const accountId = accountIds[index];
+    // Process ONE account at a time - fetch then IMMEDIATELY save
+    for (let i = 0; i < accountIds.length; i++) {
+      const accountId = accountIds[i];
       const accountRegion = accountRegionMap[String(accountId)] || null;
-      
-      // Rate limit between accounts
-      if (index > 0) {
-        await new Promise(resolve => setTimeout(resolve, ACCOUNT_DELAY));
-      }
 
-      console.log(`[DataSync] 📞 [${index + 1}/${accountIds.length}] Fetching account ${accountId} (Region: ${accountRegion || 'None'})`);
-
-      const result = await base44.functions.invoke('syncCallTrackingData', {
-        accountId: String(accountId),
-        startDate: syncJob.date_range.start_date,
-        endDate: syncJob.date_range.end_date,
-        apiKey,
-        isAgencyLevel,
-        includeRawCalls: true,
-        accountRegion
-      });
-
-      if (!result.data?.success) {
-        throw new Error(result.data?.error || `Account ${accountId} failed`);
-      }
-
-      const progressIncrement = 30 / accountIds.length;
-      const currentProgress = 10 + ((index + 1) * progressIncrement);
-
-      await base44.entities.SyncJob.update(syncJob.id, {
-        current_step: `Fetched ${index + 1}/${accountIds.length}: ${result.data.account.name} (${result.data.totalCalls} calls)`,
-        progress_percentage: Math.round(currentProgress)
-      });
-
-      accountResults.push({
-        accountId: String(accountId),
-        accountName: result.data.account.name,
-        accountMetadata: result.data.account,
-        callRecords: result.data.callRecords || [],
-        callCount: result.data.totalCalls
-      });
-    }
-
-    const totalCalls = accountResults.reduce((sum, r) => sum + r.callCount, 0);
-    console.log(`[DataSync] ✅ Fetched ${totalCalls} total calls from ${accountResults.length} accounts`);
-
-    // STEP 2: Update AccountHierarchy (40% → 50%)
-    await base44.entities.SyncJob.update(syncJob.id, {
-      current_step: `Updating account hierarchy...`,
-      progress_percentage: 40
-    });
-
-    for (const accountResult of accountResults) {
       try {
-        const existing = await base44.entities.AccountHierarchy.filter({
-          data_source_id: dataSource.id,
-          external_id: accountResult.accountId
+        console.log(`[DataSync] 📞 [${i + 1}/${accountIds.length}] Fetching account ${accountId} (Region: ${accountRegion || 'None'})`);
+
+        // 1. FETCH this account's data
+        const result = await base44.functions.invoke('syncCallTrackingData', {
+          accountId: String(accountId),
+          startDate: syncJob.date_range?.start_date,
+          endDate: syncJob.date_range?.end_date,
+          apiKey,
+          isAgencyLevel,
+          includeRawCalls: true,
+          accountRegion
         });
 
-        if (existing.length === 0) {
-          await base44.entities.AccountHierarchy.create({
-            organization_id: dataSource.organization_id,
-            data_source_id: dataSource.id,
-            platform_type: dataSource.platform_type,
-            hierarchy_level: 'account',
-            external_id: accountResult.accountId,
-            name: accountResult.accountName,
-            region: accountResult.accountMetadata.region,
-            status: accountResult.accountMetadata.status || 'active',
-            metadata: {
-              synced_at: new Date().toISOString(),
-              timezone: accountResult.accountMetadata.timezone,
-              country: accountResult.accountMetadata.country
-            },
-            last_updated: new Date().toISOString()
-          });
-          console.log(`[DataSync] ✓ Created AccountHierarchy: ${accountResult.accountName}`);
-        } else {
-          await base44.entities.AccountHierarchy.update(existing[0].id, {
-            name: accountResult.accountName,
-            region: accountResult.accountMetadata.region || existing[0].region,
-            status: accountResult.accountMetadata.status || 'active',
-            last_updated: new Date().toISOString()
-          });
+        if (!result.data?.success) {
+          console.log(`[DataSync] ⚠️ Account ${accountId} failed: ${result.data?.error}`);
+          failedAccounts.push({ accountId, error: result.data?.error });
+          continue; // Skip to next account
         }
+
+        const callRecords = result.data.callRecords || [];
+        const accountName = result.data.account?.name || `Account ${accountId}`;
+        const accountMetadata = result.data.account || {};
+        totalFetched += callRecords.length;
+
+        console.log(`[DataSync] 📥 Account ${accountId} returned ${callRecords.length} records`);
+
+        // 2. Update/Create AccountHierarchy for this account
+        try {
+          const existing = await base44.entities.AccountHierarchy.filter({
+            data_source_id: dataSource.id,
+            external_id: String(accountId)
+          });
+
+          if (existing.length === 0) {
+            await base44.entities.AccountHierarchy.create({
+              organization_id: organizationId,
+              data_source_id: dataSourceId,
+              platform_type: dataSource.platform_type,
+              hierarchy_level: 'account',
+              external_id: String(accountId),
+              name: accountName,
+              region: accountRegion || accountMetadata.region,
+              status: accountMetadata.status || 'active',
+              metadata: {
+                synced_at: new Date().toISOString(),
+                timezone: accountMetadata.timezone,
+                country: accountMetadata.country
+              },
+              last_updated: new Date().toISOString()
+            });
+            console.log(`[DataSync] ✓ Created AccountHierarchy: ${accountName}`);
+          } else {
+            await base44.entities.AccountHierarchy.update(existing[0].id, {
+              name: accountName,
+              region: accountRegion || accountMetadata.region || existing[0].region,
+              status: accountMetadata.status || 'active',
+              last_updated: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          console.error(`[DataSync] ⚠️ AccountHierarchy update failed for ${accountId}:`, error.message);
+        }
+
+        // 3. IMMEDIATELY SAVE this account's records (don't wait for other accounts)
+        if (callRecords.length > 0) {
+          const recordsToSave = callRecords.map(call => ({
+            organization_id: organizationId,
+            data_source_id: dataSourceId,
+            account_id: String(accountId),
+            account_name: accountName,
+            region: accountRegion || accountMetadata.region || null,
+            call_id: String(call.call_id || call.id),
+            tracking_number: call.tracking_number || null,
+            caller_number: call.caller_number || null,
+            start_time: call.start_time || call.called_at,
+            end_time: call.end_time || null,
+            duration: call.duration || 0,
+            talk_time: call.talk_time || 0,
+            call_status: call.call_status || call.status || 'unknown',
+            is_voicemail: call.is_voicemail || false,
+            is_working_hours: call.is_working_hours !== false,
+            qualified: call.qualified || false,
+            sale_status: call.sale_status || null,
+            first_time_caller: call.first_time_caller || false,
+            keypress: call.keypress || null,
+            web_source: call.web_source || call.source || null,
+            web_medium: call.web_medium || null,
+            web_campaign: call.web_campaign || call.campaign || null,
+            web_campaign_id: call.web_campaign_id || null,
+            web_keyword: call.web_keyword || call.keyword || null,
+            web_visit_keywords: call.web_visit_keywords || null,
+            web_ad_group_id: call.web_ad_group_id || null,
+            web_adgroup_id: call.web_adgroup_id || null,
+            web_creative_id: call.web_creative_id || null,
+            web_ad_network: call.web_ad_network || null,
+            web_ad_match_type: call.web_ad_match_type || null,
+            web_ad_slot: call.web_ad_slot || null,
+            web_ad_slot_position: call.web_ad_slot_position || null,
+            web_ad_targeting_type: call.web_ad_targeting_type || null,
+            landing_page: call.landing_page || null,
+            referrer: call.referrer || null,
+            city: call.city || null,
+            state: call.state || null,
+            country: call.country || null,
+            recording_url: call.recording_url || null,
+            transcription: call.transcription || null,
+            tags: call.tags || [],
+            custom_fields: call.custom_fields || {},
+            sync_date: new Date().toISOString().split('T')[0]
+          }));
+
+          try {
+            const created = await base44.entities.CallRecord.bulkCreate(recordsToSave);
+            const createdCount = Array.isArray(created) ? created.length : 0;
+            totalCreated += createdCount;
+            console.log(`[DataSync] ✅ Account ${accountId} SAVED ${createdCount} records (total: ${totalCreated})`);
+          } catch (saveError) {
+            console.error(`[DataSync] ❌ Account ${accountId} SAVE FAILED:`, saveError.message);
+            failedAccounts.push({ accountId, error: saveError.message });
+          }
+        } else {
+          console.log(`[DataSync] ⏭️ Account ${accountId} has 0 records - skipping save`);
+        }
+
+        // 4. UPDATE PROGRESS after each account
+        const progress = Math.round(((i + 1) / accountIds.length) * 100);
+        await base44.entities.SyncJob.update(syncJob.id, {
+          progress_percentage: progress,
+          records_synced: totalFetched,
+          records_created: totalCreated,
+          current_step: `Processed ${i + 1}/${accountIds.length} accounts (${totalCreated} records saved)`
+        });
+
       } catch (error) {
-        console.error(`[DataSync] ⚠️ AccountHierarchy update failed for ${accountResult.accountId}:`, error.message);
+        console.error(`[DataSync] ❌ Account ${accountId} ERROR:`, error.message);
+        failedAccounts.push({ accountId, error: error.message });
+        // Continue to next account - don't kill the whole sync
       }
+
+      // Small delay to prevent rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // STEP 3: Store CallRecords per account (50% → 100%)
-    let totalCreated = 0;
-    
-    for (let index = 0; index < accountResults.length; index++) {
-      const accountResult = accountResults[index];
-      
-      const progressBase = 50;
-      const progressIncrement = 50 / accountResults.length;
-      const currentProgress = progressBase + ((index + 1) * progressIncrement);
-      
-      await base44.entities.SyncJob.update(syncJob.id, {
-        current_step: `Saving calls from account ${index + 1}/${accountResults.length}: ${accountResult.accountName}...`,
-        progress_percentage: Math.round(currentProgress)
-      });
-      
-      // Skip accounts with no calls
-      if (!accountResult.callRecords || accountResult.callRecords.length === 0) {
-        console.log(`[DataSync] ⊘ Account ${accountResult.accountId} has no calls, skipping`);
-        continue;
-      }
-      
-      // Build and save call records for this account
-       const accountCallRecords = accountResult.callRecords.map(call => ({
-         organization_id: dataSource.organization_id,
-         data_source_id: dataSource.id,
-         account_id: accountResult.accountId,
-         account_name: accountResult.accountName,
-         region: accountResult.accountMetadata.region || null,
-         call_id: call.call_id,
-         tracking_number: call.tracking_number || null,
-         caller_number: call.caller_number || null,
-         start_time: call.start_time,
-         end_time: call.end_time || null,
-         duration: call.duration || 0,
-         talk_time: call.talk_time || 0,
-         call_status: call.call_status || 'unknown',
-         is_voicemail: call.is_voicemail || false,
-         is_working_hours: call.is_working_hours !== false,
-         qualified: call.qualified || false,
-         sale_status: call.sale_status || null,
-         first_time_caller: call.first_time_caller || false,
-         keypress: call.keypress || null,
-         web_source: call.web_source || null,
-         web_medium: call.web_medium || null,
-         web_campaign: call.web_campaign || null,
-         web_campaign_id: call.web_campaign_id || null,
-         web_keyword: call.web_keyword || null,
-         web_visit_keywords: call.web_visit_keywords || null,
-         web_ad_group_id: call.web_ad_group_id || null,
-         web_adgroup_id: call.web_adgroup_id || null,
-         web_creative_id: call.web_creative_id || null,
-         web_ad_network: call.web_ad_network || null,
-         web_ad_match_type: call.web_ad_match_type || null,
-         web_ad_slot: call.web_ad_slot || null,
-         web_ad_slot_position: call.web_ad_slot_position || null,
-         web_ad_targeting_type: call.web_ad_targeting_type || null,
-         landing_page: call.landing_page || null,
-         referrer: call.referrer || null,
-         city: call.city || null,
-         state: call.state || null,
-         country: call.country || null,
-         recording_url: call.recording_url || null,
-         transcription: call.transcription || null,
-         tags: call.tags || [],
-         custom_fields: call.custom_fields || {},
-         sync_date: call.sync_date
-       }));
-      
-      // Save this account's calls immediately
-      console.log(`[DataSync] 💾 Attempting to save ${accountCallRecords.length} records for account ${accountResult.accountId}`);
-      console.log(`[DataSync] 📋 First record sample:`, JSON.stringify(accountCallRecords[0], null, 2));
-
-      try {
-        const created = await base44.entities.CallRecord.bulkCreate(accountCallRecords);
-        totalCreated += created.length;
-        console.log(`[DataSync] ✓ Account ${accountResult.accountId}: Saved ${created.length} calls (response: ${JSON.stringify(created)})`);
-      } catch (error) {
-        console.error(`[DataSync] ❌ Account ${accountResult.accountId}: Failed to save calls`);
-        console.error(`[DataSync] Error details:`, error);
-        console.error(`[DataSync] Records being saved:`, JSON.stringify(accountCallRecords.slice(0, 2)));
-        throw error;
-      }
+    // 5. FINAL STATUS
+    console.log(`[DataSync] 🏁 Sync complete: ${totalCreated} records saved from ${accountIds.length} accounts`);
+    if (failedAccounts.length > 0) {
+      console.log(`[DataSync] ⚠️ ${failedAccounts.length} accounts failed:`, failedAccounts);
     }
-    
-    recordsCreated = totalCreated;
-    recordsSynced = totalCalls;
 
-    console.log(`[DataSync] ✅ Successfully stored ${recordsCreated} total call records`);
-
-    return { recordsSynced, recordsCreated, recordsUpdated };
+    return {
+      recordsSynced: totalFetched,
+      recordsCreated: totalCreated,
+      recordsUpdated: 0
+    };
   }
 
   async syncGoogleAds(syncJob, dataSource) {
