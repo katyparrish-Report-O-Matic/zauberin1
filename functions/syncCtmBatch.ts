@@ -238,8 +238,8 @@ Deno.serve(async (req) => {
           // Check which already exist in database
           const existingRecords = await base44.asServiceRole.entities.CallRecord.filter({
             call_id: { $in: callIds }
-          }).select('call_id');
-          
+          });
+
           const existingCallIds = new Set(existingRecords.map(r => r.call_id));
           
           // Filter to only new records
