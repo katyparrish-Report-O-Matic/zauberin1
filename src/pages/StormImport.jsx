@@ -65,10 +65,11 @@ export default function StormImport() {
           const reader = new FileReader();
            reader.onload = (event) => {
              try {
-               const data = new Uint8Array(event.target.result);
-               const workbook = XLSX.read(data, { type: 'array' });
-               const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-               const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+               const text = event.target.result;
+               const lines = text.split('\n').filter(line => line.trim());
+               const rows = lines.map(line => {
+                 return line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
+               });
 
                console.log('Parsed rows:', rows.length);
                console.log('First row (headers):', rows[0]);
