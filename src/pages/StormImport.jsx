@@ -67,7 +67,6 @@ export default function StormImport() {
     if (!selectedFile) return;
 
     setFile(selectedFile);
-    setFileSize(selectedFile.size);
     setError(null);
     setResult(null);
 
@@ -259,7 +258,7 @@ export default function StormImport() {
         total: parsedData.length,
         imported,
         skipped: parsedData.length - imported,
-        message: `Successfully imported ${imported} call records from ${(fileSize / 1024 / 1024).toFixed(2)} MB file`
+        message: `Successfully imported ${imported} call records`
       });
 
     } catch (err) {
