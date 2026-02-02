@@ -68,47 +68,53 @@ export default function StormImport() {
              try {
                const data = new Uint8Array(event.target.result);
                const workbook = XLSX.read(data, { type: 'array' });
-              const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-              const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+               const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+               const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-          if (rows.length < 2) {
-            setError('File must contain headers and at least one data row');
-            return;
-          }
+               console.log('Parsed rows:', rows.length);
+               console.log('First row (headers):', rows[0]);
 
-          // Expected headers
-          const headers = rows[0];
-          const dateTimeIdx = headers.indexOf('date_time');
-          const ctNumberIdx = headers.indexOf('ct_number');
-          const callEndIdx = headers.indexOf('call_end');
-          const callIdIdx = headers.indexOf('call_id');
-          const durationIdx = headers.indexOf('Call Duration');
-          const numberIdIdx = headers.indexOf('Number ID');
+           if (rows.length < 2) {
+             setError('File must contain headers and at least one data row');
+             return;
+           }
 
-          if (dateTimeIdx === -1 || ctNumberIdx === -1 || callIdIdx === -1 || durationIdx === -1 || numberIdIdx === -1) {
-            setError('Missing required columns: date_time, ct_number, call_id, Call Duration, Number ID');
-            return;
-          }
+           // Expected headers
+           const headers = rows[0];
+           const dateTimeIdx = headers.indexOf('date_time');
+           const ctNumberIdx = headers.indexOf('ct_number');
+           const callEndIdx = headers.indexOf('call_end');
+           const callIdIdx = headers.indexOf('call_id');
+           const durationIdx = headers.indexOf('Call Duration');
+           const numberIdIdx = headers.indexOf('Number ID');
 
-          // Parse all data rows
-          const parsed = rows.slice(1).map((row, idx) => {
-            const { account_name, tracking_number_description } = parseNumberId(row[numberIdIdx]);
+           console.log('Header indices:', { dateTimeIdx, ctNumberIdx, callEndIdx, callIdIdx, durationIdx, numberIdIdx });
 
-            return {
-              start_time: row[dateTimeIdx],
-              end_time: row[callEndIdx],
-              tracking_number: String(row[ctNumberIdx] || ''),
-              call_id: String(row[callIdIdx] || ''),
-              duration: parseTimeToSeconds(row[durationIdx]),
-              account_name,
-              tracking_number_description,
-              data_source: 'storm',
-              sync_date: new Date().toISOString().split('T')[0]
-            };
-          }).filter(record => record.call_id); // Skip rows without call_id
+           if (dateTimeIdx === -1 || ctNumberIdx === -1 || callIdIdx === -1 || durationIdx === -1 || numberIdIdx === -1) {
+             setError('Missing required columns. Found: ' + headers.join(', '));
+             return;
+           }
 
-          setParsedData(parsed);
-          setPreview(parsed.slice(0, 20)); // Show first 20
+           // Parse all data rows
+           const parsed = rows.slice(1).map((row, idx) => {
+             const { account_name, tracking_number_description } = parseNumberId(row[numberIdIdx]);
+
+             return {
+               start_time: row[dateTimeIdx],
+               end_time: row[callEndIdx],
+               tracking_number: String(row[ctNumberIdx] || ''),
+               call_id: String(row[callIdIdx] || ''),
+               duration: parseTimeToSeconds(row[durationIdx]),
+               account_name,
+               tracking_number_description,
+               data_source: 'storm',
+               sync_date: new Date().toISOString().split('T')[0]
+             };
+           }).filter(record => record.call_id); // Skip rows without call_id
+
+           console.log('Parsed records:', parsed.length);
+           setParsedData(parsed);
+           setPreview(parsed.slice(0, 20)); // Show first 20
 
         } catch (parseError) {
           setError(`Failed to parse file: ${parseError.message}`);
