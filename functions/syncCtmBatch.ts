@@ -232,9 +232,26 @@ Deno.serve(async (req) => {
             });
 
           if (callRecords.length > 0) {
-            await base44.asServiceRole.entities.CallRecord.bulkCreate(callRecords);
-            recordsSaved += callRecords.length;
-            console.log(`[CTM Batch] Page ${currentPage}: saved ${callRecords.length} records (total: ${recordsSaved})`);
+            // Get call_ids from this batch
+            const callIds = callRecords.map(r => r.call_id);
+
+            // Check which already exist in database
+            const existingRecords = await base44.asServiceRole.entities.CallRecord.filter({
+              call_id: { $in: callIds }
+            }).select('call_id');
+
+            const existingCallIds = new Set(existingRecords.map(r => r.call_id));
+
+            // Filter to only new records
+            const newRecords = callRecords.filter(r => !existingCallIds.has(r.call_id));
+            const skippedCount = callRecords.length - newRecords.length;
+
+            if (newRecords.length > 0) {
+              await base44.asServiceRole.entities.CallRecord.bulkCreate(newRecords);
+            }
+
+            recordsSaved += newRecords.length;
+            console.log(`[CTM Batch] Page ${currentPage}: saved ${newRecords.length} new, skipped ${skippedCount} duplicates (total: ${recordsSaved})`);
           }
 
           pagesFetched++;
