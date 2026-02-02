@@ -64,10 +64,10 @@ export default function StormImport() {
 
     try {
           const reader = new FileReader();
-          reader.onload = (event) => {
-            try {
-              const data = event.target.result;
-              const workbook = XLSX.read(data, { type: 'binary' });
+           reader.onload = (event) => {
+             try {
+               const data = event.target.result;
+               const workbook = XLSX.read(data, { type: 'array' });
               const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
               const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
