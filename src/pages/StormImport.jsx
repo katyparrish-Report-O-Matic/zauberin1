@@ -239,6 +239,21 @@ export default function StormImport() {
         }
       }
 
+      // Create SyncJob record for tracking
+      await base44.entities.SyncJob.create({
+        organization_id: userOrg.id,
+        data_source_id: dataSourceId,
+        sync_type: 'manual',
+        status: 'completed',
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        records_synced: imported,
+        records_created: imported,
+        records_updated: 0,
+        records_failed: 0,
+        progress_percentage: 100
+      });
+
       setResult({
         total: parsedData.length,
         imported,
