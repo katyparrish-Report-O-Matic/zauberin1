@@ -148,6 +148,7 @@ export default function StormImport() {
     setError(null);
 
     try {
+      console.log('[StormImport] Starting import with', parsedData.length, 'records');
       // Get or create Storm data source
       let dataSource = await base44.entities.DataSource.filter({
         organization_id: userOrg.id,
