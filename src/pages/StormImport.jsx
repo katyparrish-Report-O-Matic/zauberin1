@@ -113,7 +113,7 @@ export default function StormImport() {
         }
       };
 
-      reader.readAsArrayBuffer(selectedFile);
+      reader.readAsBinaryString(selectedFile);
     } catch (err) {
       setError(`Error reading file: ${err.message}`);
     }
