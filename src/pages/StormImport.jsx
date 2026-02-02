@@ -22,14 +22,36 @@ const SimpleProgress = ({ value }) => (
 );
 
 export default function StormImport() {
-  const { userOrg } = usePermissions();
-  const [file, setFile] = useState(null);
-  const [parsedData, setParsedData] = useState(null);
-  const [preview, setPreview] = useState([]);
-  const [importing, setImporting] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
+   const { userOrg } = usePermissions();
+   const [file, setFile] = useState(null);
+   const [parsedData, setParsedData] = useState(null);
+   const [preview, setPreview] = useState([]);
+   const [importing, setImporting] = useState(false);
+   const [progress, setProgress] = useState(0);
+   const [result, setResult] = useState(null);
+   const [error, setError] = useState(null);
+
+   // Fetch Storm imports history
+   const { data: importHistory = [] } = useQuery({
+     queryKey: ['stormImports', userOrg?.id],
+     queryFn: async () => {
+       if (!userOrg) return [];
+       const dataSource = await base44.entities.DataSource.filter({
+         organization_id: userOrg.id,
+         platform_type: 'custom_api',
+         name: 'Storm Call Tracking'
+       });
+       if (!dataSource.length) return [];
+
+       const jobs = await base44.entities.SyncJob.filter(
+         { data_source_id: dataSource[0].id },
+         '-created_date',
+         50
+       );
+       return jobs;
+     },
+     enabled: !!userOrg
+   });
 
   // Parse "HH:MM:SS" to seconds
   const parseTimeToSeconds = (timeStr) => {
