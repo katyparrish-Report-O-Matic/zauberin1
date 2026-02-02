@@ -734,11 +734,6 @@ export default function DataSourceManager() {
                              <p className="text-xs text-gray-600">{job.current_step || 'Processing...'}</p>
                            </div>
                          )}
-
-                         {/* Filename for completed jobs */}
-                         {job.status === 'completed' && job.current_step && (
-                           <p className="text-xs text-gray-600">File: {job.current_step}</p>
-                         )}
                         
                         {/* Error message */}
                         {job.status === 'failed' && job.error_message && (
