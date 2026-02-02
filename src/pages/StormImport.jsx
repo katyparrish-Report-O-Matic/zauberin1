@@ -175,14 +175,17 @@ export default function StormImport() {
       console.log('[StormImport] Using DataSource:', dataSourceId);
 
       // Check for duplicate call_ids
+      console.log('[StormImport] Checking for duplicates among', parsedData.length, 'records');
       const callIds = parsedData.map(r => r.call_id);
       const existing = await base44.entities.CallRecord.filter({
         organization_id: userOrg.id,
         call_id: { $in: callIds }
       });
 
+      console.log('[StormImport] Found', existing.length, 'existing records');
       const existingIds = new Set(existing.map(r => r.call_id));
       const toImport = parsedData.filter(r => !existingIds.has(r.call_id));
+      console.log('[StormImport] Will import', toImport.length, 'new records');
 
       if (toImport.length === 0) {
         setResult({
