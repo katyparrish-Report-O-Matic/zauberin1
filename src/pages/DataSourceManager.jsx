@@ -540,9 +540,8 @@ export default function DataSourceManager() {
 
             {/* Data Sources Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {dataSources.map(source => {
+              {dataSources.filter(source => !source.name.toLowerCase().includes('storm')).map(source => {
                 const lastJob = lastSyncJobs[source.id];
-                const isStorm = source.name.toLowerCase().includes('storm');
 
                 return (
                 <Card key={source.id} className="hover:shadow-lg transition-shadow">
@@ -575,26 +574,7 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.account_ids.length} connected</p>
                       </div>
                     )}
-                    {isStorm && (
-                      lastJob ? (
-                        <div className="text-sm space-y-1">
-                          <div>
-                            <span className="text-gray-600">Last import:</span>
-                            <p className="font-medium">{format(new Date(lastJob.created_date), "MMM d, h:mm a")}</p>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Records:</span>
-                            <p className="font-medium">{(lastJob.records_synced || 0).toLocaleString()}</p>
-                          </div>
-                          <p className="text-xs text-gray-500 capitalize">Status: {lastJob.status}</p>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">
-                          <p>No imports yet</p>
-                        </div>
-                      )
-                    )}
-                    {!isStorm && source.last_sync_at && (
+                    {source.last_sync_at && (
                       <div className="text-sm">
                         <span className="text-gray-600">Last sync:</span>
                         <p className="font-medium">{format(new Date(source.last_sync_at), "MMM d, h:mm a")}</p>
@@ -610,20 +590,18 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.total_records_synced.toLocaleString()}</p>
                       </div>
                     )}
-                    
+
                     <div className="flex gap-2">
-                      {!isStorm && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 gap-2"
-                          onClick={() => triggerSyncMutation.mutate(source.id)}
-                          disabled={!source.enabled || triggerSyncMutation.isPending || isAnySyncRunning}
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          Sync
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-2"
+                        onClick={() => triggerSyncMutation.mutate(source.id)}
+                        disabled={!source.enabled || triggerSyncMutation.isPending || isAnySyncRunning}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Sync
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -640,7 +618,7 @@ export default function DataSourceManager() {
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
-                    
+
                     <Button
                       variant="ghost"
                       size="sm"
@@ -648,7 +626,7 @@ export default function DataSourceManager() {
                       onClick={() => setSelectedSource(source)}
                     >
                       <SettingsIcon className="w-3 h-3" />
-                      {isStorm ? 'View Import History' : 'View Sync History'}
+                      View Sync History
                     </Button>
                   </CardContent>
                   </Card>
