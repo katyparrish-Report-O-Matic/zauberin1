@@ -15,17 +15,23 @@ Deno.serve(async (req) => {
 
     console.log('[Dedupe] Starting duplicate removal...');
 
-    // Fetch all CallRecords in batches
+    // Fetch CallRecords from today only (where duplicates were created)
+    const today = new Date().toISOString().split('T')[0];
     let allRecords = [];
     let skip = 0;
     const batchSize = 500;
     
     while (true) {
-      const batch = await base44.asServiceRole.entities.CallRecord.filter({}, 'created_date', batchSize, skip);
+      const batch = await base44.asServiceRole.entities.CallRecord.filter(
+        { sync_date: today },
+        'created_date', 
+        batchSize, 
+        skip
+      );
       if (!batch || batch.length === 0) break;
       allRecords = allRecords.concat(batch);
       skip += batchSize;
-      console.log(`[Dedupe] Fetched ${allRecords.length} records so far...`);
+      console.log(`[Dedupe] Fetched ${allRecords.length} records from today...`);
       if (batch.length < batchSize) break;
     }
     
