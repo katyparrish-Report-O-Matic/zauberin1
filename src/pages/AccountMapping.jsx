@@ -5,11 +5,44 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Link2, Trash2, Loader2, Building2, Phone } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Link2, Trash2, Loader2, Building2, Phone, AlertTriangle } from "lucide-react";
+
+// Simple fuzzy match scoring
+function calculateMatchScore(str1, str2) {
+  if (!str1 || !str2) return 0;
+  
+  const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  if (s1 === s2) return 100;
+  if (s1.includes(s2) || s2.includes(s1)) return 80;
+  
+  // Check word overlap
+  const words1 = str1.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const words2 = str2.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  
+  let matchingWords = 0;
+  for (const w1 of words1) {
+    for (const w2 of words2) {
+      if (w1.includes(w2) || w2.includes(w1)) {
+        matchingWords++;
+        break;
+      }
+    }
+  }
+  
+  const totalWords = Math.max(words1.length, words2.length);
+  if (totalWords === 0) return 0;
+  
+  return Math.round((matchingWords / totalWords) * 70);
+}
 
 export default function AccountMapping() {
   const [selectedSalesforce, setSelectedSalesforce] = useState('');
   const [selectedCtm, setSelectedCtm] = useState('');
+  const [wrongMatches, setWrongMatches] = useState({});
   const queryClient = useQueryClient();
 
   // Fetch Salesforce Accounts
@@ -21,11 +54,11 @@ export default function AccountMapping() {
     }
   });
 
-  // Fetch CTM Account Names (distinct from CallRecords)
-  const { data: callRecords, isLoading: callsLoading } = useQuery({
-    queryKey: ['allCallRecords'],
+  // Fetch CTM Accounts from AccountHierarchy (more complete than CallRecords)
+  const { data: ctmAccounts, isLoading: ctmLoading } = useQuery({
+    queryKey: ['ctmAccountHierarchy'],
     queryFn: async () => {
-      return await base44.entities.CallRecord.list();
+      return await base44.entities.AccountHierarchy.filter({ platform_type: 'call_tracking' });
     }
   });
 
@@ -37,15 +70,45 @@ export default function AccountMapping() {
     }
   });
 
-  // Get unique CTM account names
-  const ctmAccountNames = useMemo(() => {
-    if (!callRecords) return [];
-    const names = [...new Set(callRecords.map(r => r.account_name).filter(Boolean))];
-    return names.sort();
-  }, [callRecords]);
-
   // Get Salesforce accounts
   const salesforceAccounts = accountsData?.accounts || [];
+
+  // Calculate probable matches
+  const probableMatches = useMemo(() => {
+    if (!ctmAccounts || !salesforceAccounts.length) return [];
+
+    const sfNames = salesforceAccounts.map(a => ({
+      id: a.Id,
+      name: a.Company__r?.Name || a.Name,
+      saName: a.Name
+    }));
+
+    return ctmAccounts.map(ctm => {
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const sf of sfNames) {
+        const score = calculateMatchScore(ctm.name, sf.name);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = sf;
+        }
+      }
+
+      return {
+        ctmId: ctm.external_id,
+        ctmName: ctm.name,
+        sfMatch: bestMatch,
+        score: bestScore
+      };
+    }).sort((a, b) => b.score - a.score);
+  }, [ctmAccounts, salesforceAccounts]);
+
+  // Get unique CTM account names for manual mapping dropdown
+  const ctmAccountNames = useMemo(() => {
+    if (!ctmAccounts) return [];
+    return ctmAccounts.map(a => a.name).sort();
+  }, [ctmAccounts]);
 
   // Create mapping mutation
   const createMapping = useMutation({
