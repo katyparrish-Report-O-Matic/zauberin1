@@ -579,6 +579,7 @@ export default function DataSourceManager() {
                       <div className="text-sm">
                         <span className="text-gray-600">Last import:</span>
                         <p className="font-medium">{format(new Date(lastJob.created_date), "MMM d, h:mm a")}</p>
+                        <p className="text-xs text-gray-500 capitalize">Status: {lastJob.status}</p>
                       </div>
                     )}
                     {!isStorm && source.last_sync_at && (
