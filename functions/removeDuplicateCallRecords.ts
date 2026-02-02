@@ -15,8 +15,19 @@ Deno.serve(async (req) => {
 
     console.log('[Dedupe] Starting duplicate removal...');
 
-    // Fetch all CallRecords
-    const allRecords = await base44.asServiceRole.entities.CallRecord.list('created_date', 10000);
+    // Fetch all CallRecords in batches
+    let allRecords = [];
+    let skip = 0;
+    const batchSize = 500;
+    
+    while (true) {
+      const batch = await base44.asServiceRole.entities.CallRecord.filter({}, 'created_date', batchSize, skip);
+      if (!batch || batch.length === 0) break;
+      allRecords = allRecords.concat(batch);
+      skip += batchSize;
+      console.log(`[Dedupe] Fetched ${allRecords.length} records so far...`);
+      if (batch.length < batchSize) break;
+    }
     
     console.log(`[Dedupe] Found ${allRecords.length} total records`);
 
@@ -24,10 +35,14 @@ Deno.serve(async (req) => {
     const callIdMap = {};
     for (const record of allRecords) {
       const callId = record.call_id;
+      if (!callId) continue;
       if (!callIdMap[callId]) {
         callIdMap[callId] = [];
       }
-      callIdMap[callId].push(record);
+      callIdMap[callId].push({
+        id: record.id,
+        created_date: record.created_date
+      });
     }
 
     // Find duplicates (call_ids with more than 1 record)
@@ -50,15 +65,18 @@ Deno.serve(async (req) => {
 
     console.log(`[Dedupe] Will delete ${idsToDelete.length} duplicate records`);
 
-    // Delete in batches of 50
+    // Delete one by one
     let deleted = 0;
-    for (let i = 0; i < idsToDelete.length; i += 50) {
-      const batch = idsToDelete.slice(i, i + 50);
-      for (const id of batch) {
+    for (const id of idsToDelete) {
+      try {
         await base44.asServiceRole.entities.CallRecord.delete(id);
         deleted++;
+        if (deleted % 100 === 0) {
+          console.log(`[Dedupe] Deleted ${deleted}/${idsToDelete.length}`);
+        }
+      } catch (e) {
+        console.warn(`[Dedupe] Failed to delete ${id}: ${e.message}`);
       }
-      console.log(`[Dedupe] Deleted ${deleted}/${idsToDelete.length}`);
     }
 
     return Response.json({
