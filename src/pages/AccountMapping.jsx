@@ -144,7 +144,14 @@ export default function AccountMapping() {
     });
   };
 
-  const isLoading = accountsLoading || callsLoading || mappingsLoading;
+  const handleWrongMatchToggle = (ctmName, checked) => {
+    setWrongMatches(prev => ({
+      ...prev,
+      [ctmName]: checked
+    }));
+  };
+
+  const isLoading = accountsLoading || ctmLoading || mappingsLoading;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
