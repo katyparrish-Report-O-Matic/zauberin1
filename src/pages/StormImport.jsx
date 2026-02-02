@@ -27,6 +27,7 @@ export default function StormImport() {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [fileSize, setFileSize] = useState(null);
 
   // Parse "HH:MM:SS" to seconds
   const parseTimeToSeconds = (timeStr) => {
