@@ -183,16 +183,23 @@ export default function StormImport() {
       const dataSourceId = dataSource[0].id;
       console.log('[StormImport] Using DataSource:', dataSourceId);
 
-      // Check for duplicate call_ids
+      // Check for duplicate call_ids in batches (avoid URL length limits)
       console.log('[StormImport] Checking for duplicates among', parsedData.length, 'records');
       const callIds = parsedData.map(r => r.call_id);
-      const existing = await base44.entities.CallRecord.filter({
-        organization_id: userOrg.id,
-        call_id: { $in: callIds }
-      });
+      const existingIds = new Set();
 
-      console.log('[StormImport] Found', existing.length, 'existing records');
-      const existingIds = new Set(existing.map(r => r.call_id));
+      const batchCheckSize = 1000;
+      for (let i = 0; i < callIds.length; i += batchCheckSize) {
+        const batch = callIds.slice(i, i + batchCheckSize);
+        const existing = await base44.entities.CallRecord.filter({
+          organization_id: userOrg.id,
+          call_id: { $in: batch }
+        });
+        existing.forEach(r => existingIds.add(r.call_id));
+        console.log(`[StormImport] Checked batch ${Math.floor(i / batchCheckSize) + 1}, found ${existing.length} duplicates so far`);
+      }
+
+      console.log('[StormImport] Total existing records:', existingIds.size);
       const toImport = parsedData.filter(r => !existingIds.has(r.call_id));
       console.log('[StormImport] Will import', toImport.length, 'new records');
 
