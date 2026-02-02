@@ -112,27 +112,6 @@ export default function DataSourceManager() {
     }
   });
 
-  // Fetch latest sync job for each data source
-  const { data: latestSyncJobs = {} } = useQuery({
-    queryKey: ['latestSyncJobs', dataSources?.map(s => s.id).join(',')],
-    queryFn: async () => {
-      if (!dataSources?.length) return {};
-      const result = {};
-      for (const source of dataSources) {
-        const jobs = await base44.entities.SyncJob.filter(
-          { data_source_id: source.id },
-          '-completed_at',
-          1
-        );
-        if (jobs.length > 0) {
-          result[source.id] = jobs[0];
-        }
-      }
-      return result;
-    },
-    initialData: {}
-  });
-
   // Test connection and fetch accounts
   const testConnectionMutation = useMutation({
     mutationFn: async (credentials) => {
@@ -570,38 +549,10 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.account_ids.length} connected</p>
                       </div>
                     )}
-                    {latestSyncJobs[source.id] && (
+                    {source.last_sync_at && (
                       <div className="text-sm">
-                        <span className="text-gray-600">Last import:</span>
-                        <p className="font-medium">
-                          {latestSyncJobs[source.id].completed_at 
-                            ? format(new Date(latestSyncJobs[source.id].completed_at), "MMM d, h:mm a")
-                            : 'In progress'}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {latestSyncJobs[source.id].status === 'completed' && (
-                            <>
-                              <CheckCircle className="w-3 h-3 text-green-600" />
-                              <span className="text-xs text-green-600">
-                                {latestSyncJobs[source.id].records_created || latestSyncJobs[source.id].records_synced || 0} records
-                              </span>
-                            </>
-                          )}
-                          {latestSyncJobs[source.id].status === 'failed' && (
-                            <>
-                              <XCircle className="w-3 h-3 text-red-600" />
-                              <span className="text-xs text-red-600">Failed</span>
-                            </>
-                          )}
-                          {latestSyncJobs[source.id].status === 'in_progress' && (
-                            <>
-                              <RefreshCw className="w-3 h-3 text-blue-600 animate-spin" />
-                              <span className="text-xs text-blue-600">
-                                {latestSyncJobs[source.id].progress_percentage}%
-                              </span>
-                            </>
-                          )}
-                        </div>
+                        <span className="text-gray-600">Last sync:</span>
+                        <p className="font-medium">{format(new Date(source.last_sync_at), "MMM d, h:mm a")}</p>
                       </div>
                     )}
                     <div className="text-sm">

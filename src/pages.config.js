@@ -56,7 +56,6 @@ import BookViewer from './pages/BookViewer';
 import CacheManager from './pages/CacheManager';
 import DashboardBuilder from './pages/DashboardBuilder';
 import DataQuality from './pages/DataQuality';
-import DataSourceManager from './pages/DataSourceManager';
 import FilesManager from './pages/FilesManager';
 import HelpGuide from './pages/HelpGuide';
 import Home from './pages/Home';
@@ -72,9 +71,10 @@ import ReportTemplates from './pages/ReportTemplates';
 import SalesforceAccounts from './pages/SalesforceAccounts';
 import Settings from './pages/Settings';
 import StatusPage from './pages/StatusPage';
-import StormImport from './pages/StormImport';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
+import DataSourceManager from './pages/DataSourceManager';
+import StormImport from './pages/StormImport';
 import __Layout from './Layout.jsx';
 
 
@@ -88,7 +88,6 @@ export const PAGES = {
     "CacheManager": CacheManager,
     "DashboardBuilder": DashboardBuilder,
     "DataQuality": DataQuality,
-    "DataSourceManager": DataSourceManager,
     "FilesManager": FilesManager,
     "HelpGuide": HelpGuide,
     "Home": Home,
@@ -104,9 +103,10 @@ export const PAGES = {
     "SalesforceAccounts": SalesforceAccounts,
     "Settings": Settings,
     "StatusPage": StatusPage,
-    "StormImport": StormImport,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
+    "DataSourceManager": DataSourceManager,
+    "StormImport": StormImport,
 }
 
 export const pagesConfig = {
