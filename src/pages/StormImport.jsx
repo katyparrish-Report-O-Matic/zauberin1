@@ -80,6 +80,7 @@ export default function StormImport() {
           const headers = rows[0];
           const dateTimeIdx = headers.indexOf('date_time');
           const ctNumberIdx = headers.indexOf('ct_number');
+          const callEndIdx = headers.indexOf('call_end');
           const callIdIdx = headers.indexOf('call_id');
           const durationIdx = headers.indexOf('Call Duration');
           const numberIdIdx = headers.indexOf('Number ID');
