@@ -207,8 +207,8 @@ export default function StormImport() {
         return;
       }
 
-      // Import in batches of 100 (smaller batches to avoid timeout)
-      const batchSize = 100;
+      // Import in batches of 500
+      const batchSize = 500;
       let imported = 0;
 
       for (let i = 0; i < toImport.length; i += batchSize) {
@@ -221,14 +221,9 @@ export default function StormImport() {
           account_id: record.account_name || 'unknown' // Required field
         }));
 
-        try {
-          await base44.entities.CallRecord.bulkCreate(records);
-          imported += batch.length;
-        } catch (batchError) {
-          console.error('[StormImport] Batch error at index', i, ':', batchError);
-          throw batchError;
-        }
+        await base44.entities.CallRecord.bulkCreate(records);
 
+        imported += batch.length;
         setProgress(Math.round((imported / toImport.length) * 100));
       }
 
