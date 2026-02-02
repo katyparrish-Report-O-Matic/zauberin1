@@ -9,6 +9,16 @@ import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2 } from "luci
 import { usePermissions } from "../components/auth/usePermissions";
 import PermissionGuard from "../components/auth/PermissionGuard";
 
+// Simple inline progress bar
+const SimpleProgress = ({ value }) => (
+  <div className="w-full bg-gray-200 rounded-full h-2">
+    <div 
+      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+      style={{ width: `${value}%` }}
+    />
+  </div>
+);
+
 export default function StormImport() {
   const { userOrg } = usePermissions();
   const [file, setFile] = useState(null);
