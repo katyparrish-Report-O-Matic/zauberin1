@@ -575,18 +575,24 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.account_ids.length} connected</p>
                       </div>
                     )}
-                    {isStorm && lastJob && (
-                      <div className="text-sm space-y-1">
-                        <div>
-                          <span className="text-gray-600">Last import:</span>
-                          <p className="font-medium">{format(new Date(lastJob.created_date), "MMM d, h:mm a")}</p>
+                    {isStorm && (
+                      lastJob ? (
+                        <div className="text-sm space-y-1">
+                          <div>
+                            <span className="text-gray-600">Last import:</span>
+                            <p className="font-medium">{format(new Date(lastJob.created_date), "MMM d, h:mm a")}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Records:</span>
+                            <p className="font-medium">{(lastJob.records_synced || 0).toLocaleString()}</p>
+                          </div>
+                          <p className="text-xs text-gray-500 capitalize">Status: {lastJob.status}</p>
                         </div>
-                        <div>
-                          <span className="text-gray-600">Records:</span>
-                          <p className="font-medium">{(lastJob.records_synced || 0).toLocaleString()}</p>
+                      ) : (
+                        <div className="text-sm text-gray-500">
+                          <p>No imports yet</p>
                         </div>
-                        <p className="text-xs text-gray-500 capitalize">Status: {lastJob.status}</p>
-                      </div>
+                      )
                     )}
                     {!isStorm && source.last_sync_at && (
                       <div className="text-sm">
