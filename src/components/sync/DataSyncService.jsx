@@ -125,199 +125,70 @@ class DataSyncService {
   }
 
   /**
-   * SIMPLIFIED: Sync call tracking data - Store CallRecords IMMEDIATELY after each fetch
-   * KEY CHANGE: Save after each account fetch instead of accumulating in memory
+   * TRUE BATCHING: Sync call tracking data in small batches
+   * Multiple SHORT backend calls instead of one LONG call
    */
   async syncCallTracking(syncJob, dataSource) {
     const accountIds = dataSource.account_ids || [];
-    const apiKey = dataSource.credentials?.api_key || dataSource.credentials?.access_token;
-    const isAgencyLevel = dataSource.metadata?.access_level === 'agency' || apiKey.includes(':');
-    const organizationId = dataSource.organization_id;
-    const dataSourceId = dataSource.id;
-
+    
     if (accountIds.length === 0) {
       throw new Error('No account IDs configured for Call Tracking sync');
     }
 
-    if (!apiKey) {
-      throw new Error('No API credentials found for Call Tracking sync');
-    }
+    console.log(`[DataSync] 🚀 Starting batched sync for ${accountIds.length} accounts`);
 
-    console.log(`[DataSync] 🚀 Syncing ${accountIds.length} account(s) - saving after each fetch`);
-
-    // Get account hierarchy records for region info
-    const accountHierarchies = await base44.entities.AccountHierarchy.filter({
-      data_source_id: dataSource.id
-    });
-
-    const accountRegionMap = {};
-    accountHierarchies.forEach(ah => {
-      if (ah.external_id && ah.region) {
-        accountRegionMap[ah.external_id] = ah.region;
-      }
-    });
-
+    let currentIndex = 0;
     let totalCreated = 0;
-    let totalFetched = 0;
-    let failedAccounts = [];
+    const batchSize = 25; // Process 25 accounts per batch
 
-    // Process ONE account at a time - fetch then IMMEDIATELY save
-    for (let i = 0; i < accountIds.length; i++) {
-      const accountId = accountIds[i];
-      const accountRegion = accountRegionMap[String(accountId)] || null;
+    while (currentIndex < accountIds.length) {
+      console.log(`[DataSync] 📦 Batch starting at index ${currentIndex}`);
 
       try {
-        console.log(`[DataSync] 📞 [${i + 1}/${accountIds.length}] Fetching account ${accountId} (Region: ${accountRegion || 'None'})`);
-
-        // 1. FETCH this account's data
-        const result = await base44.functions.invoke('syncCallTrackingData', {
-          accountId: String(accountId),
-          startDate: syncJob.date_range?.start_date,
-          endDate: syncJob.date_range?.end_date,
-          apiKey,
-          isAgencyLevel,
-          includeRawCalls: true,
-          accountRegion
+        // Call backend batch function
+        const result = await base44.functions.invoke('syncCtmBatch', {
+          dataSourceId: dataSource.id,
+          startIndex: currentIndex,
+          batchSize
         });
 
         if (!result.data?.success) {
-          console.log(`[DataSync] ⚠️ Account ${accountId} failed: ${result.data?.error}`);
-          failedAccounts.push({ accountId, error: result.data?.error });
-          continue; // Skip to next account
+          throw new Error(result.data?.error || 'Batch sync failed');
         }
 
-        const callRecords = result.data.callRecords || [];
-        const accountName = result.data.account?.name || `Account ${accountId}`;
-        const accountMetadata = result.data.account || {};
-        totalFetched += callRecords.length;
+        const { processedCount, totalSaved, nextStartIndex, isComplete } = result.data;
 
-        console.log(`[DataSync] 📥 Account ${accountId} returned ${callRecords.length} records`);
+        totalCreated += totalSaved;
+        currentIndex = nextStartIndex;
 
-        // 2. Update/Create AccountHierarchy for this account
-        try {
-          const existing = await base44.entities.AccountHierarchy.filter({
-            data_source_id: dataSource.id,
-            external_id: String(accountId)
-          });
-
-          if (existing.length === 0) {
-            await base44.entities.AccountHierarchy.create({
-              organization_id: organizationId,
-              data_source_id: dataSourceId,
-              platform_type: dataSource.platform_type,
-              hierarchy_level: 'account',
-              external_id: String(accountId),
-              name: accountName,
-              region: accountRegion || accountMetadata.region,
-              status: accountMetadata.status || 'active',
-              metadata: {
-                synced_at: new Date().toISOString(),
-                timezone: accountMetadata.timezone,
-                country: accountMetadata.country
-              },
-              last_updated: new Date().toISOString()
-            });
-            console.log(`[DataSync] ✓ Created AccountHierarchy: ${accountName}`);
-          } else {
-            await base44.entities.AccountHierarchy.update(existing[0].id, {
-              name: accountName,
-              region: accountRegion || accountMetadata.region || existing[0].region,
-              status: accountMetadata.status || 'active',
-              last_updated: new Date().toISOString()
-            });
-          }
-        } catch (error) {
-          console.error(`[DataSync] ⚠️ AccountHierarchy update failed for ${accountId}:`, error.message);
-        }
-
-        // 3. IMMEDIATELY SAVE this account's records (don't wait for other accounts)
-        if (callRecords.length > 0) {
-          const recordsToSave = callRecords.map(call => ({
-            organization_id: organizationId,
-            data_source_id: dataSourceId,
-            account_id: String(accountId),
-            account_name: accountName,
-            region: accountRegion || accountMetadata.region || null,
-            call_id: String(call.call_id || call.id),
-            tracking_number: call.tracking_number || null,
-            caller_number: call.caller_number || null,
-            start_time: call.start_time || call.called_at,
-            end_time: call.end_time || null,
-            duration: call.duration || 0,
-            talk_time: call.talk_time || 0,
-            call_status: call.call_status || call.status || 'unknown',
-            is_voicemail: call.is_voicemail || false,
-            is_working_hours: call.is_working_hours !== false,
-            qualified: call.qualified || false,
-            sale_status: call.sale_status || null,
-            first_time_caller: call.first_time_caller || false,
-            keypress: call.keypress || null,
-            web_source: call.web_source || call.source || null,
-            web_medium: call.web_medium || null,
-            web_campaign: call.web_campaign || call.campaign || null,
-            web_campaign_id: call.web_campaign_id || null,
-            web_keyword: call.web_keyword || call.keyword || null,
-            web_visit_keywords: call.web_visit_keywords || null,
-            web_ad_group_id: call.web_ad_group_id || null,
-            web_adgroup_id: call.web_adgroup_id || null,
-            web_creative_id: call.web_creative_id || null,
-            web_ad_network: call.web_ad_network || null,
-            web_ad_match_type: call.web_ad_match_type || null,
-            web_ad_slot: call.web_ad_slot || null,
-            web_ad_slot_position: call.web_ad_slot_position || null,
-            web_ad_targeting_type: call.web_ad_targeting_type || null,
-            landing_page: call.landing_page || null,
-            referrer: call.referrer || null,
-            city: call.city || null,
-            state: call.state || null,
-            country: call.country || null,
-            recording_url: call.recording_url || null,
-            transcription: call.transcription || null,
-            tags: call.tags || [],
-            custom_fields: call.custom_fields || {},
-            sync_date: new Date().toISOString().split('T')[0]
-          }));
-
-          try {
-            const created = await base44.entities.CallRecord.bulkCreate(recordsToSave);
-            const createdCount = Array.isArray(created) ? created.length : 0;
-            totalCreated += createdCount;
-            console.log(`[DataSync] ✅ Account ${accountId} SAVED ${createdCount} records (total: ${totalCreated})`);
-          } catch (saveError) {
-            console.error(`[DataSync] ❌ Account ${accountId} SAVE FAILED:`, saveError.message);
-            failedAccounts.push({ accountId, error: saveError.message });
-          }
-        } else {
-          console.log(`[DataSync] ⏭️ Account ${accountId} has 0 records - skipping save`);
-        }
-
-        // 4. UPDATE PROGRESS after each account
-        const progress = Math.round(((i + 1) / accountIds.length) * 100);
+        // Update progress
+        const progress = Math.round((currentIndex / accountIds.length) * 100);
         await base44.entities.SyncJob.update(syncJob.id, {
           progress_percentage: progress,
-          records_synced: totalFetched,
+          records_synced: totalCreated,
           records_created: totalCreated,
-          current_step: `Processed ${i + 1}/${accountIds.length} accounts (${totalCreated} records saved)`
+          current_step: `Processed ${currentIndex}/${accountIds.length} accounts (${totalCreated} records saved)`
         });
 
+        console.log(`[DataSync] ✅ Batch complete: ${totalSaved} records, next index: ${nextStartIndex}`);
+
+        if (isComplete) {
+          break;
+        }
+
+        // Delay between batches to prevent blocking
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
       } catch (error) {
-        console.error(`[DataSync] ❌ Account ${accountId} ERROR:`, error.message);
-        failedAccounts.push({ accountId, error: error.message });
-        // Continue to next account - don't kill the whole sync
+        console.error(`[DataSync] ❌ Batch at index ${currentIndex} failed:`, error.message);
+        throw error;
       }
-
-      // Small delay to prevent rate limiting
-      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // 5. FINAL STATUS
-    console.log(`[DataSync] 🏁 Sync complete: ${totalCreated} records saved from ${accountIds.length} accounts`);
-    if (failedAccounts.length > 0) {
-      console.log(`[DataSync] ⚠️ ${failedAccounts.length} accounts failed:`, failedAccounts);
-    }
+    console.log(`[DataSync] 🏁 Batched sync complete: ${totalCreated} records saved`);
 
     return {
-      recordsSynced: totalFetched,
+      recordsSynced: totalCreated,
       recordsCreated: totalCreated,
       recordsUpdated: 0
     };
