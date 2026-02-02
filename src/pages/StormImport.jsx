@@ -150,13 +150,16 @@ export default function StormImport() {
     try {
       console.log('[StormImport] Starting import with', parsedData.length, 'records');
       // Get or create Storm data source
+      console.log('[StormImport] Looking for DataSource in org:', userOrg.id);
       let dataSource = await base44.entities.DataSource.filter({
         organization_id: userOrg.id,
         platform_type: 'custom_api',
         name: 'Storm Call Tracking'
       });
 
+      console.log('[StormImport] Found datasources:', dataSource.length);
       if (!dataSource.length) {
+        console.log('[StormImport] Creating new DataSource');
         dataSource = await base44.entities.DataSource.create({
           organization_id: userOrg.id,
           name: 'Storm Call Tracking',
@@ -165,9 +168,11 @@ export default function StormImport() {
           enabled: true
         });
         dataSource = [dataSource];
+        console.log('[StormImport] Created DataSource:', dataSource[0].id);
       }
 
       const dataSourceId = dataSource[0].id;
+      console.log('[StormImport] Using DataSource:', dataSourceId);
 
       // Check for duplicate call_ids
       const callIds = parsedData.map(r => r.call_id);
