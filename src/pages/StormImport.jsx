@@ -67,8 +67,13 @@ export default function StormImport() {
              try {
                const text = event.target.result;
                const lines = text.split('\n').filter(line => line.trim());
+
+               // Detect delimiter (tab or comma)
+               const firstLine = lines[0];
+               const delimiter = firstLine.includes('\t') ? '\t' : ',';
+
                const rows = lines.map(line => {
-                 return line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
+                 return line.split(delimiter).map(cell => cell.trim().replace(/^"|"$/g, ''));
                });
 
                console.log('Parsed rows:', rows.length);
