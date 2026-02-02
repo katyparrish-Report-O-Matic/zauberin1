@@ -156,10 +156,10 @@ class DataSyncService {
           throw new Error(result.data?.error || 'Batch sync failed');
         }
 
-        const { recordsSaved, nextAccountIndex, isComplete } = result.data;
+        const { processedCount, totalSaved, nextStartIndex, isComplete } = result.data;
 
-        totalCreated += recordsSaved;
-        currentIndex = nextAccountIndex;
+        totalCreated += totalSaved;
+        currentIndex = nextStartIndex;
 
         // Update progress
         const progress = Math.round((currentIndex / accountIds.length) * 100);
