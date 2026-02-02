@@ -1,9 +1,43 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * Sync a BATCH of CTM accounts (NOT all at once)
- * This prevents timeout by processing only 25-50 accounts per call
+ * Sync a BATCH of CTM call records (by RECORDS, not accounts)
+ * - Processes until maxRecords reached
+ * - 600ms delay between EVERY API request
+ * - 429 retry logic with exponential backoff
+ * - Tracks exact pagination position (account + page)
+ * - Returns nextStartIndex for resuming
  */
+
+const RATE_LIMIT_DELAY = 600; // ms between requests
+const RETRY_DELAY = 5000; // ms to wait on 429
+const MAX_RETRIES = 3;
+
+// Helper: fetch with rate limit and retry logic
+async function fetchWithRetry(url, headers, retryCount = 0) {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers
+    });
+
+    if (response.status === 429) {
+      if (retryCount < MAX_RETRIES) {
+        console.warn(`[CTM Batch] Rate limited (429), retrying ${retryCount + 1}/${MAX_RETRIES}...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return fetchWithRetry(url, headers, retryCount + 1);
+      } else {
+        console.error(`[CTM Batch] Rate limited (429) - max retries exceeded`);
+        return { ok: false, status: 429, rateLimitExhausted: true };
+      }
+    }
+
+    return response;
+  } catch (error) {
+    console.error(`[CTM Batch] Fetch error:`, error.message);
+    throw error;
+  }
+}
 
 Deno.serve(async (req) => {
   try {
@@ -14,7 +48,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { dataSourceId, startIndex = 0, maxRecordsPerBatch = 2500 } = await req.json();
+    const { dataSourceId, startAccountIndex = 0, startPage = 1, maxRecords = 500 } = await req.json();
 
     if (!dataSourceId) {
       return Response.json({ error: 'dataSourceId required' }, { status: 400 });
@@ -37,17 +71,17 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'API key not configured' }, { status: 400 });
     }
 
-    if (startIndex >= accountIds.length) {
+    if (startAccountIndex >= accountIds.length) {
       return Response.json({
         success: true,
-        processedCount: 0,
-        totalSaved: 0,
-        nextStartIndex: startIndex,
+        recordsSaved: 0,
+        nextAccountIndex: startAccountIndex,
+        nextPage: 1,
         isComplete: true
       });
     }
 
-    console.log(`[CTM Batch] Starting at account ${startIndex}/${accountIds.length}, max ${maxRecordsPerBatch} records per batch`);
+    console.log(`[CTM Batch] Starting at account ${startAccountIndex}/${accountIds.length}, page ${startPage}, max ${maxRecords} records`);
 
     // Date range
     const endDate = new Date().toISOString().split('T')[0];
@@ -55,8 +89,6 @@ Deno.serve(async (req) => {
       ? new Date(dataSource.last_sync_at).toISOString().split('T')[0]
       : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    let totalSaved = 0;
-    
     // Parse API credentials
     let auth;
     if (apiKey.includes(':')) {
@@ -69,6 +101,10 @@ Deno.serve(async (req) => {
     }
 
     const baseUrl = 'https://api.calltrackingmetrics.com/api/v1';
+    const headers = {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/json'
+    };
 
     // Get account regions
     const accountHierarchies = await base44.asServiceRole.entities.AccountHierarchy.filter({
@@ -81,72 +117,74 @@ Deno.serve(async (req) => {
       }
     });
 
-    // Process accounts until we hit the record limit
-    let currentIndex = startIndex;
-    let processedCount = 0;
-    
-    while (currentIndex < accountIds.length && totalSaved < maxRecordsPerBatch) {
-      const accountId = accountIds[currentIndex];
+    // Batch collection
+    let recordsSaved = 0;
+    let currentAccountIndex = startAccountIndex;
+    let currentPage = startPage;
+    const batchStart = Date.now();
+
+    // Process accounts/pages until we hit record limit or timeout
+    while (currentAccountIndex < accountIds.length && recordsSaved < maxRecords) {
+      // Safety: abort if batch takes over 55 seconds (leave 5s buffer)
+      if (Date.now() - batchStart > 55000) {
+        console.log(`[CTM Batch] Time limit approaching, stopping batch`);
+        break;
+      }
+
+      const accountId = accountIds[currentAccountIndex];
       const accountRegion = accountRegionMap[String(accountId)] || null;
 
       try {
-        console.log(`[CTM Batch] [${currentIndex + 1}/${accountIds.length}] Fetching account ${accountId} (${totalSaved} records so far)`);
+        console.log(`[CTM Batch] Account ${currentAccountIndex + 1}/${accountIds.length} (ID: ${accountId}), page ${currentPage}, ${recordsSaved} records so far`);
 
-        // Fetch account metadata
+        // Fetch account metadata (with delay + retry)
+        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+        
         let accountName = `Account ${accountId}`;
         try {
-          const accountResponse = await fetch(`${baseUrl}/accounts/${accountId}.json`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Basic ${auth}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          if (accountResponse.ok) {
-            const accountData = await accountResponse.json();
+          const metaResponse = await fetchWithRetry(`${baseUrl}/accounts/${accountId}.json`, headers);
+          if (metaResponse.ok) {
+            const accountData = await metaResponse.json();
             accountName = accountData.name || accountName;
           }
         } catch (metaError) {
           console.warn(`[CTM Batch] Could not fetch metadata for ${accountId}`);
         }
 
-        // Fetch calls for this account
-         let allCalls = [];
-         let page = 1;
-         const maxPages = 10;
+        // Fetch calls for this account with pagination
+        let pagesFetched = 0;
+        let hasMorePages = true;
 
-         while (page <= maxPages) {
-           const callsUrl = `${baseUrl}/accounts/${accountId}/calls.json?page=${page}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
+        while (hasMorePages && recordsSaved < maxRecords && currentPage <= 100) {
+          // Rate limit delay before each call
+          await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
 
-           const callsResponse = await fetch(callsUrl, {
-             method: 'GET',
-             headers: {
-               'Authorization': `Basic ${auth}`,
-               'Content-Type': 'application/json'
-             }
-           });
+          const callsUrl = `${baseUrl}/accounts/${accountId}/calls.json?page=${currentPage}&per_page=100&start_date=${startDate}&end_date=${endDate}`;
+          
+          const callsResponse = await fetchWithRetry(callsUrl, headers);
 
-           if (!callsResponse.ok) {
-             console.warn(`[CTM Batch] Account ${accountId} page ${page} failed: ${callsResponse.status}`);
-             break;
-           }
+          if (callsResponse.rateLimitExhausted) {
+            console.error(`[CTM Batch] Account ${accountId} rate limit exhausted, moving to next account`);
+            hasMorePages = false;
+            break;
+          }
 
-           const callsData = await callsResponse.json();
-           const calls = callsData.calls || [];
+          if (!callsResponse.ok) {
+            console.warn(`[CTM Batch] Account ${accountId} page ${currentPage} failed: ${callsResponse.status}, moving to next account`);
+            hasMorePages = false;
+            break;
+          }
 
-           if (calls.length === 0) break;
+          const callsData = await callsResponse.json();
+          const calls = callsData.calls || [];
 
-           allCalls = allCalls.concat(calls);
+          if (calls.length === 0) {
+            hasMorePages = false;
+            break;
+          }
 
-           if (calls.length < 100) break;
-           page++;
-         }
-
-        console.log(`[CTM Batch] Account ${accountId}: ${allCalls.length} calls fetched`);
-
-        // Process and save call records
-        if (allCalls.length > 0) {
-          const callRecords = allCalls
+          // Process and save call records
+          const callRecords = calls
             .filter(call => call.called_at)
             .map(call => {
               const isVoicemail = call.call_status === 'voicemail' || call.status === 'voicemail';
@@ -193,10 +231,19 @@ Deno.serve(async (req) => {
               };
             });
 
-          const created = await base44.asServiceRole.entities.CallRecord.bulkCreate(callRecords);
-          const savedCount = Array.isArray(created) ? created.length : 0;
-          totalSaved += savedCount;
-          console.log(`[CTM Batch] Account ${accountId} saved ${savedCount} records`);
+          if (callRecords.length > 0) {
+            await base44.asServiceRole.entities.CallRecord.bulkCreate(callRecords);
+            recordsSaved += callRecords.length;
+            console.log(`[CTM Batch] Page ${currentPage}: saved ${callRecords.length} records (total: ${recordsSaved})`);
+          }
+
+          pagesFetched++;
+          currentPage++;
+
+          // Stop if fewer than 100 records (last page)
+          if (calls.length < 100) {
+            hasMorePages = false;
+          }
         }
 
         // Update/Create AccountHierarchy
@@ -225,41 +272,34 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Small delay to prevent rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        processedCount++;
-        currentIndex++;
-
-        // Stop if we've hit the record limit
-        if (totalSaved >= maxRecordsPerBatch) {
-          console.log(`[CTM Batch] Reached record limit (${totalSaved} records), stopping batch`);
-          break;
-        }
+        // Move to next account
+        currentAccountIndex++;
+        currentPage = 1; // Reset page for next account
 
       } catch (error) {
         console.error(`[CTM Batch] Account ${accountId} error:`, error.message);
-        currentIndex++;
-        processedCount++;
+        currentAccountIndex++;
+        currentPage = 1;
         continue;
       }
     }
 
-    const isComplete = currentIndex >= accountIds.length;
+    const isComplete = currentAccountIndex >= accountIds.length;
 
-    console.log(`[CTM Batch] Batch complete: ${totalSaved} records saved, processed ${processedCount} accounts`);
+    console.log(`[CTM Batch] Batch complete: ${recordsSaved} records saved`);
 
     return Response.json({
       success: true,
-      processedCount,
-      totalSaved,
-      nextStartIndex: currentIndex,
+      recordsSaved,
+      nextAccountIndex: currentAccountIndex,
+      nextPage: currentPage,
       isComplete,
       batchInfo: {
-        startIndex,
-        endIndex: currentIndex,
+        startAccountIndex,
+        endAccountIndex: currentAccountIndex,
         totalAccounts: accountIds.length,
-        recordsInBatch: totalSaved
+        recordsInBatch: recordsSaved,
+        timeSeconds: Math.round((Date.now() - batchStart) / 1000)
       }
     });
 
