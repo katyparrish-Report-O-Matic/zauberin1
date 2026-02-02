@@ -139,7 +139,7 @@ class DataSyncService {
 
     let currentIndex = 0;
     let totalCreated = 0;
-    const batchSize = 10; // Process 10 accounts per batch
+    const batchSize = 25; // Process 25 accounts per batch
 
     while (currentIndex < accountIds.length) {
       console.log(`[DataSync] 📦 Batch starting at index ${currentIndex}`);
