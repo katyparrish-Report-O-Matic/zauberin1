@@ -570,10 +570,38 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.account_ids.length} connected</p>
                       </div>
                     )}
-                    {source.last_sync_at && (
+                    {latestSyncJobs[source.id] && (
                       <div className="text-sm">
-                        <span className="text-gray-600">Last sync:</span>
-                        <p className="font-medium">{format(new Date(source.last_sync_at), "MMM d, h:mm a")}</p>
+                        <span className="text-gray-600">Last import:</span>
+                        <p className="font-medium">
+                          {latestSyncJobs[source.id].completed_at 
+                            ? format(new Date(latestSyncJobs[source.id].completed_at), "MMM d, h:mm a")
+                            : 'In progress'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {latestSyncJobs[source.id].status === 'completed' && (
+                            <>
+                              <CheckCircle className="w-3 h-3 text-green-600" />
+                              <span className="text-xs text-green-600">
+                                {latestSyncJobs[source.id].records_created || latestSyncJobs[source.id].records_synced || 0} records
+                              </span>
+                            </>
+                          )}
+                          {latestSyncJobs[source.id].status === 'failed' && (
+                            <>
+                              <XCircle className="w-3 h-3 text-red-600" />
+                              <span className="text-xs text-red-600">Failed</span>
+                            </>
+                          )}
+                          {latestSyncJobs[source.id].status === 'in_progress' && (
+                            <>
+                              <RefreshCw className="w-3 h-3 text-blue-600 animate-spin" />
+                              <span className="text-xs text-blue-600">
+                                {latestSyncJobs[source.id].progress_percentage}%
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     )}
                     <div className="text-sm">
