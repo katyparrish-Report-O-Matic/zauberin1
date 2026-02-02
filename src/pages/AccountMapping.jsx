@@ -225,63 +225,42 @@ export default function AccountMapping() {
           </CardContent>
         </Card>
 
-        {/* Probable Matches Table */}
+        {/* Wrong Matches - Need Manual Mapping */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Probable Matches</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-500" />
+              Wrong Matches - Need Manual Mapping
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
-            ) : !probableMatches?.length ? (
-              <p className="text-gray-500 text-center py-8">No accounts to match</p>
+            ) : !probableMatches.filter(m => wrongMatches[m.ctmName]).length ? (
+              <p className="text-gray-500 text-center py-8">No wrong matches marked</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>CTM Account Name</TableHead>
-                      <TableHead>Probable Salesforce Match</TableHead>
-                      <TableHead className="text-center">Confidence</TableHead>
-                      <TableHead className="text-center">Wrong Match?</TableHead>
+                      <TableHead>Wrong Match (was)</TableHead>
+                      <TableHead className="text-center">Unmark</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {probableMatches.map((match, idx) => (
+                    {probableMatches.filter(m => wrongMatches[m.ctmName]).map((match, idx) => (
                       <TableRow key={idx}>
                         <TableCell className="font-medium">{match.ctmName}</TableCell>
-                        <TableCell>
-                          {match.sfMatch ? (
-                            <div>
-                              <div>{match.sfMatch.name}</div>
-                              <div className="text-xs text-gray-500">{match.sfMatch.saName}</div>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">No match found</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {match.score > 0 ? (
-                            <Badge 
-                              variant={match.score >= 70 ? 'default' : match.score >= 40 ? 'secondary' : 'outline'}
-                              className={
-                                match.score >= 70 ? 'bg-green-100 text-green-800' :
-                                match.score >= 40 ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }
-                            >
-                              {match.score}%
-                            </Badge>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
+                        <TableCell className="text-gray-400 line-through">
+                          {match.sfMatch?.name || 'No match'}
                         </TableCell>
                         <TableCell className="text-center">
                           <Checkbox
-                            checked={wrongMatches[match.ctmName] || false}
-                            onCheckedChange={(checked) => handleWrongMatchToggle(match.ctmName, checked)}
+                            checked={true}
+                            onCheckedChange={() => handleWrongMatchToggle(match.ctmName, false)}
                           />
                         </TableCell>
                       </TableRow>
@@ -293,46 +272,61 @@ export default function AccountMapping() {
           </CardContent>
         </Card>
 
-        {/* Existing Mappings */}
+        {/* Confirmed Matches */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Confirmed Mappings</CardTitle>
+            <CardTitle className="text-lg">Confirmed Matches</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
-            ) : !mappings?.length ? (
-              <p className="text-gray-500 text-center py-8">No confirmed mappings yet</p>
+            ) : !probableMatches.filter(m => !wrongMatches[m.ctmName] && m.sfMatch).length ? (
+              <p className="text-gray-500 text-center py-8">No confirmed matches</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Salesforce Account</TableHead>
-                    <TableHead>CTM Account Name</TableHead>
-                    <TableHead className="w-20">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {mappings.map(mapping => (
-                    <TableRow key={mapping.id}>
-                      <TableCell>{mapping.salesforce_account_name}</TableCell>
-                      <TableCell>{mapping.ctm_account_name}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteMapping.mutate(mapping.id)}
-                          disabled={deleteMapping.isPending}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>CTM Account Name</TableHead>
+                      <TableHead>Salesforce Account</TableHead>
+                      <TableHead className="text-center">Confidence</TableHead>
+                      <TableHead className="text-center">Mark Wrong</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {probableMatches.filter(m => !wrongMatches[m.ctmName] && m.sfMatch).map((match, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{match.ctmName}</TableCell>
+                        <TableCell>
+                          <div>
+                            <div>{match.sfMatch.name}</div>
+                            <div className="text-xs text-gray-500">{match.sfMatch.saName}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge 
+                            className={
+                              match.score >= 70 ? 'bg-green-100 text-green-800' :
+                              match.score >= 40 ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }
+                          >
+                            {match.score}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={false}
+                            onCheckedChange={() => handleWrongMatchToggle(match.ctmName, true)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
