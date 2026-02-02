@@ -540,7 +540,11 @@ export default function DataSourceManager() {
 
             {/* Data Sources Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {dataSources.map(source => (
+              {dataSources.map(source => {
+                const lastJob = lastSyncJobs[source.id];
+                const isStorm = source.name.toLowerCase().includes('storm');
+
+                return (
                 <Card key={source.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -571,7 +575,13 @@ export default function DataSourceManager() {
                         <p className="font-medium">{source.account_ids.length} connected</p>
                       </div>
                     )}
-                    {source.last_sync_at && (
+                    {isStorm && lastJob && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Last import:</span>
+                        <p className="font-medium">{format(new Date(lastJob.created_date), "MMM d, h:mm a")}</p>
+                      </div>
+                    )}
+                    {!isStorm && source.last_sync_at && (
                       <div className="text-sm">
                         <span className="text-gray-600">Last sync:</span>
                         <p className="font-medium">{format(new Date(source.last_sync_at), "MMM d, h:mm a")}</p>
