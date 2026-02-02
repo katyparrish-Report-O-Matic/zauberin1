@@ -636,7 +636,7 @@ export default function DataSourceManager() {
                       onClick={() => setSelectedSource(source)}
                     >
                       <SettingsIcon className="w-3 h-3" />
-                      View Sync History
+                      {isStorm ? 'View Import History' : 'View Sync History'}
                     </Button>
                   </CardContent>
                   </Card>
