@@ -22,6 +22,7 @@ export default function Layout({ children }) {
     { name: "Data Sources", path: createPageUrl("DataSourceManager"), icon: Database, requiredLevel: "admin" },
     { name: "Storm Import", path: createPageUrl("StormImport"), icon: Upload, requiredLevel: "editor" },
     { name: "Salesforce Accounts", path: createPageUrl("SalesforceAccounts"), icon: Database, requiredLevel: "admin" },
+      { name: "Account Mapping", path: createPageUrl("AccountMapping"), icon: Link2, requiredLevel: "admin" },
     { name: "Data Quality", path: createPageUrl("DataQuality"), icon: Activity, requiredLevel: "editor" },
     { name: "Monitoring", path: createPageUrl("MonitoringDashboard"), icon: Activity, requiredLevel: "admin" },
     { name: "Performance", path: createPageUrl("PerformanceMonitor"), icon: Zap, requiredLevel: "admin" },

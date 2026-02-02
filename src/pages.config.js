@@ -73,9 +73,10 @@ import SalesforceAccounts from './pages/SalesforceAccounts';
 import Settings from './pages/Settings';
 import StatusPage from './pages/StatusPage';
 import StormImport from './pages/StormImport';
+import TelecomsReport from './pages/TelecomsReport';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
-import TelecomsReport from './pages/TelecomsReport';
+import AccountMapping from './pages/AccountMapping';
 import __Layout from './Layout.jsx';
 
 
@@ -106,9 +107,10 @@ export const PAGES = {
     "Settings": Settings,
     "StatusPage": StatusPage,
     "StormImport": StormImport,
+    "TelecomsReport": TelecomsReport,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
-    "TelecomsReport": TelecomsReport,
+    "AccountMapping": AccountMapping,
 }
 
 export const pagesConfig = {
