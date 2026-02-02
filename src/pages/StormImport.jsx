@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { usePermissions } from "../components/auth/usePermissions";
 import PermissionGuard from "../components/auth/PermissionGuard";
-import * as XLSX from 'xlsx';
 
 export default function StormImport() {
   const { userOrg } = usePermissions();
