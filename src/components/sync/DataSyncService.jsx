@@ -172,7 +172,7 @@ class DataSyncService {
           current_step: `Processed ${currentIndex}/${accountIds.length} accounts (${totalCreated} records saved)`
         });
 
-        console.log(`[DataSync] ✅ Batch complete: ${totalSaved} records, next index: ${nextStartIndex}`);
+        console.log(`[DataSync] ✅ Batch complete: ${recordsSaved} records, next index: ${nextAccountIndex}`);
 
         if (isComplete) {
           break;
