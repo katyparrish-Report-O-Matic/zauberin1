@@ -723,17 +723,22 @@ export default function DataSourceManager() {
                         </div>
                         
                         {/* Progress bar for active jobs */}
-                        {job.status === 'in_progress' && (
-                          <div className="space-y-1">
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${job.progress_percentage || 0}%` }}
-                              />
-                            </div>
-                            <p className="text-xs text-gray-600">{job.current_step || 'Processing...'}</p>
-                          </div>
-                        )}
+                         {job.status === 'in_progress' && (
+                           <div className="space-y-1">
+                             <div className="w-full bg-gray-200 rounded-full h-2">
+                               <div 
+                                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                 style={{ width: `${job.progress_percentage || 0}%` }}
+                               />
+                             </div>
+                             <p className="text-xs text-gray-600">{job.current_step || 'Processing...'}</p>
+                           </div>
+                         )}
+
+                         {/* Filename for completed jobs */}
+                         {job.status === 'completed' && job.current_step && (
+                           <p className="text-xs text-gray-600">File: {job.current_step}</p>
+                         )}
                         
                         {/* Error message */}
                         {job.status === 'failed' && job.error_message && (
