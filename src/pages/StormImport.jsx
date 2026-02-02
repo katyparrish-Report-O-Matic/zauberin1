@@ -90,7 +90,7 @@ export default function StormImport() {
 
            console.log('Header indices:', { dateTimeIdx, ctNumberIdx, callEndIdx, callIdIdx, durationIdx, numberIdIdx });
 
-           if (dateTimeIdx === -1 || ctNumberIdx === -1 || callIdIdx === -1 || durationIdx === -1 || numberIdIdx === -1) {
+           if (dateTimeIdx === -1 || ctNumberIdx === -1 || callEndIdx === -1 || callIdIdx === -1 || durationIdx === -1 || numberIdIdx === -1) {
              setError('Missing required columns. Found: ' + headers.join(', '));
              return;
            }
