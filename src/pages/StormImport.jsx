@@ -226,11 +226,12 @@ export default function StormImport() {
       });
 
     } catch (err) {
+      console.error('[StormImport] Import error:', err);
       setError(`Import failed: ${err.message}`);
     } finally {
       setImporting(false);
     }
-  };
+    };
 
   return (
     <PermissionGuard requiredLevel="editor">
