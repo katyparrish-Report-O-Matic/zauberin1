@@ -93,9 +93,10 @@ export default function StormImport() {
           // Parse all data rows
           const parsed = rows.slice(1).map((row, idx) => {
             const { account_name, tracking_number_description } = parseNumberId(row[numberIdIdx]);
-            
+
             return {
               start_time: row[dateTimeIdx],
+              end_time: row[callEndIdx],
               tracking_number: String(row[ctNumberIdx] || ''),
               call_id: String(row[callIdIdx] || ''),
               duration: parseTimeToSeconds(row[durationIdx]),
