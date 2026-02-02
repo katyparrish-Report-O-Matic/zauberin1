@@ -149,7 +149,7 @@ class DataSyncService {
         const result = await base44.functions.invoke('syncCtmBatch', {
           dataSourceId: dataSource.id,
           startIndex: currentIndex,
-          batchSize
+          maxRecordsPerBatch: 2500
         });
 
         if (!result.data?.success) {

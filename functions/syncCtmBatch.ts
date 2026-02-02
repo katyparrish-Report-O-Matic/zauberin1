@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { dataSourceId, startIndex = 0, batchSize = 25 } = await req.json();
+    const { dataSourceId, startIndex = 0, maxRecordsPerBatch = 2500 } = await req.json();
 
     if (!dataSourceId) {
       return Response.json({ error: 'dataSourceId required' }, { status: 400 });
@@ -37,14 +37,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'API key not configured' }, { status: 400 });
     }
 
-    // Calculate batch boundaries
-    const endIndex = Math.min(startIndex + batchSize, accountIds.length);
-    const batchAccountIds = accountIds.slice(startIndex, endIndex);
-    const isComplete = endIndex >= accountIds.length;
-
-    console.log(`[CTM Batch] Processing accounts ${startIndex}-${endIndex-1} of ${accountIds.length}`);
-
-    if (batchAccountIds.length === 0) {
+    if (startIndex >= accountIds.length) {
       return Response.json({
         success: true,
         processedCount: 0,
@@ -53,6 +46,8 @@ Deno.serve(async (req) => {
         isComplete: true
       });
     }
+
+    console.log(`[CTM Batch] Starting at account ${startIndex}/${accountIds.length}, max ${maxRecordsPerBatch} records per batch`);
 
     // Date range
     const endDate = new Date().toISOString().split('T')[0];
@@ -86,13 +81,16 @@ Deno.serve(async (req) => {
       }
     });
 
-    // Process ONLY this batch of accounts
-    for (let i = 0; i < batchAccountIds.length; i++) {
-      const accountId = batchAccountIds[i];
+    // Process accounts until we hit the record limit
+    let currentIndex = startIndex;
+    let processedCount = 0;
+    
+    while (currentIndex < accountIds.length && totalSaved < maxRecordsPerBatch) {
+      const accountId = accountIds[currentIndex];
       const accountRegion = accountRegionMap[String(accountId)] || null;
 
       try {
-        console.log(`[CTM Batch] [${i+1}/${batchAccountIds.length}] Fetching account ${accountId}`);
+        console.log(`[CTM Batch] [${currentIndex + 1}/${accountIds.length}] Fetching account ${accountId} (${totalSaved} records so far)`);
 
         // Fetch account metadata
         let accountName = `Account ${accountId}`;
@@ -230,24 +228,38 @@ Deno.serve(async (req) => {
         // Small delay to prevent rate limiting
         await new Promise(resolve => setTimeout(resolve, 200));
 
+        processedCount++;
+        currentIndex++;
+
+        // Stop if we've hit the record limit
+        if (totalSaved >= maxRecordsPerBatch) {
+          console.log(`[CTM Batch] Reached record limit (${totalSaved} records), stopping batch`);
+          break;
+        }
+
       } catch (error) {
         console.error(`[CTM Batch] Account ${accountId} error:`, error.message);
+        currentIndex++;
+        processedCount++;
         continue;
       }
     }
 
-    console.log(`[CTM Batch] Batch complete: ${totalSaved} records saved`);
+    const isComplete = currentIndex >= accountIds.length;
+
+    console.log(`[CTM Batch] Batch complete: ${totalSaved} records saved, processed ${processedCount} accounts`);
 
     return Response.json({
       success: true,
-      processedCount: batchAccountIds.length,
+      processedCount,
       totalSaved,
-      nextStartIndex: endIndex,
+      nextStartIndex: currentIndex,
       isComplete,
       batchInfo: {
         startIndex,
-        endIndex,
-        totalAccounts: accountIds.length
+        endIndex: currentIndex,
+        totalAccounts: accountIds.length,
+        recordsInBatch: totalSaved
       }
     });
 
