@@ -84,9 +84,9 @@ export default function StormImport() {
              return;
            }
 
-           // Expected headers - normalize by trimming and lowercasing for comparison
+           // Expected headers - normalize by trimming, removing brackets, and lowercasing for comparison
            const headers = rows[0];
-           const normalizeHeader = (h) => String(h || '').trim().toLowerCase();
+           const normalizeHeader = (h) => String(h || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
            const normalizedHeaders = headers.map(normalizeHeader);
 
            const dateTimeIdx = normalizedHeaders.indexOf('date_time');
