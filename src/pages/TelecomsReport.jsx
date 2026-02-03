@@ -40,24 +40,42 @@ export default function TelecomsReport() {
 
   const telecomsRecords = telecomsData?.records || [];
 
+  // Fetch AccountMappings to lookup CTM names for selected Salesforce account
+  const { data: accountMappings = [] } = useQuery({
+    queryKey: ['accountMappings'],
+    queryFn: async () => {
+      return await base44.entities.AccountMapping.list();
+    }
+  });
+
   // Fetch CallRecords for selected account and date range
   const { data: callRecords = [], isLoading: callsLoading } = useQuery({
-    queryKey: ['callRecords', selectedAccount, startDate, endDate],
+    queryKey: ['callRecords', selectedAccount, startDate, endDate, accountMappings],
     queryFn: async () => {
       if (!selectedAccount || !startDate || !endDate) return [];
       
-      const records = await base44.entities.CallRecord.filter({
-        account_name: selectedAccount
-      });
+      // Lookup CTM account names from AccountMapping for this Salesforce account
+      const ctmNames = accountMappings
+        .filter(m => m.salesforce_account_name === selectedAccount)
+        .map(m => m.ctm_account_name);
+      
+      if (ctmNames.length === 0) return [];
+      
+      // Fetch CallRecords for each CTM name and combine
+      const recordPromises = ctmNames.map(ctmName => 
+        base44.entities.CallRecord.filter({ account_name: ctmName })
+      );
+      const recordArrays = await Promise.all(recordPromises);
+      const allRecords = recordArrays.flat();
       
       // Filter by date range client-side
-      return records.filter(record => {
+      return allRecords.filter(record => {
         if (!record.start_time) return false;
         const callDate = record.start_time.split('T')[0];
         return callDate >= startDate && callDate <= endDate;
       });
     },
-    enabled: !!selectedAccount && !!startDate && !!endDate
+    enabled: !!selectedAccount && !!startDate && !!endDate && accountMappings.length > 0
   });
 
   // Generate month columns based on date range
