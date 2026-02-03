@@ -52,7 +52,9 @@ export default function TelecomsReport() {
     enabled: !!selectedAccountDetails?.Id
   });
 
-  const lineItems = lineItemsData?.records || [];
+  const lineItems = (lineItemsData?.records || []).filter(item => 
+    item.Status__c === 'Active' || item.Status__c === 'Planned'
+  );
 
   // Get CTM account names from mappings
   const ctmAccountNames = useMemo(() => {
@@ -67,11 +69,8 @@ export default function TelecomsReport() {
     queryKey: ['ctmTrackingNumbers', ctmAccountNames],
     queryFn: async () => {
       if (ctmAccountNames.length === 0) return [];
-      const promises = ctmAccountNames.map(name => 
-        base44.entities.TrackingNumber.filter({ account_name: name, source: 'ctm' })
-      );
-      const results = await Promise.all(promises);
-      return results.flat();
+      const allNumbers = await base44.entities.TrackingNumber.filter({ source: 'ctm' });
+      return allNumbers.filter(n => ctmAccountNames.includes(n.account_name));
     },
     enabled: ctmAccountNames.length > 0
   });
@@ -88,13 +87,12 @@ export default function TelecomsReport() {
     enabled: !!selectedAccount
   });
 
-  const stormNumbers = stormData?.records || [];
+  const stormNumbers = (stormData?.records || []).filter(r => r.Provider__c === 'Storm');
 
   // Combine all numbers for Section 2
   const allNumbers = useMemo(() => {
     const combined = [];
     
-    // CTM numbers
     ctmNumbers.forEach(num => {
       combined.push({
         tracking_number: num.tracking_number,
@@ -104,7 +102,6 @@ export default function TelecomsReport() {
       });
     });
     
-    // Storm numbers
     stormNumbers.forEach(num => {
       combined.push({
         tracking_number: num.Access_Number__c || '',
@@ -128,7 +125,6 @@ export default function TelecomsReport() {
     queryFn: async () => {
       if (allTrackingNumbersList.length === 0 || !startDate || !endDate) return [];
       
-      // Fetch all call records and filter by tracking numbers
       const allRecords = await base44.entities.CallRecord.list();
       
       return allRecords.filter(record => {
@@ -205,7 +201,6 @@ export default function TelecomsReport() {
     return { months: totals, grandTotal };
   }, [callStatsData, monthColumns]);
 
-  const isLoading = accountsLoading;
   const hasFilters = selectedAccount && startDate && endDate;
 
   return (
