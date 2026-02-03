@@ -2,20 +2,20 @@ import React, { useState, useMemo } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Phone, Calendar, Loader2, Building2 } from "lucide-react";
-import { format, parseISO, startOfMonth, eachMonthOfInterval } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import { Phone, Calendar, Loader2, Building2, Hash, BarChart3 } from "lucide-react";
+import { format, parseISO, eachMonthOfInterval } from "date-fns";
 
 export default function TelecomsReport() {
   const [selectedAccount, setSelectedAccount] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Fetch Salesforce Accounts
+  // Fetch Salesforce Accounts (Service Agreements)
   const { data: accountsData, isLoading: accountsLoading } = useQuery({
     queryKey: ['salesforceAccounts'],
     queryFn: async () => {
@@ -26,21 +26,13 @@ export default function TelecomsReport() {
 
   const accounts = accountsData?.accounts || [];
 
-  // Fetch Telecoms__c data for selected account
-  const { data: telecomsData, isLoading: telecomsLoading } = useQuery({
-    queryKey: ['telecomsData', selectedAccount],
-    queryFn: async () => {
-      const result = await base44.functions.invoke('getTelecomsData', {
-        accountName: selectedAccount
-      });
-      return result.data;
-    },
-    enabled: !!selectedAccount
-  });
+  // Get selected account details
+  const selectedAccountDetails = useMemo(() => {
+    if (!selectedAccount) return null;
+    return accounts.find(a => (a.Company__r?.Name || a.Name) === selectedAccount);
+  }, [accounts, selectedAccount]);
 
-  const telecomsRecords = telecomsData?.records || [];
-
-  // Fetch AccountMappings to lookup CTM names for selected Salesforce account
+  // Fetch AccountMappings
   const { data: accountMappings = [] } = useQuery({
     queryKey: ['accountMappings'],
     queryFn: async () => {
@@ -48,34 +40,105 @@ export default function TelecomsReport() {
     }
   });
 
-  // Fetch CallRecords for selected account and date range
-  const { data: callRecords = [], isLoading: callsLoading } = useQuery({
-    queryKey: ['callRecords', selectedAccount, startDate, endDate, accountMappings],
+  // Section 1: Active Service Lines from Subscription_Line_Item__c
+  const { data: lineItemsData, isLoading: lineItemsLoading } = useQuery({
+    queryKey: ['subscriptionLineItems', selectedAccountDetails?.Id],
     queryFn: async () => {
-      if (!selectedAccount || !startDate || !endDate) return [];
-      
-      // Lookup ALL source account names from AccountMapping for this Salesforce account
-      const sourceNames = accountMappings
-        .filter(m => m.salesforce_account_name === selectedAccount)
-        .map(m => m.source_account_name);
-      
-      if (sourceNames.length === 0) return [];
-      
-      // Fetch CallRecords for each source name and combine
-      const recordPromises = sourceNames.map(sourceName => 
-        base44.entities.CallRecord.filter({ account_name: sourceName })
+      const result = await base44.functions.invoke('getSubscriptionLineItems', {
+        serviceAgreementId: selectedAccountDetails.Id
+      });
+      return result.data;
+    },
+    enabled: !!selectedAccountDetails?.Id
+  });
+
+  const lineItems = lineItemsData?.records || [];
+
+  // Get CTM account names from mappings
+  const ctmAccountNames = useMemo(() => {
+    if (!selectedAccount) return [];
+    return accountMappings
+      .filter(m => m.salesforce_account_name === selectedAccount && m.source_type === 'ctm')
+      .map(m => m.source_account_name);
+  }, [accountMappings, selectedAccount]);
+
+  // Section 2a: CTM Numbers from TrackingNumber entity
+  const { data: ctmNumbers = [], isLoading: ctmNumbersLoading } = useQuery({
+    queryKey: ['ctmTrackingNumbers', ctmAccountNames],
+    queryFn: async () => {
+      if (ctmAccountNames.length === 0) return [];
+      const promises = ctmAccountNames.map(name => 
+        base44.entities.TrackingNumber.filter({ account_name: name, source: 'ctm' })
       );
-      const recordArrays = await Promise.all(recordPromises);
-      const allRecords = recordArrays.flat();
+      const results = await Promise.all(promises);
+      return results.flat();
+    },
+    enabled: ctmAccountNames.length > 0
+  });
+
+  // Section 2b: Storm Numbers from Salesforce Telecoms__c
+  const { data: stormData, isLoading: stormLoading } = useQuery({
+    queryKey: ['stormTelecoms', selectedAccount],
+    queryFn: async () => {
+      const result = await base44.functions.invoke('getStormTelecoms', {
+        companyName: selectedAccount
+      });
+      return result.data;
+    },
+    enabled: !!selectedAccount
+  });
+
+  const stormNumbers = stormData?.records || [];
+
+  // Combine all numbers for Section 2
+  const allNumbers = useMemo(() => {
+    const combined = [];
+    
+    // CTM numbers
+    ctmNumbers.forEach(num => {
+      combined.push({
+        tracking_number: num.tracking_number,
+        description: num.description || '',
+        source: 'CTM',
+        status: num.status || 'active'
+      });
+    });
+    
+    // Storm numbers
+    stormNumbers.forEach(num => {
+      combined.push({
+        tracking_number: num.Access_Number__c || '',
+        description: num.Telecom_Description__c || num.Name || '',
+        source: 'Storm',
+        status: num.Active__c ? 'active' : 'inactive'
+      });
+    });
+    
+    return combined;
+  }, [ctmNumbers, stormNumbers]);
+
+  // Get all tracking numbers for call stats query
+  const allTrackingNumbersList = useMemo(() => {
+    return allNumbers.map(n => n.tracking_number).filter(Boolean);
+  }, [allNumbers]);
+
+  // Section 3: Call Stats from CallRecord entity
+  const { data: callRecords = [], isLoading: callsLoading } = useQuery({
+    queryKey: ['callRecords', allTrackingNumbersList, startDate, endDate],
+    queryFn: async () => {
+      if (allTrackingNumbersList.length === 0 || !startDate || !endDate) return [];
       
-      // Filter by date range client-side
+      // Fetch all call records and filter by tracking numbers
+      const allRecords = await base44.entities.CallRecord.list();
+      
       return allRecords.filter(record => {
-        if (!record.start_time) return false;
+        if (!record.tracking_number || !record.start_time) return false;
+        if (!allTrackingNumbersList.includes(record.tracking_number)) return false;
         const callDate = record.start_time.split('T')[0];
         return callDate >= startDate && callDate <= endDate;
       });
     },
-    enabled: !!selectedAccount && !!startDate && !!endDate && accountMappings.length > 0
+    enabled: allTrackingNumbersList.length > 0 && !!startDate && !!endDate
   });
 
   // Generate month columns based on date range
@@ -103,12 +166,11 @@ export default function TelecomsReport() {
     const grouped = {};
 
     callRecords.forEach(record => {
-      const key = `${record.tracking_number || 'Unknown'}|||${record.tracking_number_description || ''}`;
+      const trackingNum = record.tracking_number;
       
-      if (!grouped[key]) {
-        grouped[key] = {
-          tracking_number: record.tracking_number || 'Unknown',
-          tracking_number_description: record.tracking_number_description || '',
+      if (!grouped[trackingNum]) {
+        grouped[trackingNum] = {
+          tracking_number: trackingNum,
           months: {},
           total: 0
         };
@@ -116,8 +178,8 @@ export default function TelecomsReport() {
 
       if (record.start_time) {
         const monthKey = format(parseISO(record.start_time), 'yyyy-MM');
-        grouped[key].months[monthKey] = (grouped[key].months[monthKey] || 0) + 1;
-        grouped[key].total += 1;
+        grouped[trackingNum].months[monthKey] = (grouped[trackingNum].months[monthKey] || 0) + 1;
+        grouped[trackingNum].total += 1;
       }
     });
 
@@ -143,7 +205,7 @@ export default function TelecomsReport() {
     return { months: totals, grandTotal };
   }, [callStatsData, monthColumns]);
 
-  const isLoading = accountsLoading || telecomsLoading || callsLoading;
+  const isLoading = accountsLoading;
   const hasFilters = selectedAccount && startDate && endDate;
 
   return (
@@ -155,7 +217,7 @@ export default function TelecomsReport() {
             <Phone className="w-8 h-8" />
             Telecoms Report
           </h1>
-          <p className="text-gray-600 mt-1">View active services and call statistics by account</p>
+          <p className="text-gray-600 mt-1">View active services, tracking numbers, and call statistics</p>
         </div>
 
         {/* Filters */}
@@ -169,17 +231,17 @@ export default function TelecomsReport() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Account</Label>
+                <Label>Salesforce Account</Label>
                 <Select value={selectedAccount} onValueChange={setSelectedAccount}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select account..." />
                   </SelectTrigger>
                   <SelectContent>
                     {accounts.map(account => (
-                                                <SelectItem key={account.Id} value={account.Company__r?.Name || account.Name}>
-                                                  {account.Name} {account.Company__r?.Name ? `(${account.Company__r.Name})` : ''}
-                                                </SelectItem>
-                                              ))}
+                      <SelectItem key={account.Id} value={account.Company__r?.Name || account.Name}>
+                        {account.Name} {account.Company__r?.Name ? `(${account.Company__r.Name})` : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -205,68 +267,150 @@ export default function TelecomsReport() {
           </CardContent>
         </Card>
 
-        {/* Loading State */}
-        {isLoading && hasFilters && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-          </div>
+        {/* Empty State */}
+        {!selectedAccount && (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Phone className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">Select an account to view telecoms data</p>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Section 1: Active Services & Locations */}
-        {selectedAccount && !telecomsLoading && (
+        {/* Section 1: Active Service Lines */}
+        {selectedAccount && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Building2 className="w-5 h-5" />
-                Active Services & Locations
+                Active Service Lines
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {telecomsRecords.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No telecoms records found for this account</p>
+              {lineItemsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : lineItems.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No active service lines found</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Access Number</TableHead>
-                      <TableHead>Telecoms Name</TableHead>
-                      <TableHead>Active</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {telecomsRecords.map(record => (
-                      <TableRow key={record.Id}>
-                        <TableCell className="font-mono">{record.Access_Number__c}</TableCell>
-                        <TableCell>{record.Name}</TableCell>
-                        <TableCell>{record.Active__c ? 'Yes' : 'No'}</TableCell>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Display Name</TableHead>
+                        <TableHead>Recurring Amount</TableHead>
+                        <TableHead>Start Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Frequency</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {lineItems.map(item => (
+                        <TableRow key={item.Id}>
+                          <TableCell className="font-medium">{item.Name}</TableCell>
+                          <TableCell>{item.Display_Name__c || '-'}</TableCell>
+                          <TableCell>
+                            {item.Recurring_Amount__c 
+                              ? `£${Number(item.Recurring_Amount__c).toFixed(2)}` 
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {item.Start_Date__c 
+                              ? format(parseISO(item.Start_Date__c), 'dd/MM/yyyy') 
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={item.Status__c === 'Active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                              {item.Status__c}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{item.Frequency__c || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>
         )}
 
-        {/* Section 2: Call Stats */}
-        {hasFilters && !callsLoading && (
+        {/* Section 2: All Numbers */}
+        {selectedAccount && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Phone className="w-5 h-5" />
+                <Hash className="w-5 h-5" />
+                All Numbers
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(ctmNumbersLoading || stormLoading) ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : allNumbers.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No tracking numbers found</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tracking Number</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allNumbers.map((num, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-mono">{num.tracking_number}</TableCell>
+                          <TableCell>{num.description || '-'}</TableCell>
+                          <TableCell>
+                            <Badge className={num.source === 'CTM' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}>
+                              {num.source}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={num.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                              {num.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Section 3: Call Stats */}
+        {hasFilters && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
                 Call Statistics
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {callStatsData.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No call records found for this account and date range</p>
+              {callsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : callStatsData.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No call records found for this date range</p>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="min-w-[150px]">Tracking Number</TableHead>
-                        <TableHead className="min-w-[200px]">Description</TableHead>
                         {monthColumns.map(col => (
                           <TableHead key={col.key} className="text-center min-w-[80px]">
                             {col.label}
@@ -279,7 +423,6 @@ export default function TelecomsReport() {
                       {callStatsData.map((row, idx) => (
                         <TableRow key={idx}>
                           <TableCell className="font-mono">{row.tracking_number}</TableCell>
-                          <TableCell>{row.tracking_number_description}</TableCell>
                           {monthColumns.map(col => (
                             <TableCell key={col.key} className="text-center">
                               {row.months[col.key] || 0}
@@ -290,7 +433,7 @@ export default function TelecomsReport() {
                       ))}
                       {/* Totals Row */}
                       <TableRow className="bg-gray-100 font-bold">
-                        <TableCell colSpan={2}>Total</TableCell>
+                        <TableCell>Total</TableCell>
                         {monthColumns.map(col => (
                           <TableCell key={col.key} className="text-center">
                             {monthTotals.months[col.key] || 0}
@@ -302,16 +445,6 @@ export default function TelecomsReport() {
                   </Table>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Empty State */}
-        {!selectedAccount && (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Phone className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500">Select an account to view telecoms data</p>
             </CardContent>
           </Card>
         )}
