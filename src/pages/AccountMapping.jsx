@@ -332,8 +332,8 @@ export default function AccountMapping() {
                             {(mapping.source_type || 'ctm').toUpperCase()}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">{mapping.source_account_name}</TableCell>
-                        <TableCell>{mapping.salesforce_account_name}</TableCell>
+                        <TableCell className="font-medium">{mapping.source_account_name || mapping.ctm_account_name}</TableCell>
+                                                      <TableCell>{mapping.salesforce_account_name}</TableCell>
                         <TableCell className="text-center">
                           <Button
                             size="sm"
@@ -386,8 +386,8 @@ export default function AccountMapping() {
                             {(mapping.source_type || 'ctm').toUpperCase()}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">{mapping.source_account_name}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-medium">{mapping.source_account_name || mapping.ctm_account_name}</TableCell>
+                                                      <TableCell>
                           <Select 
                             value={manualSelections[mapping.id] || ""} 
                             onValueChange={(value) => setManualSelections(prev => ({ ...prev, [mapping.id]: value }))}
