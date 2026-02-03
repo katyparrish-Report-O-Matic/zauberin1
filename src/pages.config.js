@@ -47,6 +47,7 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import AccountMapping from './pages/AccountMapping';
 import ApiDocumentation from './pages/ApiDocumentation';
 import ApiKeysManager from './pages/ApiKeysManager';
 import AuditLogs from './pages/AuditLogs';
@@ -76,11 +77,11 @@ import StormImport from './pages/StormImport';
 import TelecomsReport from './pages/TelecomsReport';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
-import AccountMapping from './pages/AccountMapping';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "AccountMapping": AccountMapping,
     "ApiDocumentation": ApiDocumentation,
     "ApiKeysManager": ApiKeysManager,
     "AuditLogs": AuditLogs,
@@ -110,7 +111,6 @@ export const PAGES = {
     "TelecomsReport": TelecomsReport,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
-    "AccountMapping": AccountMapping,
 }
 
 export const pagesConfig = {

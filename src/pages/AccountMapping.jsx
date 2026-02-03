@@ -5,9 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Link2, Trash2, Loader2, Building2, Phone, AlertTriangle } from "lucide-react";
+import { Link2, Trash2, Loader2, Check, X, Save } from "lucide-react";
 
 // Simple fuzzy match scoring
 function calculateMatchScore(str1, str2) {
@@ -19,7 +18,6 @@ function calculateMatchScore(str1, str2) {
   if (s1 === s2) return 100;
   if (s1.includes(s2) || s2.includes(s1)) return 80;
   
-  // Check word overlap
   const words1 = str1.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   const words2 = str2.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   
@@ -40,9 +38,7 @@ function calculateMatchScore(str1, str2) {
 }
 
 export default function AccountMapping() {
-  const [selectedSalesforce, setSelectedSalesforce] = useState('');
-  const [selectedCtm, setSelectedCtm] = useState('');
-  const [wrongMatches, setWrongMatches] = useState({});
+  const [manualSelections, setManualSelections] = useState({});
   const queryClient = useQueryClient();
 
   // Fetch Salesforce Accounts
@@ -54,7 +50,7 @@ export default function AccountMapping() {
     }
   });
 
-  // Fetch CTM Accounts from AccountHierarchy (more complete than CallRecords)
+  // Fetch CTM Accounts from AccountHierarchy
   const { data: ctmAccounts, isLoading: ctmLoading } = useQuery({
     queryKey: ['ctmAccountHierarchy'],
     queryFn: async () => {
@@ -70,45 +66,7 @@ export default function AccountMapping() {
     }
   });
 
-  // Get Salesforce accounts
   const salesforceAccounts = accountsData?.accounts || [];
-
-  // Calculate probable matches
-  const probableMatches = useMemo(() => {
-    if (!ctmAccounts || !salesforceAccounts.length) return [];
-
-    const sfNames = salesforceAccounts.map(a => ({
-      id: a.Id,
-      name: a.Company__r?.Name || a.Name,
-      saName: a.Name
-    }));
-
-    return ctmAccounts.map(ctm => {
-      let bestMatch = null;
-      let bestScore = 0;
-
-      for (const sf of sfNames) {
-        const score = calculateMatchScore(ctm.name, sf.name);
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = sf;
-        }
-      }
-
-      return {
-        ctmId: ctm.external_id,
-        ctmName: ctm.name,
-        sfMatch: bestMatch,
-        score: bestScore
-      };
-    }).sort((a, b) => b.score - a.score);
-  }, [ctmAccounts, salesforceAccounts]);
-
-  // Get unique CTM account names for manual mapping dropdown
-  const ctmAccountNames = useMemo(() => {
-    if (!ctmAccounts) return [];
-    return ctmAccounts.map(a => a.name).sort();
-  }, [ctmAccounts]);
 
   // Create mapping mutation
   const createMapping = useMutation({
@@ -117,8 +75,16 @@ export default function AccountMapping() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accountMappings'] });
-      setSelectedSalesforce('');
-      setSelectedCtm('');
+    }
+  });
+
+  // Update mapping mutation
+  const updateMapping = useMutation({
+    mutationFn: async ({ id, data }) => {
+      return await base44.entities.AccountMapping.update(id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accountMappings'] });
     }
   });
 
@@ -132,23 +98,85 @@ export default function AccountMapping() {
     }
   });
 
-  const handleCreateMapping = () => {
-    if (!selectedSalesforce || !selectedCtm) return;
+  // Compute "Needs Review" = CTM accounts NOT IN any AccountMapping record
+  const needsReview = useMemo(() => {
+    if (!ctmAccounts || !mappings || !salesforceAccounts.length) return [];
 
-    const sfAccount = salesforceAccounts.find(a => a.Id === selectedSalesforce);
+    const mappedCtmNames = new Set(mappings.map(m => m.ctm_account_name));
     
+    const sfNames = salesforceAccounts.map(a => ({
+      id: a.Id,
+      name: a.Company__r?.Name || a.Name,
+      saName: a.Name
+    }));
+
+    return ctmAccounts
+      .filter(ctm => !mappedCtmNames.has(ctm.name))
+      .map(ctm => {
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const sf of sfNames) {
+          const score = calculateMatchScore(ctm.name, sf.name);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = sf;
+          }
+        }
+
+        return {
+          ctmName: ctm.name,
+          sfMatch: bestMatch,
+          score: bestScore
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [ctmAccounts, mappings, salesforceAccounts]);
+
+  // Confirmed Matches = AccountMapping WHERE salesforce_account_name IS NOT empty
+  const confirmedMatches = useMemo(() => {
+    if (!mappings) return [];
+    return mappings.filter(m => m.salesforce_account_name && m.salesforce_account_name !== "");
+  }, [mappings]);
+
+  // Needs Manual Mapping = AccountMapping WHERE salesforce_account_name IS empty
+  const needsManualMapping = useMemo(() => {
+    if (!mappings) return [];
+    return mappings.filter(m => !m.salesforce_account_name || m.salesforce_account_name === "");
+  }, [mappings]);
+
+  // Confirm button handler
+  const handleConfirm = (ctmName, salesforceAccountName) => {
     createMapping.mutate({
-      salesforce_account_id: sfAccount.Id,
-      salesforce_account_name: sfAccount.Company__r?.Name || sfAccount.Name,
-      ctm_account_name: selectedCtm
+      ctm_account_name: ctmName,
+      salesforce_account_name: salesforceAccountName
     });
   };
 
-  const handleWrongMatchToggle = (ctmName, checked) => {
-    setWrongMatches(prev => ({
-      ...prev,
-      [ctmName]: checked
-    }));
+  // Wrong button handler
+  const handleWrong = (ctmName) => {
+    createMapping.mutate({
+      ctm_account_name: ctmName,
+      salesforce_account_name: ""
+    });
+  };
+
+  // Delete handler
+  const handleDelete = (id) => {
+    deleteMapping.mutate(id);
+  };
+
+  // Save manual mapping handler
+  const handleSaveManual = (mappingId, salesforceAccountName) => {
+    updateMapping.mutate({
+      id: mappingId,
+      data: { salesforce_account_name: salesforceAccountName }
+    });
+    setManualSelections(prev => {
+      const newSelections = { ...prev };
+      delete newSelections[mappingId];
+      return newSelections;
+    });
   };
 
   const isLoading = accountsLoading || ctmLoading || mappingsLoading;
@@ -165,103 +193,77 @@ export default function AccountMapping() {
           <p className="text-gray-600 mt-1">Link Salesforce accounts to CTM account names</p>
         </div>
 
-        {/* Create Mapping */}
+        {/* Table 1: Needs Review (Probable Matches) */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Create New Mapping</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Building2 className="w-4 h-4" />
-                  Salesforce Account
-                </label>
-                <Select value={selectedSalesforce} onValueChange={setSelectedSalesforce}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Salesforce account..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {salesforceAccounts.map(account => (
-                      <SelectItem key={account.Id} value={account.Id}>
-                        {account.Name} {account.Company__r?.Name ? `(${account.Company__r.Name})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Phone className="w-4 h-4" />
-                  CTM Account Name
-                </label>
-                <Select value={selectedCtm} onValueChange={setSelectedCtm}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select CTM account..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ctmAccountNames.map(name => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button 
-                onClick={handleCreateMapping}
-                disabled={!selectedSalesforce || !selectedCtm || createMapping.isPending}
-              >
-                {createMapping.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : (
-                  <Link2 className="w-4 h-4 mr-2" />
-                )}
-                Create Mapping
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Wrong Matches - Need Manual Mapping */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-              Wrong Matches - Need Manual Mapping
-            </CardTitle>
+            <CardTitle className="text-lg">Needs Review (Probable Matches)</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
-            ) : !probableMatches.filter(m => wrongMatches[m.ctmName]).length ? (
-              <p className="text-gray-500 text-center py-8">No wrong matches marked</p>
+            ) : !needsReview.length ? (
+              <p className="text-gray-500 text-center py-8">No accounts need review</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>CTM Account Name</TableHead>
-                      <TableHead>Wrong Match (was)</TableHead>
-                      <TableHead className="text-center">Unmark</TableHead>
+                      <TableHead>CTM Name</TableHead>
+                      <TableHead>Best Fuzzy Match from Salesforce</TableHead>
+                      <TableHead className="text-center">Match Score</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {probableMatches.filter(m => wrongMatches[m.ctmName]).map((match, idx) => (
+                    {needsReview.map((item, idx) => (
                       <TableRow key={idx}>
-                        <TableCell className="font-medium">{match.ctmName}</TableCell>
-                        <TableCell className="text-gray-400 line-through">
-                          {match.sfMatch?.name || 'No match'}
+                        <TableCell className="font-medium">{item.ctmName}</TableCell>
+                        <TableCell>
+                          {item.sfMatch ? (
+                            <div>
+                              <div>{item.sfMatch.name}</div>
+                              <div className="text-xs text-gray-500">{item.sfMatch.saName}</div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">No match found</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Checkbox
-                            checked={true}
-                            onCheckedChange={() => handleWrongMatchToggle(match.ctmName, false)}
-                          />
+                          <Badge 
+                            className={
+                              item.score >= 70 ? 'bg-green-100 text-green-800' :
+                              item.score >= 40 ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }
+                          >
+                            {item.score}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex gap-2 justify-center">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-600 border-green-600 hover:bg-green-50"
+                              onClick={() => handleConfirm(item.ctmName, item.sfMatch?.name || "")}
+                              disabled={createMapping.isPending}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Confirm
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 border-red-600 hover:bg-red-50"
+                              onClick={() => handleWrong(item.ctmName)}
+                              disabled={createMapping.isPending}
+                            >
+                              <X className="w-4 h-4 mr-1" />
+                              Wrong
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -272,7 +274,7 @@ export default function AccountMapping() {
           </CardContent>
         </Card>
 
-        {/* Confirmed Matches */}
+        {/* Table 2: Confirmed Matches */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Confirmed Matches</CardTitle>
@@ -282,45 +284,96 @@ export default function AccountMapping() {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
-            ) : !probableMatches.filter(m => !wrongMatches[m.ctmName] && m.sfMatch).length ? (
+            ) : !confirmedMatches.length ? (
               <p className="text-gray-500 text-center py-8">No confirmed matches</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>CTM Account Name</TableHead>
+                      <TableHead>CTM Name</TableHead>
                       <TableHead>Salesforce Account</TableHead>
-                      <TableHead className="text-center">Confidence</TableHead>
-                      <TableHead className="text-center">Mark Wrong</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {probableMatches.filter(m => !wrongMatches[m.ctmName] && m.sfMatch).map((match, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-medium">{match.ctmName}</TableCell>
-                        <TableCell>
-                          <div>
-                            <div>{match.sfMatch.name}</div>
-                            <div className="text-xs text-gray-500">{match.sfMatch.saName}</div>
-                          </div>
-                        </TableCell>
+                    {confirmedMatches.map((mapping) => (
+                      <TableRow key={mapping.id}>
+                        <TableCell className="font-medium">{mapping.ctm_account_name}</TableCell>
+                        <TableCell>{mapping.salesforce_account_name}</TableCell>
                         <TableCell className="text-center">
-                          <Badge 
-                            className={
-                              match.score >= 70 ? 'bg-green-100 text-green-800' :
-                              match.score >= 40 ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 border-red-600 hover:bg-red-50"
+                            onClick={() => handleDelete(mapping.id)}
+                            disabled={deleteMapping.isPending}
                           >
-                            {match.score}%
-                          </Badge>
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Table 3: Needs Manual Mapping */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Needs Manual Mapping</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : !needsManualMapping.length ? (
+              <p className="text-gray-500 text-center py-8">No accounts need manual mapping</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>CTM Name</TableHead>
+                      <TableHead>Select Salesforce Account</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {needsManualMapping.map((mapping) => (
+                      <TableRow key={mapping.id}>
+                        <TableCell className="font-medium">{mapping.ctm_account_name}</TableCell>
+                        <TableCell>
+                          <Select 
+                            value={manualSelections[mapping.id] || ""} 
+                            onValueChange={(value) => setManualSelections(prev => ({ ...prev, [mapping.id]: value }))}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select Salesforce account..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {salesforceAccounts.map(account => (
+                                <SelectItem key={account.Id} value={account.Company__r?.Name || account.Name}>
+                                  {account.Name} {account.Company__r?.Name ? `(${account.Company__r.Name})` : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Checkbox
-                            checked={false}
-                            onCheckedChange={() => handleWrongMatchToggle(match.ctmName, true)}
-                          />
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveManual(mapping.id, manualSelections[mapping.id])}
+                            disabled={!manualSelections[mapping.id] || updateMapping.isPending}
+                          >
+                            <Save className="w-4 h-4 mr-1" />
+                            Save
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
