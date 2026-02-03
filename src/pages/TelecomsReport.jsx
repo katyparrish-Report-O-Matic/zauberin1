@@ -80,7 +80,7 @@ export default function TelecomsReport() {
     queryKey: ['stormTelecoms', selectedAccount],
     queryFn: async () => {
       const result = await base44.functions.invoke('getStormTelecoms', {
-        companyName: selectedAccount
+        companyId: selectedAccountDetails?.Company__c
       });
       return result.data;
     },

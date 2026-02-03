@@ -9,10 +9,10 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { companyName } = await req.json();
+    const { companyId } = await req.json();
 
-    if (!companyName) {
-      return Response.json({ error: 'companyName required' }, { status: 400 });
+    if (!companyId) {
+      return Response.json({ error: 'companyId required' }, { status: 400 });
     }
 
     const accessToken = await base44.asServiceRole.connectors.getAccessToken("salesforce");
@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     const query = `
       SELECT Id, Name, Access_Number__c, Telecom_Description__c, Active__c, Provider__c
       FROM Telecoms__c
-      WHERE Company__c = '${companyName.replace(/'/g, "\\'")}'
+      WHERE Company__c = '${companyId}'
       AND Provider__c = 'Storm'
       ORDER BY Name ASC
     `;
