@@ -54,16 +54,16 @@ export default function TelecomsReport() {
     queryFn: async () => {
       if (!selectedAccount || !startDate || !endDate) return [];
       
-      // Lookup CTM account names from AccountMapping for this Salesforce account
-      const ctmNames = accountMappings
+      // Lookup ALL source account names from AccountMapping for this Salesforce account
+      const sourceNames = accountMappings
         .filter(m => m.salesforce_account_name === selectedAccount)
-        .map(m => m.ctm_account_name);
+        .map(m => m.source_account_name);
       
-      if (ctmNames.length === 0) return [];
+      if (sourceNames.length === 0) return [];
       
-      // Fetch CallRecords for each CTM name and combine
-      const recordPromises = ctmNames.map(ctmName => 
-        base44.entities.CallRecord.filter({ account_name: ctmName })
+      // Fetch CallRecords for each source name and combine
+      const recordPromises = sourceNames.map(sourceName => 
+        base44.entities.CallRecord.filter({ account_name: sourceName })
       );
       const recordArrays = await Promise.all(recordPromises);
       const allRecords = recordArrays.flat();

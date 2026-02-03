@@ -58,6 +58,16 @@ export default function AccountMapping() {
     }
   });
 
+  // Fetch Storm Accounts from CallRecord (distinct names only)
+  const { data: stormAccountNames = [], isLoading: stormLoading } = useQuery({
+    queryKey: ['stormAccounts'],
+    queryFn: async () => {
+      const stormRecords = await base44.entities.CallRecord.filter({ data_source: "storm" });
+      const names = [...new Set(stormRecords.map(r => r.account_name).filter(Boolean))];
+      return names;
+    }
+  });
+
   // Fetch existing mappings
   const { data: mappings, isLoading: mappingsLoading } = useQuery({
     queryKey: ['accountMappings'],
@@ -98,11 +108,12 @@ export default function AccountMapping() {
     }
   });
 
-  // Compute "Needs Review" = CTM accounts NOT IN any AccountMapping record
+  // Compute "Needs Review" = CTM + Storm accounts NOT IN any AccountMapping record
   const needsReview = useMemo(() => {
     if (!ctmAccounts || !mappings || !salesforceAccounts.length) return [];
 
-    const mappedCtmNames = new Set(mappings.map(m => m.ctm_account_name));
+    // Build set of already-mapped accounts (key = source_account_name + source_type)
+    const mappedKeys = new Set(mappings.map(m => `${m.source_account_name}|${m.source_type}`));
     
     const sfNames = salesforceAccounts.map(a => ({
       id: a.Id,
@@ -110,14 +121,21 @@ export default function AccountMapping() {
       saName: a.Name
     }));
 
-    return ctmAccounts
-      .filter(ctm => !mappedCtmNames.has(ctm.name))
-      .map(ctm => {
+    // Combine CTM and Storm accounts
+    const ctmList = ctmAccounts.map(ctm => ({ name: ctm.name, source: 'ctm' }));
+    const stormList = stormAccountNames.map(name => ({ name, source: 'storm' }));
+    const allSourceAccounts = [...ctmList, ...stormList];
+
+    // Filter out already mapped
+    const unmapped = allSourceAccounts.filter(acc => !mappedKeys.has(`${acc.name}|${acc.source}`));
+
+    return unmapped
+      .map(acc => {
         let bestMatch = null;
         let bestScore = 0;
 
         for (const sf of sfNames) {
-          const score = calculateMatchScore(ctm.name, sf.name);
+          const score = calculateMatchScore(acc.name, sf.name);
           if (score > bestScore) {
             bestScore = score;
             bestMatch = sf;
@@ -125,13 +143,14 @@ export default function AccountMapping() {
         }
 
         return {
-          ctmName: ctm.name,
+          sourceName: acc.name,
+          sourceType: acc.source,
           sfMatch: bestMatch,
           score: bestScore
         };
       })
       .sort((a, b) => b.score - a.score);
-  }, [ctmAccounts, mappings, salesforceAccounts]);
+  }, [ctmAccounts, stormAccountNames, mappings, salesforceAccounts]);
 
   // Confirmed Matches = AccountMapping WHERE salesforce_account_name IS NOT empty
   const confirmedMatches = useMemo(() => {
@@ -146,17 +165,19 @@ export default function AccountMapping() {
   }, [mappings]);
 
   // Confirm button handler
-  const handleConfirm = (ctmName, salesforceAccountName) => {
+  const handleConfirm = (sourceName, sourceType, salesforceAccountName) => {
     createMapping.mutate({
-      ctm_account_name: ctmName,
+      source_account_name: sourceName,
+      source_type: sourceType,
       salesforce_account_name: salesforceAccountName
     });
   };
 
   // Wrong button handler
-  const handleWrong = (ctmName) => {
+  const handleWrong = (sourceName, sourceType) => {
     createMapping.mutate({
-      ctm_account_name: ctmName,
+      source_account_name: sourceName,
+      source_type: sourceType,
       salesforce_account_name: ""
     });
   };
@@ -179,7 +200,7 @@ export default function AccountMapping() {
     });
   };
 
-  const isLoading = accountsLoading || ctmLoading || mappingsLoading;
+  const isLoading = accountsLoading || ctmLoading || stormLoading || mappingsLoading;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -210,7 +231,8 @@ export default function AccountMapping() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>CTM Name</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Account Name</TableHead>
                       <TableHead>Best Fuzzy Match from Salesforce</TableHead>
                       <TableHead className="text-center">Match Score</TableHead>
                       <TableHead className="text-center">Actions</TableHead>
@@ -219,7 +241,12 @@ export default function AccountMapping() {
                   <TableBody>
                     {needsReview.map((item, idx) => (
                       <TableRow key={idx}>
-                        <TableCell className="font-medium">{item.ctmName}</TableCell>
+                        <TableCell>
+                          <Badge className={item.sourceType === 'ctm' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}>
+                            {item.sourceType.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{item.sourceName}</TableCell>
                         <TableCell>
                           {item.sfMatch ? (
                             <div>
@@ -247,7 +274,7 @@ export default function AccountMapping() {
                               size="sm"
                               variant="outline"
                               className="text-green-600 border-green-600 hover:bg-green-50"
-                              onClick={() => handleConfirm(item.ctmName, item.sfMatch?.name || "")}
+                              onClick={() => handleConfirm(item.sourceName, item.sourceType, item.sfMatch?.name || "")}
                               disabled={createMapping.isPending}
                             >
                               <Check className="w-4 h-4 mr-1" />
@@ -257,7 +284,7 @@ export default function AccountMapping() {
                               size="sm"
                               variant="outline"
                               className="text-red-600 border-red-600 hover:bg-red-50"
-                              onClick={() => handleWrong(item.ctmName)}
+                              onClick={() => handleWrong(item.sourceName, item.sourceType)}
                               disabled={createMapping.isPending}
                             >
                               <X className="w-4 h-4 mr-1" />
@@ -291,7 +318,8 @@ export default function AccountMapping() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>CTM Name</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Account Name</TableHead>
                       <TableHead>Salesforce Account</TableHead>
                       <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
@@ -299,7 +327,12 @@ export default function AccountMapping() {
                   <TableBody>
                     {confirmedMatches.map((mapping) => (
                       <TableRow key={mapping.id}>
-                        <TableCell className="font-medium">{mapping.ctm_account_name}</TableCell>
+                        <TableCell>
+                          <Badge className={mapping.source_type === 'ctm' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}>
+                            {(mapping.source_type || 'ctm').toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{mapping.source_account_name}</TableCell>
                         <TableCell>{mapping.salesforce_account_name}</TableCell>
                         <TableCell className="text-center">
                           <Button
@@ -339,7 +372,8 @@ export default function AccountMapping() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>CTM Name</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Account Name</TableHead>
                       <TableHead>Select Salesforce Account</TableHead>
                       <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
@@ -347,7 +381,12 @@ export default function AccountMapping() {
                   <TableBody>
                     {needsManualMapping.map((mapping) => (
                       <TableRow key={mapping.id}>
-                        <TableCell className="font-medium">{mapping.ctm_account_name}</TableCell>
+                        <TableCell>
+                          <Badge className={mapping.source_type === 'ctm' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}>
+                            {(mapping.source_type || 'ctm').toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{mapping.source_account_name}</TableCell>
                         <TableCell>
                           <Select 
                             value={manualSelections[mapping.id] || ""} 
