@@ -40,12 +40,21 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Data source not found' }, { status: 404 });
     }
 
-    const credentials = dataSource.credentials || {};
-    const accessToken = credentials.access_token;
-    const secretKey = credentials.api_key;
+    const apiKey = dataSource.credentials?.api_key;
 
-    if (!accessToken || !secretKey) {
-      return Response.json({ error: 'Missing CTM credentials' }, { status: 400 });
+    if (!apiKey) {
+      return Response.json({ error: 'API key not configured' }, { status: 400 });
+    }
+
+    // Parse API credentials (same pattern as syncCtmBatch)
+    let auth;
+    if (apiKey.includes(':')) {
+      const [access, secret] = apiKey.split(':');
+      const encoder = new TextEncoder();
+      const data = encoder.encode(`${access}:${secret}`);
+      auth = btoa(String.fromCharCode(...data));
+    } else {
+      auth = apiKey;
     }
 
     // Get all CTM accounts from AccountHierarchy
@@ -68,7 +77,7 @@ Deno.serve(async (req) => {
 
       // Fetch tracking numbers from CTM API
       const url = `https://api.calltrackingmetrics.com/api/v1/accounts/${accountId}/numbers.json`;
-      const authHeader = 'Basic ' + btoa(`${accessToken}:${secretKey}`);
+      const authHeader = `Basic ${auth}`;
 
       const response = await fetchWithRetry(url, {
         method: 'GET',
