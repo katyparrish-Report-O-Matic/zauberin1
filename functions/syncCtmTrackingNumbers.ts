@@ -13,6 +13,8 @@ const fetchWithRetry = async (url, options, retries = 3) => {
   throw new Error('Max retries exceeded');
 };
 
+const ACCOUNT_BATCH_SIZE = 5;
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -46,7 +48,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'API key not configured' }, { status: 400 });
     }
 
-    // Parse API credentials (same pattern as syncCtmBatch)
+    // Parse API credentials
     let auth;
     if (apiKey.includes(':')) {
       const [access, secret] = apiKey.split(':');
@@ -67,69 +69,85 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No CTM accounts found' }, { status: 404 });
     }
 
-    let created = 0;
-    let updated = 0;
+    // Fetch ALL existing tracking numbers once upfront
+    const existingNumbers = await base44.entities.TrackingNumber.filter({ source: 'ctm' });
+    const existingSet = new Set(existingNumbers.map(n => n.tracking_number));
+
     const syncDate = new Date().toISOString();
+    let created = 0;
 
-    for (const account of accounts) {
-      const accountId = account.external_id;
-      const accountName = account.name;
+    // Process accounts in batches
+    for (let i = 0; i < accounts.length; i += ACCOUNT_BATCH_SIZE) {
+      const accountBatch = accounts.slice(i, i + ACCOUNT_BATCH_SIZE);
+      const batchRecords = [];
 
-      // Fetch tracking numbers from CTM API
-      const url = `https://api.calltrackingmetrics.com/api/v1/accounts/${accountId}/numbers.json`;
-      const authHeader = `Basic ${auth}`;
+      for (const account of accountBatch) {
+        const accountId = account.external_id;
+        const accountName = account.name;
 
-      const response = await fetchWithRetry(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json'
-        }
-      });
+        // Fetch tracking numbers from CTM API
+        const url = `https://api.calltrackingmetrics.com/api/v1/accounts/${accountId}/numbers.json`;
+        const authHeader = `Basic ${auth}`;
 
-      if (!response.ok) {
-        console.error(`Failed to fetch numbers for account ${accountId}: ${response.status}`);
-        continue;
-      }
-
-      const data = await response.json();
-      const numbers = data.numbers || [];
-
-      for (const num of numbers) {
-        const trackingNumber = num.number || num.tracking_number;
-        if (!trackingNumber) continue;
-
-        // Check if already exists
-        const existing = await base44.entities.TrackingNumber.filter({
-          tracking_number: trackingNumber,
-          source: 'ctm'
+        const response = await fetchWithRetry(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          }
         });
 
-        const record = {
-          tracking_number: trackingNumber,
-          description: num.name || num.description || '',
-          account_name: accountName,
-          account_id: accountId,
-          status: num.active ? 'active' : 'inactive',
-          source: 'ctm',
-          sync_date: syncDate
-        };
-
-        if (existing.length > 0) {
-          await base44.entities.TrackingNumber.update(existing[0].id, record);
-          updated++;
-        } else {
-          await base44.entities.TrackingNumber.create(record);
-          created++;
+        if (!response.ok) {
+          console.error(`Failed to fetch numbers for account ${accountId}: ${response.status}`);
+          continue;
         }
+
+        const data = await response.json();
+        const numbers = data.numbers || [];
+
+        for (const num of numbers) {
+          const trackingNumber = num.number || num.tracking_number;
+          if (!trackingNumber) continue;
+
+          // Skip if already exists
+          if (existingSet.has(trackingNumber)) continue;
+
+          batchRecords.push({
+            tracking_number: trackingNumber,
+            description: num.name || num.description || '',
+            account_name: accountName,
+            account_id: accountId,
+            status: num.active ? 'active' : 'inactive',
+            source: 'ctm',
+            sync_date: syncDate
+          });
+        }
+      }
+
+      // Deduplicate within batch by tracking_number
+      const uniqueRecords = [];
+      const seenInBatch = new Set();
+      for (const record of batchRecords) {
+        if (!seenInBatch.has(record.tracking_number)) {
+          seenInBatch.add(record.tracking_number);
+          uniqueRecords.push(record);
+        }
+      }
+
+      // Bulk create this batch
+      if (uniqueRecords.length > 0) {
+        await base44.entities.TrackingNumber.bulkCreate(uniqueRecords);
+        created += uniqueRecords.length;
+        
+        // Add to existingSet so next batch doesn't duplicate
+        uniqueRecords.forEach(r => existingSet.add(r.tracking_number));
       }
     }
 
     return Response.json({
       success: true,
       created,
-      updated,
-      total: created + updated
+      total: created
     });
 
   } catch (error) {
