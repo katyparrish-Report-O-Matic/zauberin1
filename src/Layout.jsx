@@ -35,6 +35,7 @@ export default function Layout({ children }) {
     { name: "Jobs", path: createPageUrl("JobsManager"), icon: Clock, requiredLevel: "editor" },
     { name: "Audit Logs", path: createPageUrl("AuditLogs"), icon: FileText, requiredLevel: "admin" },
     { name: "Organizations", path: createPageUrl("OrganizationManager"), icon: Building2, requiredLevel: "admin", agencyOnly: true },
+    { name: "Data Export", path: createPageUrl("DataExport"), icon: Download, requiredLevel: "admin" },
     { name: "Settings", path: createPageUrl("Settings"), icon: Settings, requiredLevel: "admin" }
   ];
 
