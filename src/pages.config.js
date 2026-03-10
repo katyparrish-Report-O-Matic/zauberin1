@@ -77,6 +77,7 @@ import StormImport from './pages/StormImport';
 import TelecomsReport from './pages/TelecomsReport';
 import TemplateManager from './pages/TemplateManager';
 import WebhookManager from './pages/WebhookManager';
+import DataExport from './pages/DataExport';
 import __Layout from './Layout.jsx';
 
 
@@ -111,6 +112,7 @@ export const PAGES = {
     "TelecomsReport": TelecomsReport,
     "TemplateManager": TemplateManager,
     "WebhookManager": WebhookManager,
+    "DataExport": DataExport,
 }
 
 export const pagesConfig = {
