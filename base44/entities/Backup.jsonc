@@ -1,0 +1,99 @@
+{
+  "name": "Backup",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this backup belongs to"
+    },
+    "backup_type": {
+      "type": "string",
+      "enum": [
+        "full",
+        "incremental",
+        "manual"
+      ],
+      "description": "Type of backup"
+    },
+    "backup_name": {
+      "type": "string",
+      "description": "Name/description of the backup"
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "Complete data snapshot",
+      "properties": {
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "api_settings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "dashboards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "templates": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "webhooks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "scheduled_jobs": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "size_bytes": {
+      "type": "number",
+      "description": "Backup size in bytes"
+    },
+    "retention_days": {
+      "type": "number",
+      "default": 30,
+      "description": "How many days to keep this backup"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When backup expires"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed",
+        "in_progress"
+      ],
+      "default": "completed",
+      "description": "Backup status"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error if backup failed"
+    }
+  },
+  "required": [
+    "organization_id",
+    "backup_type",
+    "backup_name",
+    "snapshot"
+  ]
+}

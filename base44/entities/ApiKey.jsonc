@@ -1,0 +1,72 @@
+{
+  "name": "ApiKey",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this API key belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Friendly name for this API key"
+    },
+    "key": {
+      "type": "string",
+      "description": "The actual API key (hashed)"
+    },
+    "key_prefix": {
+      "type": "string",
+      "description": "First 8 chars for identification"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "reports:read",
+          "reports:write",
+          "reports:delete",
+          "data:read",
+          "data:export"
+        ]
+      },
+      "description": "Permissions granted to this key"
+    },
+    "rate_limit_per_hour": {
+      "type": "number",
+      "default": 1000,
+      "description": "Max requests per hour"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether key is active"
+    },
+    "last_used": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time key was used"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When key expires (optional)"
+    },
+    "allowed_ips": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IP whitelist (optional)"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "key"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "name": "ReportVersion",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this version belongs to"
+    },
+    "report_request_id": {
+      "type": "string",
+      "description": "Reference to ReportRequest"
+    },
+    "version_number": {
+      "type": "number",
+      "description": "Sequential version number"
+    },
+    "configuration_snapshot": {
+      "type": "object",
+      "description": "Complete config at this version"
+    },
+    "change_summary": {
+      "type": "string",
+      "description": "What changed in this version"
+    },
+    "changed_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of fields that changed"
+    },
+    "is_current": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is the current active version"
+    }
+  },
+  "required": [
+    "organization_id",
+    "report_request_id",
+    "version_number",
+    "configuration_snapshot"
+  ]
+}

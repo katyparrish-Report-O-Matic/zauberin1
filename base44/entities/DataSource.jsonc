@@ -1,0 +1,152 @@
+{
+  "name": "DataSource",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this data source belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Friendly name for this data source"
+    },
+    "platform_type": {
+      "type": "string",
+      "enum": [
+        "google_ads",
+        "google_analytics_4",
+        "google_analytics_ua",
+        "call_tracking",
+        "facebook_ads",
+        "linkedin_ads",
+        "custom_api"
+      ],
+      "description": "Type of platform/service"
+    },
+    "auth_type": {
+      "type": "string",
+      "enum": [
+        "oauth2",
+        "api_key",
+        "bearer_token"
+      ],
+      "description": "Authentication method"
+    },
+    "credentials": {
+      "type": "object",
+      "description": "Encrypted credentials",
+      "properties": {
+        "access_token": {
+          "type": "string"
+        },
+        "refresh_token": {
+          "type": "string"
+        },
+        "token_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "api_key": {
+          "type": "string"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "client_secret": {
+          "type": "string"
+        }
+      }
+    },
+    "account_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Platform-specific account IDs to sync"
+    },
+    "property_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "GA4 property IDs or similar"
+    },
+    "sync_config": {
+      "type": "object",
+      "description": "Synchronization configuration",
+      "properties": {
+        "schedule": {
+          "type": "string",
+          "enum": [
+            "realtime",
+            "hourly",
+            "daily",
+            "manual"
+          ]
+        },
+        "backfill_days": {
+          "type": "number",
+          "default": 90
+        },
+        "incremental_only": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "last_sync_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last successful sync time"
+    },
+    "last_sync_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failed",
+        "in_progress",
+        "pending"
+      ],
+      "default": "pending"
+    },
+    "last_sync_error": {
+      "type": "string",
+      "description": "Error message from last sync if failed"
+    },
+    "next_sync_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Next scheduled sync time"
+    },
+    "total_records_synced": {
+      "type": "number",
+      "default": 0,
+      "description": "Total records synced lifetime"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether sync is active"
+    },
+    "timezone": {
+      "type": "string",
+      "default": "UTC",
+      "description": "Timezone for date ranges"
+    },
+    "currency": {
+      "type": "string",
+      "default": "USD",
+      "description": "Currency for cost data"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional platform-specific metadata"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "platform_type",
+    "auth_type"
+  ]
+}

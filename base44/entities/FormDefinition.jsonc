@@ -1,0 +1,105 @@
+{
+  "name": "FormDefinition",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this form belongs to"
+    },
+    "form_name": {
+      "type": "string",
+      "description": "Name of the form"
+    },
+    "form_id": {
+      "type": "string",
+      "description": "External form ID from tracking platform"
+    },
+    "form_type": {
+      "type": "string",
+      "enum": [
+        "contact_form",
+        "quote_request",
+        "demo_request",
+        "newsletter_signup",
+        "download_form",
+        "registration",
+        "checkout",
+        "multi_step",
+        "other"
+      ],
+      "description": "Type of form"
+    },
+    "tracking_method": {
+      "type": "string",
+      "enum": [
+        "ga4_event",
+        "webhook",
+        "api",
+        "manual"
+      ],
+      "description": "How form submissions are tracked"
+    },
+    "conversion_value": {
+      "type": "number",
+      "description": "Default value assigned to form submissions"
+    },
+    "fields_tracked": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field_name": {
+            "type": "string"
+          },
+          "field_type": {
+            "type": "string"
+          },
+          "is_required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Form fields being tracked"
+    },
+    "url_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "URLs where this form appears"
+    },
+    "qualification_rules": {
+      "type": "object",
+      "description": "Rules to determine if submission is qualified lead",
+      "properties": {
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "email_validation": {
+          "type": "boolean"
+        },
+        "phone_validation": {
+          "type": "boolean"
+        }
+      }
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether tracking is active"
+    },
+    "total_submissions": {
+      "type": "number",
+      "default": 0,
+      "description": "Lifetime submission count"
+    }
+  },
+  "required": [
+    "organization_id",
+    "form_name",
+    "form_type"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "name": "ApiSettings",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization these settings belong to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Friendly name for this API config"
+    },
+    "api_url": {
+      "type": "string",
+      "description": "Base URL for the metrics API"
+    },
+    "auth_method": {
+      "type": "string",
+      "enum": [
+        "bearer_token",
+        "api_key"
+      ],
+      "description": "Authentication method"
+    },
+    "api_token": {
+      "type": "string",
+      "description": "Bearer token or API key"
+    },
+    "connection_status": {
+      "type": "string",
+      "enum": [
+        "connected",
+        "disconnected",
+        "error"
+      ],
+      "default": "disconnected"
+    },
+    "priority": {
+      "type": "number",
+      "default": 1,
+      "description": "Priority order (1=highest)"
+    },
+    "rate_limit_per_hour": {
+      "type": "number",
+      "description": "Max requests per hour"
+    },
+    "current_usage": {
+      "type": "number",
+      "default": 0,
+      "description": "Requests used in current period"
+    },
+    "usage_reset_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When usage counter resets"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this API config is currently active"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "api_url",
+    "auth_method",
+    "api_token"
+  ]
+}

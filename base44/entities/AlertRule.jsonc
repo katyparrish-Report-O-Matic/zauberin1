@@ -1,0 +1,57 @@
+{
+  "name": "AlertRule",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this rule belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Alert rule name"
+    },
+    "rule_type": {
+      "type": "string",
+      "enum": [
+        "failed_api_calls",
+        "unusual_access",
+        "config_changes",
+        "data_export",
+        "permission_changes"
+      ],
+      "description": "Type of alert rule"
+    },
+    "threshold": {
+      "type": "number",
+      "description": "Threshold value for triggering alert"
+    },
+    "time_window_minutes": {
+      "type": "number",
+      "default": 60,
+      "description": "Time window to evaluate the rule"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether rule is active"
+    },
+    "notification_channels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Email addresses to notify"
+    },
+    "last_triggered": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When alert was last triggered"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "rule_type",
+    "threshold"
+  ]
+}

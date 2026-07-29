@@ -1,0 +1,89 @@
+{
+  "name": "EmailSchedule",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this schedule belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Schedule name"
+    },
+    "report_type": {
+      "type": "string",
+      "enum": [
+        "summary",
+        "detailed",
+        "custom"
+      ],
+      "description": "Type of report to send"
+    },
+    "recipients": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Email addresses to send to"
+    },
+    "schedule": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly"
+      ],
+      "description": "How often to send"
+    },
+    "schedule_time": {
+      "type": "string",
+      "description": "Time to send (HH:MM format)"
+    },
+    "day_of_week": {
+      "type": "number",
+      "description": "Day of week for weekly (0=Sunday)"
+    },
+    "day_of_month": {
+      "type": "number",
+      "description": "Day of month for monthly"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "pdf",
+        "csv",
+        "html"
+      ],
+      "default": "pdf",
+      "description": "Report format"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether schedule is active"
+    },
+    "metric_configs": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Metrics to include in report"
+    },
+    "last_sent": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time report was sent"
+    },
+    "next_send": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When report should next be sent"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "recipients",
+    "schedule"
+  ]
+}

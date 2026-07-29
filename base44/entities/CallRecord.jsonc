@@ -1,0 +1,211 @@
+{
+  "name": "CallRecord",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this call belongs to"
+    },
+    "data_source_id": {
+      "type": "string",
+      "description": "Reference to DataSource"
+    },
+    "data_source": {
+      "type": "string",
+      "enum": [
+        "ctm",
+        "storm"
+      ],
+      "description": "Source system: ctm or storm"
+    },
+    "account_id": {
+      "type": "string",
+      "description": "CTM Account ID"
+    },
+    "account_name": {
+      "type": "string",
+      "description": "CTM Account Name / Dealer Name"
+    },
+    "tracking_number_description": {
+      "type": "string",
+      "description": "Description of tracking number (e.g., SEO BULWELL)"
+    },
+    "region": {
+      "type": "string",
+      "description": "Geographic region for this account/dealer"
+    },
+    "call_id": {
+      "type": "string",
+      "description": "Call ID (external_id)"
+    },
+    "tracking_number": {
+      "type": "string",
+      "description": "Phone number that was called"
+    },
+    "caller_number": {
+      "type": "string",
+      "description": "Phone number of caller"
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the call started"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the call ended"
+    },
+    "duration": {
+      "type": "number",
+      "description": "Call duration in seconds"
+    },
+    "talk_time": {
+      "type": "number",
+      "description": "Talk time in seconds"
+    },
+    "call_status": {
+      "type": "string",
+      "enum": [
+        "answered",
+        "missed",
+        "abandoned",
+        "voicemail"
+      ],
+      "description": "Status of the call"
+    },
+    "is_voicemail": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether call went to voicemail"
+    },
+    "is_working_hours": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether call was during working hours"
+    },
+    "qualified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether call was marked as qualified"
+    },
+    "sale_status": {
+      "type": "string",
+      "description": "Sale status (qualified, unqualified, etc.)"
+    },
+    "first_time_caller": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this was first time caller contacted"
+    },
+    "keypress": {
+      "type": "string",
+      "description": "Keypress/menu option selected during call"
+    },
+    "web_source": {
+      "type": "string",
+      "description": "UTM source / tracking source"
+    },
+    "web_medium": {
+      "type": "string",
+      "description": "UTM medium / tracking medium"
+    },
+    "web_campaign": {
+      "type": "string",
+      "description": "Campaign name"
+    },
+    "web_campaign_id": {
+      "type": "string",
+      "description": "Campaign ID"
+    },
+    "web_keyword": {
+      "type": "string",
+      "description": "Keyword that triggered the ad"
+    },
+    "web_visit_keywords": {
+      "type": "string",
+      "description": "Keywords from visitor search"
+    },
+    "web_ad_group_id": {
+      "type": "string",
+      "description": "Ad Group ID"
+    },
+    "web_adgroup_id": {
+      "type": "string",
+      "description": "Adgroup ID (alternate field)"
+    },
+    "web_creative_id": {
+      "type": "string",
+      "description": "Creative/Ad ID"
+    },
+    "web_ad_network": {
+      "type": "string",
+      "description": "Ad network (Search, Display, etc.)"
+    },
+    "web_ad_match_type": {
+      "type": "string",
+      "description": "Keyword match type (exact, phrase, broad)"
+    },
+    "web_ad_slot": {
+      "type": "string",
+      "description": "Ad slot/position on page"
+    },
+    "web_ad_slot_position": {
+      "type": "string",
+      "description": "Specific slot position number"
+    },
+    "web_ad_targeting_type": {
+      "type": "string",
+      "description": "Targeting type used"
+    },
+    "landing_page": {
+      "type": "string",
+      "description": "Landing page URL"
+    },
+    "referrer": {
+      "type": "string",
+      "description": "HTTP referrer"
+    },
+    "city": {
+      "type": "string",
+      "description": "Caller city"
+    },
+    "state": {
+      "type": "string",
+      "description": "Caller state/province"
+    },
+    "country": {
+      "type": "string",
+      "description": "Caller country"
+    },
+    "recording_url": {
+      "type": "string",
+      "description": "URL to call recording"
+    },
+    "transcription": {
+      "type": "string",
+      "description": "Call transcription text"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags applied to the call"
+    },
+    "custom_fields": {
+      "type": "object",
+      "description": "Additional custom field data"
+    },
+    "sync_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date this record was synced"
+    }
+  },
+  "required": [
+    "organization_id",
+    "data_source_id",
+    "call_id"
+  ]
+}

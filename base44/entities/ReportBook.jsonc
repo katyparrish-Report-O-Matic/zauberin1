@@ -1,0 +1,106 @@
+{
+  "name": "ReportBook",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this book belongs to"
+    },
+    "title": {
+      "type": "string",
+      "description": "Book title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Book description"
+    },
+    "cover_color": {
+      "type": "string",
+      "default": "blue",
+      "description": "Cover color theme"
+    },
+    "account_id": {
+      "type": "string",
+      "description": "Specific account this book is for"
+    },
+    "account_name": {
+      "type": "string",
+      "description": "Account display name"
+    },
+    "date_range": {
+      "type": "object",
+      "description": "Date range for all reports in book",
+      "properties": {
+        "from": {
+          "type": "string",
+          "format": "date"
+        },
+        "to": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "reports": {
+      "type": "array",
+      "description": "Ordered list of report configurations",
+      "items": {
+        "type": "object",
+        "properties": {
+          "order": {
+            "type": "number"
+          },
+          "report_id": {
+            "type": "string",
+            "description": "Reference to saved ReportRequest"
+          },
+          "template_id": {
+            "type": "string",
+            "description": "Reference to ReportTemplate"
+          },
+          "custom_config": {
+            "type": "object",
+            "description": "Custom report configuration"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes about this report section"
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published",
+        "archived"
+      ],
+      "default": "draft",
+      "description": "Book status"
+    },
+    "shared_with": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Email addresses with access"
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether book has public link"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization"
+    }
+  },
+  "required": [
+    "organization_id",
+    "title"
+  ]
+}

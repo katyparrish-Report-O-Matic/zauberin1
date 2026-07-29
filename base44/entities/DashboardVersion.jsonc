@@ -1,0 +1,31 @@
+{
+  "name": "DashboardVersion",
+  "type": "object",
+  "properties": {
+    "dashboard_id": {
+      "type": "string",
+      "description": "Reference to Dashboard"
+    },
+    "version_number": {
+      "type": "number",
+      "description": "Version number"
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "Complete dashboard state at this version"
+    },
+    "change_description": {
+      "type": "string",
+      "description": "What changed in this version"
+    },
+    "created_by_user": {
+      "type": "string",
+      "description": "User who created this version"
+    }
+  },
+  "required": [
+    "dashboard_id",
+    "version_number",
+    "snapshot"
+  ]
+}

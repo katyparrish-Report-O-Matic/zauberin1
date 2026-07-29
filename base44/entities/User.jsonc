@@ -1,0 +1,23 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this user belongs to"
+    },
+    "permission_level": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "editor",
+        "viewer"
+      ],
+      "default": "viewer",
+      "description": "User's permission level within their organization"
+    }
+  },
+  "required": [
+    "organization_id"
+  ]
+}

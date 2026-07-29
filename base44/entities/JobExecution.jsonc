@@ -1,0 +1,55 @@
+{
+  "name": "JobExecution",
+  "type": "object",
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "description": "Reference to ScheduledJob"
+    },
+    "job_name": {
+      "type": "string",
+      "description": "Name of the job"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "completed",
+        "failed"
+      ],
+      "description": "Execution status"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When execution started"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When execution finished"
+    },
+    "duration_ms": {
+      "type": "number",
+      "description": "Execution duration in milliseconds"
+    },
+    "records_processed": {
+      "type": "number",
+      "description": "Number of records processed"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if failed"
+    },
+    "result_summary": {
+      "type": "object",
+      "description": "Summary of execution results"
+    }
+  },
+  "required": [
+    "job_id",
+    "job_name",
+    "status",
+    "started_at"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "name": "ReportTemplate",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Template name"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this template does"
+    },
+    "template_type": {
+      "type": "string",
+      "enum": [
+        "executive_summary",
+        "detailed_analysis",
+        "comparison_view",
+        "realtime_monitor",
+        "custom"
+      ],
+      "description": "Template category"
+    },
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this template belongs to (null for public)"
+    },
+    "created_by": {
+      "type": "string",
+      "description": "User who created this template"
+    },
+    "layout_config": {
+      "type": "object",
+      "description": "Dashboard layout structure",
+      "properties": {
+        "grid_layout": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "refresh_interval": {
+          "type": "number"
+        }
+      }
+    },
+    "metric_configs": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Metrics to display and their configurations"
+    },
+    "filter_presets": {
+      "type": "object",
+      "description": "Default filter settings"
+    },
+    "chart_settings": {
+      "type": "object",
+      "description": "Chart types and display options"
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false,
+      "description": "Available in marketplace"
+    },
+    "is_archived": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether template is archived (soft delete)"
+    },
+    "usage_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Times this template has been used"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Search tags (e.g., sales, marketing, executive)"
+    }
+  },
+  "required": [
+    "name",
+    "template_type",
+    "layout_config"
+  ]
+}

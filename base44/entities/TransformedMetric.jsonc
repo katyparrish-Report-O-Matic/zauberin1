@@ -1,0 +1,67 @@
+{
+  "name": "TransformedMetric",
+  "type": "object",
+  "properties": {
+    "metric_name": {
+      "type": "string",
+      "description": "Name of the metric"
+    },
+    "time_period": {
+      "type": "string",
+      "enum": [
+        "hourly",
+        "daily",
+        "weekly",
+        "monthly"
+      ],
+      "description": "Aggregation time period"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Start of the time period"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date-time",
+      "description": "End of the time period"
+    },
+    "raw_value": {
+      "type": "number",
+      "description": "Original value from API"
+    },
+    "aggregated_value": {
+      "type": "number",
+      "description": "Aggregated/calculated value"
+    },
+    "segment": {
+      "type": "object",
+      "description": "Segment dimensions (branch, region, etc.)"
+    },
+    "derived_metrics": {
+      "type": "object",
+      "description": "Calculated metrics",
+      "properties": {
+        "growth_rate": {
+          "type": "number"
+        },
+        "moving_average": {
+          "type": "number"
+        },
+        "percent_of_total": {
+          "type": "number"
+        }
+      }
+    },
+    "data_quality_score": {
+      "type": "number",
+      "description": "Quality score 0-100"
+    }
+  },
+  "required": [
+    "metric_name",
+    "time_period",
+    "period_start",
+    "aggregated_value"
+  ]
+}

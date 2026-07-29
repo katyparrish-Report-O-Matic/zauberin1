@@ -1,0 +1,64 @@
+{
+  "name": "ReportRequest",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this report belongs to"
+    },
+    "title": {
+      "type": "string",
+      "description": "Title of the report"
+    },
+    "description": {
+      "type": "string",
+      "description": "User's natural language request for the report"
+    },
+    "configuration": {
+      "type": "object",
+      "description": "Generated report configuration",
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "chart_type": {
+          "type": "string"
+        },
+        "date_range": {
+          "type": "object"
+        },
+        "filters": {
+          "type": "object"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "generated",
+        "saved"
+      ],
+      "default": "draft"
+    },
+    "shared_with": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether report has public link"
+    }
+  },
+  "required": [
+    "organization_id",
+    "title",
+    "description"
+  ]
+}

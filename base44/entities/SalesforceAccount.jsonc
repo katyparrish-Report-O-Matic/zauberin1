@@ -1,0 +1,104 @@
+{
+  "name": "SalesforceAccount",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this record belongs to"
+    },
+    "data_source_id": {
+      "type": "string",
+      "description": "Reference to DataSource"
+    },
+    "salesforce_id": {
+      "type": "string",
+      "description": "Salesforce Account ID"
+    },
+    "account_name": {
+      "type": "string",
+      "description": "Account name"
+    },
+    "account_number": {
+      "type": "string",
+      "description": "Account number"
+    },
+    "type": {
+      "type": "string",
+      "description": "Account type"
+    },
+    "industry": {
+      "type": "string",
+      "description": "Industry"
+    },
+    "annual_revenue": {
+      "type": "number",
+      "description": "Annual revenue"
+    },
+    "number_of_employees": {
+      "type": "number",
+      "description": "Employee count"
+    },
+    "billing_street": {
+      "type": "string",
+      "description": "Billing address street"
+    },
+    "billing_city": {
+      "type": "string",
+      "description": "Billing city"
+    },
+    "billing_state": {
+      "type": "string",
+      "description": "Billing state"
+    },
+    "billing_postal_code": {
+      "type": "string",
+      "description": "Billing postal code"
+    },
+    "billing_country": {
+      "type": "string",
+      "description": "Billing country"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "website": {
+      "type": "string",
+      "description": "Website URL"
+    },
+    "owner_name": {
+      "type": "string",
+      "description": "Account owner name"
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Account owner email"
+    },
+    "created_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Salesforce creation date"
+    },
+    "last_modified_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last modified in Salesforce"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether account is active"
+    },
+    "sync_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date this record was synced"
+    }
+  },
+  "required": [
+    "organization_id",
+    "data_source_id",
+    "salesforce_id",
+    "account_name"
+  ]
+}

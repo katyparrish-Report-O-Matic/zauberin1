@@ -1,0 +1,47 @@
+{
+  "name": "WebhookEndpoint",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this webhook belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Friendly name for the webhook"
+    },
+    "webhook_url": {
+      "type": "string",
+      "description": "Generated webhook URL"
+    },
+    "secret_key": {
+      "type": "string",
+      "description": "Secret key for signature validation"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether webhook is active"
+    },
+    "metric_mappings": {
+      "type": "object",
+      "description": "Maps incoming fields to metric names"
+    },
+    "last_triggered": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time webhook received data"
+    },
+    "total_requests": {
+      "type": "number",
+      "default": 0,
+      "description": "Total number of webhook calls"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "webhook_url",
+    "secret_key"
+  ]
+}

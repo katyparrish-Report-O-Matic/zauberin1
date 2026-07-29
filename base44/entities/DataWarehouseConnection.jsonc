@@ -1,0 +1,99 @@
+{
+  "name": "DataWarehouseConnection",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this connection belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Connection name"
+    },
+    "warehouse_type": {
+      "type": "string",
+      "enum": [
+        "snowflake",
+        "bigquery",
+        "redshift",
+        "databricks"
+      ],
+      "description": "Type of data warehouse"
+    },
+    "connection_config": {
+      "type": "object",
+      "description": "Connection credentials (encrypted)",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "database": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "credentials": {
+          "type": "string"
+        }
+      }
+    },
+    "sync_schedule": {
+      "type": "string",
+      "enum": [
+        "realtime",
+        "hourly",
+        "daily"
+      ],
+      "description": "Sync frequency"
+    },
+    "sync_mode": {
+      "type": "string",
+      "enum": [
+        "full",
+        "incremental"
+      ],
+      "default": "incremental",
+      "description": "Sync strategy"
+    },
+    "table_mappings": {
+      "type": "object",
+      "description": "Maps metrics to warehouse tables"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether sync is active"
+    },
+    "last_sync": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last successful sync"
+    },
+    "next_sync": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Next scheduled sync"
+    },
+    "sync_status": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "syncing",
+        "error"
+      ],
+      "default": "idle",
+      "description": "Current sync status"
+    },
+    "last_error": {
+      "type": "string",
+      "description": "Last sync error message"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "warehouse_type",
+    "connection_config"
+  ]
+}

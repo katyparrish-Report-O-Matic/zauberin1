@@ -1,0 +1,63 @@
+{
+  "name": "DataQualityLog",
+  "type": "object",
+  "properties": {
+    "metric_name": {
+      "type": "string",
+      "description": "Affected metric"
+    },
+    "issue_type": {
+      "type": "string",
+      "enum": [
+        "missing_data",
+        "null_value",
+        "schema_mismatch",
+        "anomaly",
+        "validation_error"
+      ],
+      "description": "Type of data quality issue"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "Issue severity"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the issue"
+    },
+    "affected_records": {
+      "type": "number",
+      "description": "Number of records affected"
+    },
+    "raw_data_sample": {
+      "type": "object",
+      "description": "Sample of problematic data"
+    },
+    "resolution_status": {
+      "type": "string",
+      "enum": [
+        "unresolved",
+        "resolved",
+        "ignored"
+      ],
+      "default": "unresolved"
+    },
+    "auto_fixed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether issue was automatically fixed"
+    }
+  },
+  "required": [
+    "metric_name",
+    "issue_type",
+    "severity",
+    "description"
+  ]
+}

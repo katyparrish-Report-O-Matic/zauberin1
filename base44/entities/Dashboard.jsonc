@@ -1,0 +1,77 @@
+{
+  "name": "Dashboard",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Dashboard name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Dashboard description"
+    },
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this dashboard belongs to"
+    },
+    "template_id": {
+      "type": "string",
+      "description": "Template used as base (optional)"
+    },
+    "layout": {
+      "type": "object",
+      "description": "Grid layout configuration",
+      "properties": {
+        "columns": {
+          "type": "number",
+          "default": 12
+        },
+        "rowHeight": {
+          "type": "number",
+          "default": 100
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Dashboard components with positions and configs"
+    },
+    "global_settings": {
+      "type": "object",
+      "description": "Global dashboard settings",
+      "properties": {
+        "refresh_interval": {
+          "type": "number"
+        },
+        "theme": {
+          "type": "string"
+        }
+      }
+    },
+    "is_default": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is the default dashboard"
+    },
+    "shared_with": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "User emails to share with"
+    },
+    "version": {
+      "type": "number",
+      "default": 1,
+      "description": "Current version number"
+    }
+  },
+  "required": [
+    "name",
+    "organization_id",
+    "components"
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "name": "ServiceAgreement",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this record belongs to"
+    },
+    "data_source_id": {
+      "type": "string",
+      "description": "Reference to DataSource"
+    },
+    "salesforce_id": {
+      "type": "string",
+      "description": "Salesforce Service Agreement ID"
+    },
+    "account_id": {
+      "type": "string",
+      "description": "Related Salesforce Account ID"
+    },
+    "account_name": {
+      "type": "string",
+      "description": "Related account name"
+    },
+    "agreement_name": {
+      "type": "string",
+      "description": "Service agreement name"
+    },
+    "agreement_number": {
+      "type": "string",
+      "description": "Agreement number"
+    },
+    "status": {
+      "type": "string",
+      "description": "Agreement status"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Agreement start date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Agreement end date"
+    },
+    "total_value": {
+      "type": "number",
+      "description": "Total contract value"
+    },
+    "monthly_value": {
+      "type": "number",
+      "description": "Monthly recurring value"
+    },
+    "payment_terms": {
+      "type": "string",
+      "description": "Payment terms"
+    },
+    "billing_frequency": {
+      "type": "string",
+      "enum": [
+        "monthly",
+        "quarterly",
+        "annually",
+        "one-time"
+      ],
+      "description": "Billing frequency"
+    },
+    "service_type": {
+      "type": "string",
+      "description": "Type of service"
+    },
+    "description": {
+      "type": "string",
+      "description": "Agreement description"
+    },
+    "owner_name": {
+      "type": "string",
+      "description": "Agreement owner name"
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Agreement owner email"
+    },
+    "created_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Salesforce creation date"
+    },
+    "last_modified_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last modified in Salesforce"
+    },
+    "sync_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date this record was synced"
+    }
+  },
+  "required": [
+    "organization_id",
+    "data_source_id",
+    "salesforce_id",
+    "agreement_name"
+  ]
+}

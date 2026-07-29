@@ -1,0 +1,55 @@
+{
+  "name": "ApiUsage",
+  "type": "object",
+  "properties": {
+    "api_key_id": {
+      "type": "string",
+      "description": "Reference to ApiKey"
+    },
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this usage belongs to"
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "API endpoint called"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "description": "HTTP method"
+    },
+    "status_code": {
+      "type": "number",
+      "description": "Response status code"
+    },
+    "response_time_ms": {
+      "type": "number",
+      "description": "Response time in milliseconds"
+    },
+    "ip_address": {
+      "type": "string",
+      "description": "Request IP address"
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "Client user agent"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if request failed"
+    }
+  },
+  "required": [
+    "api_key_id",
+    "organization_id",
+    "endpoint",
+    "method",
+    "status_code"
+  ]
+}

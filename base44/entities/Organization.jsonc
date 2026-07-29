@@ -1,0 +1,36 @@
+{
+  "name": "Organization",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Organization name"
+    },
+    "slug": {
+      "type": "string",
+      "description": "URL-friendly identifier"
+    },
+    "is_agency": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is the agency (Adtrak) with full access"
+    },
+    "subscription_tier": {
+      "type": "string",
+      "enum": [
+        "free",
+        "pro",
+        "enterprise"
+      ],
+      "default": "free"
+    },
+    "settings": {
+      "type": "object",
+      "description": "Organization-specific settings"
+    }
+  },
+  "required": [
+    "name",
+    "slug"
+  ]
+}

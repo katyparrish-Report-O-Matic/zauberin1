@@ -1,0 +1,76 @@
+{
+  "name": "ScheduledJob",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this job belongs to"
+    },
+    "job_name": {
+      "type": "string",
+      "description": "Name of the job"
+    },
+    "job_type": {
+      "type": "string",
+      "enum": [
+        "data_fetch",
+        "report_generation",
+        "data_cleanup",
+        "quality_check",
+        "backup",
+        "api_health_check",
+        "data_prefetch"
+      ],
+      "description": "Type of background job"
+    },
+    "schedule": {
+      "type": "string",
+      "enum": [
+        "hourly",
+        "daily",
+        "weekly",
+        "manual"
+      ],
+      "description": "How often to run"
+    },
+    "configuration": {
+      "type": "object",
+      "description": "Job-specific configuration",
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "report_type": {
+          "type": "string"
+        },
+        "cleanup_days": {
+          "type": "number"
+        }
+      }
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether job is active"
+    },
+    "last_run": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When job last executed"
+    },
+    "next_run": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When job should run next"
+    }
+  },
+  "required": [
+    "organization_id",
+    "job_name",
+    "job_type",
+    "schedule"
+  ]
+}

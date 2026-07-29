@@ -1,0 +1,63 @@
+{
+  "name": "CacheEntry",
+  "type": "object",
+  "properties": {
+    "cache_key": {
+      "type": "string",
+      "description": "Unique cache key"
+    },
+    "cache_type": {
+      "type": "string",
+      "enum": [
+        "query",
+        "api_response",
+        "metric_data",
+        "report",
+        "user_prefs"
+      ],
+      "description": "Type of cached data"
+    },
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this cache belongs to"
+    },
+    "data": {
+      "type": "object",
+      "description": "Cached data"
+    },
+    "ttl_seconds": {
+      "type": "number",
+      "default": 3600,
+      "description": "Time to live in seconds"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When cache expires"
+    },
+    "hit_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of times cache was accessed"
+    },
+    "last_accessed": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time cache was accessed"
+    },
+    "size_bytes": {
+      "type": "number",
+      "description": "Approximate size of cached data"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional cache metadata"
+    }
+  },
+  "required": [
+    "cache_key",
+    "cache_type",
+    "data",
+    "expires_at"
+  ]
+}

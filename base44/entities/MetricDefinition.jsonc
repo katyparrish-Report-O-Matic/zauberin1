@@ -1,0 +1,149 @@
+{
+  "name": "MetricDefinition",
+  "type": "object",
+  "properties": {
+    "metric_key": {
+      "type": "string",
+      "description": "Unique identifier for this metric (e.g., 'clicks', 'sessions')"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-readable name"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this metric measures"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "traffic",
+        "engagement",
+        "conversion",
+        "revenue",
+        "cost",
+        "call_tracking",
+        "social",
+        "custom"
+      ],
+      "description": "Metric category"
+    },
+    "data_type": {
+      "type": "string",
+      "enum": [
+        "integer",
+        "decimal",
+        "currency",
+        "percentage",
+        "duration"
+      ],
+      "description": "Data type"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measurement (e.g., 'USD', '%', 'seconds')"
+    },
+    "aggregation_method": {
+      "type": "string",
+      "enum": [
+        "sum",
+        "average",
+        "count",
+        "min",
+        "max",
+        "last"
+      ],
+      "default": "sum",
+      "description": "How to aggregate this metric"
+    },
+    "calculation_formula": {
+      "type": "string",
+      "description": "Formula for calculated metrics (e.g., 'cost / clicks')"
+    },
+    "is_calculated": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a calculated metric"
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Metrics this calculated metric depends on"
+    },
+    "platform_mappings": {
+      "type": "object",
+      "description": "Platform-specific metric names",
+      "properties": {
+        "google_ads": {
+          "type": "string"
+        },
+        "google_analytics_4": {
+          "type": "string"
+        },
+        "call_tracking": {
+          "type": "string"
+        },
+        "facebook_ads": {
+          "type": "string"
+        }
+      }
+    },
+    "format": {
+      "type": "object",
+      "description": "Display formatting",
+      "properties": {
+        "decimal_places": {
+          "type": "number",
+          "default": 2
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "thousands_separator": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "is_cost_metric": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this represents a cost"
+    },
+    "is_conversion_metric": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this represents a conversion"
+    },
+    "higher_is_better": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether higher values are better"
+    },
+    "available_dimensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Dimensions this metric can be segmented by"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization and search"
+    }
+  },
+  "required": [
+    "metric_key",
+    "display_name",
+    "category",
+    "data_type"
+  ]
+}

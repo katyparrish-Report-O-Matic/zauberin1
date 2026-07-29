@@ -1,0 +1,126 @@
+{
+  "name": "SyncJob",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this sync belongs to"
+    },
+    "data_source_id": {
+      "type": "string",
+      "description": "Reference to DataSource"
+    },
+    "sync_type": {
+      "type": "string",
+      "enum": [
+        "backfill",
+        "incremental",
+        "manual",
+        "scheduled"
+      ],
+      "description": "Type of sync operation"
+    },
+    "date_range": {
+      "type": "object",
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "description": "Date range being synced"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_progress",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "default": "pending",
+      "description": "Current sync status"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When sync started"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When sync finished"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "How long sync took"
+    },
+    "records_synced": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of records processed"
+    },
+    "records_created": {
+      "type": "number",
+      "default": 0,
+      "description": "New records created"
+    },
+    "records_updated": {
+      "type": "number",
+      "default": 0,
+      "description": "Records updated"
+    },
+    "records_failed": {
+      "type": "number",
+      "default": 0,
+      "description": "Records that failed to sync"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if sync failed"
+    },
+    "error_details": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Detailed error log"
+    },
+    "progress_percentage": {
+      "type": "number",
+      "default": 0,
+      "description": "Progress 0-100"
+    },
+    "current_step": {
+      "type": "string",
+      "description": "Current operation being performed"
+    },
+    "metrics_synced": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of metrics that were synced"
+    },
+    "api_calls_made": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of API calls during sync"
+    },
+    "retry_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of retries attempted"
+    }
+  },
+  "required": [
+    "organization_id",
+    "data_source_id",
+    "sync_type"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "name": "WebhookActivity",
+  "type": "object",
+  "properties": {
+    "webhook_id": {
+      "type": "string",
+      "description": "Reference to WebhookEndpoint"
+    },
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this activity belongs to"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failed",
+        "pending"
+      ],
+      "description": "Processing status"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Incoming webhook data"
+    },
+    "signature_valid": {
+      "type": "boolean",
+      "description": "Whether signature validation passed"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if failed"
+    },
+    "records_created": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of metric records created"
+    },
+    "processing_time_ms": {
+      "type": "number",
+      "description": "Time taken to process"
+    }
+  },
+  "required": [
+    "webhook_id",
+    "organization_id",
+    "status",
+    "payload"
+  ]
+}

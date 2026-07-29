@@ -1,0 +1,103 @@
+{
+  "name": "Goal",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this goal belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Goal name"
+    },
+    "metric_key": {
+      "type": "string",
+      "description": "Metric this goal is for"
+    },
+    "target_value": {
+      "type": "number",
+      "description": "Target value to achieve"
+    },
+    "time_period": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly",
+        "quarterly",
+        "yearly"
+      ],
+      "description": "Time period for goal"
+    },
+    "scope": {
+      "type": "object",
+      "description": "What this goal applies to",
+      "properties": {
+        "account_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "campaign_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "data_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "alert_threshold_percentage": {
+      "type": "number",
+      "description": "Alert when this % off target (e.g., 90 = alert at 90% of goal)"
+    },
+    "alert_emails": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Email addresses to notify"
+    },
+    "comparison_operator": {
+      "type": "string",
+      "enum": [
+        "greater_than",
+        "less_than",
+        "equals"
+      ],
+      "default": "greater_than",
+      "description": "How to compare actual vs target"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether goal is active"
+    },
+    "current_value": {
+      "type": "number",
+      "description": "Current actual value (updated by sync)"
+    },
+    "last_alerted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time alert was sent"
+    },
+    "achievement_percentage": {
+      "type": "number",
+      "description": "Current progress percentage"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "metric_key",
+    "target_value",
+    "time_period"
+  ]
+}

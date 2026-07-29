@@ -1,0 +1,133 @@
+{
+  "name": "FormSubmission",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this submission belongs to"
+    },
+    "form_definition_id": {
+      "type": "string",
+      "description": "Reference to FormDefinition"
+    },
+    "submission_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When form was submitted"
+    },
+    "form_data": {
+      "type": "object",
+      "description": "Form field values (anonymized/encrypted as needed)"
+    },
+    "user_identifier": {
+      "type": "string",
+      "description": "User identifier for attribution (cookie, email hash, etc)"
+    },
+    "page_url": {
+      "type": "string",
+      "description": "URL where form was submitted"
+    },
+    "referrer_url": {
+      "type": "string",
+      "description": "Page user came from"
+    },
+    "attribution_data": {
+      "type": "object",
+      "description": "Marketing attribution at time of submission",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "medium": {
+          "type": "string"
+        },
+        "campaign": {
+          "type": "string"
+        },
+        "keyword": {
+          "type": "string"
+        },
+        "ad_id": {
+          "type": "string"
+        }
+      }
+    },
+    "is_qualified": {
+      "type": "boolean",
+      "description": "Whether submission meets qualification criteria"
+    },
+    "qualification_score": {
+      "type": "number",
+      "description": "Lead quality score 0-100"
+    },
+    "conversion_value": {
+      "type": "number",
+      "description": "Value assigned to this submission"
+    },
+    "followup_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "contacted",
+        "qualified",
+        "converted",
+        "disqualified"
+      ],
+      "default": "pending",
+      "description": "Follow-up status"
+    },
+    "ip_address": {
+      "type": "string",
+      "description": "Submitter IP address"
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "Browser user agent"
+    },
+    "device_type": {
+      "type": "string",
+      "enum": [
+        "desktop",
+        "mobile",
+        "tablet"
+      ],
+      "description": "Device used for submission"
+    },
+    "time_on_page": {
+      "type": "number",
+      "description": "Seconds spent on page before submission"
+    },
+    "form_abandonment": {
+      "type": "object",
+      "description": "If user started but didn't complete",
+      "properties": {
+        "was_abandoned": {
+          "type": "boolean"
+        },
+        "fields_completed": {
+          "type": "number"
+        },
+        "abandonment_point": {
+          "type": "string"
+        }
+      }
+    },
+    "duplicate_check": {
+      "type": "object",
+      "description": "Duplicate submission detection",
+      "properties": {
+        "is_duplicate": {
+          "type": "boolean"
+        },
+        "original_submission_id": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "organization_id",
+    "form_definition_id",
+    "submission_date"
+  ]
+}

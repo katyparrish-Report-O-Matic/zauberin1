@@ -1,0 +1,124 @@
+{
+  "name": "AccountHierarchy",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this belongs to"
+    },
+    "data_source_id": {
+      "type": "string",
+      "description": "Reference to DataSource"
+    },
+    "platform_type": {
+      "type": "string",
+      "enum": [
+        "google_ads",
+        "google_analytics_4",
+        "call_tracking",
+        "facebook_ads"
+      ],
+      "description": "Platform type"
+    },
+    "hierarchy_level": {
+      "type": "string",
+      "enum": [
+        "account",
+        "property",
+        "campaign",
+        "ad_group",
+        "ad",
+        "keyword",
+        "data_stream",
+        "tracking_number"
+      ],
+      "description": "Level in hierarchy"
+    },
+    "external_id": {
+      "type": "string",
+      "description": "Platform-specific ID"
+    },
+    "parent_id": {
+      "type": "string",
+      "description": "Reference to parent AccountHierarchy record"
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name (Dealer/Account name)"
+    },
+    "region": {
+      "type": "string",
+      "description": "Geographic region for this account"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "removed",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Current status"
+    },
+    "budget": {
+      "type": "number",
+      "description": "Daily/monthly budget if applicable"
+    },
+    "budget_type": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "monthly",
+        "lifetime"
+      ],
+      "description": "Budget time period"
+    },
+    "target_cpa": {
+      "type": "number",
+      "description": "Target cost per acquisition"
+    },
+    "target_roas": {
+      "type": "number",
+      "description": "Target return on ad spend"
+    },
+    "tracking_template": {
+      "type": "string",
+      "description": "URL tracking template"
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Platform labels/tags"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional platform-specific data"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Campaign/ad start date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Campaign/ad end date"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time this was updated from platform"
+    }
+  },
+  "required": [
+    "organization_id",
+    "data_source_id",
+    "platform_type",
+    "hierarchy_level",
+    "external_id",
+    "name"
+  ]
+}

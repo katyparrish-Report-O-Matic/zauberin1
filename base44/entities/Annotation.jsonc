@@ -1,0 +1,84 @@
+{
+  "name": "Annotation",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this annotation belongs to"
+    },
+    "title": {
+      "type": "string",
+      "description": "Brief title for the annotation"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the event"
+    },
+    "annotation_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date this event occurred"
+    },
+    "annotation_type": {
+      "type": "string",
+      "enum": [
+        "campaign_launch",
+        "campaign_end",
+        "website_change",
+        "holiday",
+        "promotion",
+        "external_event",
+        "data_issue",
+        "other"
+      ],
+      "description": "Type of annotation"
+    },
+    "scope": {
+      "type": "object",
+      "description": "What this annotation applies to",
+      "properties": {
+        "scope_type": {
+          "type": "string",
+          "enum": [
+            "global",
+            "data_source",
+            "campaign",
+            "account"
+          ]
+        },
+        "scope_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "internal",
+        "client_facing"
+      ],
+      "default": "internal",
+      "description": "Whether this note is internal only or client-facing"
+    },
+    "color": {
+      "type": "string",
+      "default": "blue",
+      "description": "Color for visual marker on charts"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization"
+    }
+  },
+  "required": [
+    "organization_id",
+    "title",
+    "annotation_date"
+  ]
+}

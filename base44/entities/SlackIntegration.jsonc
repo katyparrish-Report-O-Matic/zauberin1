@@ -1,0 +1,64 @@
+{
+  "name": "SlackIntegration",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this integration belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Integration name"
+    },
+    "webhook_url": {
+      "type": "string",
+      "description": "Slack incoming webhook URL"
+    },
+    "channel": {
+      "type": "string",
+      "description": "Slack channel name"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether integration is active"
+    },
+    "notification_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "daily_summary",
+          "threshold_alerts",
+          "quality_alerts",
+          "report_shares"
+        ]
+      },
+      "description": "Types of notifications to send"
+    },
+    "schedule": {
+      "type": "string",
+      "enum": [
+        "hourly",
+        "daily",
+        "weekly"
+      ],
+      "description": "How often to send summaries"
+    },
+    "metric_filters": {
+      "type": "object",
+      "description": "Which metrics to include in summaries"
+    },
+    "last_posted": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time a message was posted"
+    }
+  },
+  "required": [
+    "organization_id",
+    "name",
+    "webhook_url",
+    "channel"
+  ]
+}

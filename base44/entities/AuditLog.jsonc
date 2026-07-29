@@ -1,0 +1,69 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "organization_id": {
+      "type": "string",
+      "description": "Organization this log belongs to"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "User who performed the action"
+    },
+    "action_type": {
+      "type": "string",
+      "enum": [
+        "api_call",
+        "report_created",
+        "report_updated",
+        "report_deleted",
+        "settings_changed",
+        "user_login",
+        "data_export",
+        "webhook_triggered",
+        "template_created",
+        "dashboard_created",
+        "permission_changed"
+      ],
+      "description": "Type of action performed"
+    },
+    "resource_type": {
+      "type": "string",
+      "description": "Type of resource affected (e.g., report, settings, user)"
+    },
+    "resource_id": {
+      "type": "string",
+      "description": "ID of the affected resource"
+    },
+    "action_details": {
+      "type": "object",
+      "description": "Detailed information about the action"
+    },
+    "ip_address": {
+      "type": "string",
+      "description": "IP address of the user"
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "Browser/client user agent"
+    },
+    "success": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the action was successful"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message if action failed"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional contextual information"
+    }
+  },
+  "required": [
+    "organization_id",
+    "user_email",
+    "action_type"
+  ]
+}

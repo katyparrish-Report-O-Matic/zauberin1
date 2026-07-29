@@ -1,0 +1,30 @@
+{
+  "name": "AccountMapping",
+  "type": "object",
+  "properties": {
+    "salesforce_account_id": {
+      "type": "string",
+      "description": "Salesforce Account/Service Agreement ID"
+    },
+    "salesforce_account_name": {
+      "type": "string",
+      "description": "Salesforce Account/Company Name"
+    },
+    "source_account_name": {
+      "type": "string",
+      "description": "Account name from CTM or Storm"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "ctm",
+        "storm"
+      ],
+      "description": "Source system: ctm or storm"
+    }
+  },
+  "required": [
+    "source_account_name",
+    "source_type"
+  ]
+}
